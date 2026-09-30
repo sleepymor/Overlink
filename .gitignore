@@ -1,0 +1,30 @@
+# Unity generated folders — never commit these
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+# Generated IDE / build files
+*.csproj
+*.unityproj
+*.sln
+Obj/
+
+# Test Runner bootstrap scenes (regenerated on every PlayMode run)
+Assets/InitTestScene*
+
+# OS noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Rider / VS noise (keep .vscode/ editor settings)
+.idea/
+*.user
+*.userprefs
+*.suo
+.vs/

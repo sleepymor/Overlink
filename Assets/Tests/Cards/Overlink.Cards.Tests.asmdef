@@ -1,0 +1,10 @@
+{
+    "name": "Overlink.Cards.Tests",
+    "references": ["Overlink.Cards"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": false
+}
