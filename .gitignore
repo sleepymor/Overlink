@@ -17,6 +17,9 @@ Obj/
 # Test Runner bootstrap scenes (regenerated on every PlayMode run)
 Assets/InitTestScene*
 
+# Local multiplayer test captures
+Assets/Screenshots/
+
 # OS noise
 .DS_Store
 Thumbs.db
