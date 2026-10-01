@@ -443,11 +443,15 @@ namespace Overlink.Net
 
         async Task<bool> EnsureSignedInAsync()
         {
-            if (net != null && !await net.EnsureServicesAsync())
+            if (net != null)
             {
-                SetStatus("Could not sign in to Unity Services — see console.");
-                SetState(LobbyState.Idle);
-                return false;
+                await net.EnsureServicesAsync();
+                if (AuthenticationService.Instance == null || !AuthenticationService.Instance.IsSignedIn)
+                {
+                    SetStatus("Could not sign in to Unity Services — see console.");
+                    SetState(LobbyState.Idle);
+                    return false;
+                }
             }
 
             playerId = AuthenticationService.Instance.PlayerId;

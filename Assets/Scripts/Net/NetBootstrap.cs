@@ -393,7 +393,7 @@ namespace Overlink.Net
         /// during sign-in waits on the same work instead of initialising the SDK twice.
         /// LobbyManager reuses this so the Lobby and Relay paths share one signed-in player.
         /// </summary>
-        public async Task EnsureServicesAsync()
+        public Task EnsureServicesAsync()
         {
             if (servicesTask == null)
             {
