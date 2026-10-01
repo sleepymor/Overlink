@@ -8,11 +8,15 @@
         "Unity.Services.Core",
         "Unity.Services.Authentication",
         "Unity.Services.Relay",
+        "Unity.Services.Lobbies",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
-    "autoReferenced": true
+    "autoReferenced": true,
+    "precompiledReferences": [],
+    "defineConstraints": [],
+    "versionDefines": []
 }

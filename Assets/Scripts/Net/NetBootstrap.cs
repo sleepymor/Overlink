@@ -110,9 +110,45 @@ namespace Overlink.Net
 
         // --- Session lifecycle -------------------------------------------------
 
-        public async Task HostGame()
+        public Task HostGame()
         {
-            if (!ready || !CanStart("Host")) return;
+            if (!CanStart("Host")) return Task.CompletedTask;
+            return CreateRelayAndHostAsync(maxPlayers);
+        }
+
+        public Task JoinGame(string rawCode)
+        {
+            if (!CanStart("Join")) return Task.CompletedTask;
+
+            string code = NormalizeCode(rawCode);
+            if (code.Length == 0)
+            {
+                SetStatus("Enter a join code first.");
+                return Task.CompletedTask;
+            }
+
+            OnJoinCodeChanged?.Invoke("");
+            return JoinRelayAsync(code);
+        }
+
+        /// <summary>
+        /// Allocates a Relay server for <paramref name="playerCount"/> total players (the
+        /// host included) and starts the NGO host. Returns the join code to hand out, or
+        /// null if the attempt failed. LobbyManager uses this directly so it never has to
+        /// surface a Relay code to the player.
+        /// </summary>
+        public async Task<string> CreateRelayAndHostAsync(int playerCount)
+        {
+            if (!ready)
+            {
+                SetStatus("Session layer not ready — see console.");
+                return null;
+            }
+            if (mgr.IsListening)
+            {
+                SetStatus("Already hosting or connected — Leave before starting again.");
+                return null;
+            }
 
             try
             {
@@ -120,38 +156,53 @@ namespace Overlink.Net
                 await EnsureServicesAsync();
                 SetStatus("Creating Relay allocation…");
 
-                // maxPlayers counts the host, Relay counts only the clients that may join.
-                Allocation alloc = await RelayService.Instance.CreateAllocationAsync(maxPlayers - 1);
+                // playerCount counts the host, Relay counts only the clients that may join.
+                Allocation alloc = await RelayService.Instance.CreateAllocationAsync(Mathf.Max(0, playerCount - 1));
                 string code = await RelayService.Instance.GetJoinCodeAsync(alloc.AllocationId);
 
                 transport.SetRelayServerData(new RelayServerData(alloc, RelayProtocol));
                 if (!mgr.StartHost())
                 {
                     SetStatus("Host failed to start — see console.");
-                    return;
+                    return null;
                 }
 
+                ResetSeats(playerCount);
                 LastJoinCode = code;
                 OnJoinCodeChanged?.Invoke(code);
                 SetStatus($"Hosting — share code: {code}");
+                return code;
             }
             catch (Exception e)
             {
                 SetStatus($"Host failed: {e.Message}");
+                return null;
             }
         }
 
-        public async Task JoinGame(string rawCode)
+        /// <summary>
+        /// Joins a Relay allocation by join code and starts the NGO client. Returns false
+        /// if the attempt failed.
+        /// </summary>
+        public async Task<bool> JoinRelayAsync(string rawCode)
         {
-            if (!ready || !CanStart("Join")) return;
+            if (!ready)
+            {
+                SetStatus("Session layer not ready — see console.");
+                return false;
+            }
+            if (mgr.IsListening)
+            {
+                SetStatus("Already hosting or connected — Leave before joining.");
+                return false;
+            }
 
-            string code = (rawCode ?? "").Trim().ToUpperInvariant();
+            string code = NormalizeCode(rawCode);
             if (code.Length == 0)
             {
                 SetStatus("Enter a join code first.");
-                return;
+                return false;
             }
-            OnJoinCodeChanged?.Invoke("");
 
             try
             {
@@ -164,16 +215,25 @@ namespace Overlink.Net
                 if (!mgr.StartClient())
                 {
                     SetStatus("Client failed to start — see console.");
-                    return;
+                    return false;
                 }
 
+                LastJoinCode = "";
                 SetStatus($"Joining {code}… (waiting for host)");
+                if (watchdog != null) StopCoroutine(watchdog);
                 watchdog = StartCoroutine(JoinWatchdog(code));
+                return true;
             }
             catch (Exception e)
             {
                 SetStatus($"Join failed: {e.Message}");
+                return false;
             }
+        }
+
+        static string NormalizeCode(string rawCode)
+        {
+            return (rawCode ?? "").Trim().ToUpperInvariant();
         }
 
         public void LeaveGame()
@@ -188,6 +248,11 @@ namespace Overlink.Net
 
         bool CanStart(string action)
         {
+            if (!ready)
+            {
+                SetStatus("Session layer not ready — see console.");
+                return false;
+            }
             if (IsListening)
             {
                 SetStatus($"Already hosting or connected — Leave before trying to {action}.");
@@ -271,11 +336,18 @@ namespace Overlink.Net
             Debug.Log($"[Net] Spawned avatar for client {clientId} on seat {seat}.");
         }
 
-        void ResetSeats()
+        void ResetSeats() => ResetSeats(maxPlayers);
+
+        /// <summary>
+        /// Seat 0 always belongs to the host, so positions and colours stay put across
+        /// join/leave cycles. <paramref name="count"/> is clamped to at least one.
+        /// </summary>
+        void ResetSeats(int count)
         {
+            int seats = Mathf.Max(1, count);
             freeSeats.Clear();
             clientSeats.Clear();
-            for (int seat = maxPlayers - 1; seat >= 0; seat--) freeSeats.Push(seat);
+            for (int seat = seats - 1; seat >= 0; seat--) freeSeats.Push(seat);
         }
 
         static Vector3 SeatPosition(int seat)
@@ -319,8 +391,9 @@ namespace Overlink.Net
         /// <summary>
         /// Single-flight Unity Services startup: caching the Task means a second click
         /// during sign-in waits on the same work instead of initialising the SDK twice.
+        /// LobbyManager reuses this so the Lobby and Relay paths share one signed-in player.
         /// </summary>
-        Task EnsureServicesAsync()
+        public async Task EnsureServicesAsync()
         {
             if (servicesTask == null)
             {
