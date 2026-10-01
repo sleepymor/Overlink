@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Services.Authentication;
@@ -328,9 +329,9 @@ namespace Overlink.Net
         }
 
         /// <summary>
-        /// Lobby SDK 1.3.0 has no self-leave call, so a guest leaves by asking the host's
-        /// lobby to remove them. Guests whose remove fails are dropped by the service once
-        /// their heartbeats stop.
+        /// Starts the heartbeat and poll loops, replacing any pair left over from a previous
+        /// lobby. Both loops bail out on their own if <see cref="CurrentLobby"/> is replaced,
+        /// so this is only ever called on adopting a fresh lobby.
         /// </summary>
         void StartRoutines()
         {
@@ -347,7 +348,12 @@ namespace Overlink.Net
             pollRoutine = null;
         }
 
-        System.Collections.IEnumerator HeartbeatRoutine()
+        /// <summary>
+        /// Pings every <see cref="HeartbeatSeconds"/> so the service does not expire the lobby
+        /// while the players are still deciding. The id captured before each yield is what makes
+        /// a lobby switch abort the loop instead of pinging a lobby we already left.
+        /// </summary>
+        IEnumerator HeartbeatRoutine()
         {
             var wait = new WaitForSeconds(HeartbeatSeconds);
             while (CurrentLobby != null && !leaving)
@@ -362,7 +368,12 @@ namespace Overlink.Net
             }
         }
 
-        System.Collections.IEnumerator PollRoutine()
+        /// <summary>
+        /// Pulls the lobby every <see cref="PollSeconds"/>. This is the only channel that carries
+        /// the host's Relay code over to clients, and the only thing that keeps the member count
+        /// and Start eligibility current.
+        /// </summary>
+        IEnumerator PollRoutine()
         {
             var wait = new WaitForSeconds(PollSeconds);
             while (CurrentLobby != null && !leaving)
@@ -424,11 +435,18 @@ namespace Overlink.Net
             }
             else if (!IsHost)
             {
+                // The host publishes the Relay code and the InGame flag in the same write, so
+                // both have to be present before a client moves off the lobby.
                 string relayCode = GetData(refreshed, KeyRelayCode);
-                if (!string.IsNullOrEmpty(relayCode) && net != null && !net.IsListening)
+                bool started = GetData(refreshed, KeyStatus) == StatusInGame;
+                if (started && !string.IsNullOrEmpty(relayCode) && net != null && !net.IsListening)
                 {
                     SetStatus("Match found — joining…");
-                    await net.JoinRelayAsync(relayCode);
+                    if (await net.JoinRelayAsync(relayCode))
+                    {
+                        SetState(LobbyState.InGame);
+                        SetStatus("Joined the match.");
+                    }
                 }
             }
 
@@ -443,19 +461,22 @@ namespace Overlink.Net
 
         async Task<bool> EnsureSignedInAsync()
         {
-            if (net != null)
+            if (net != null) await net.EnsureServicesAsync();
+
+            IAuthenticationService auth = AuthenticationService.Instance;
+            if (auth == null || !auth.IsSignedIn)
             {
-                await net.EnsureServicesAsync();
-                if (AuthenticationService.Instance == null || !AuthenticationService.Instance.IsSignedIn)
-                {
-                    SetStatus("Could not sign in to Unity Services — see console.");
-                    SetState(LobbyState.Idle);
-                    return false;
-                }
+                SetStatus("Could not sign in to Unity Services — see console.");
+                SetState(LobbyState.Idle);
+                return false;
             }
 
-            playerId = AuthenticationService.Instance.PlayerId;
-            return !string.IsNullOrEmpty(playerId);
+            playerId = auth.PlayerId;
+            if (!string.IsNullOrEmpty(playerId)) return true;
+
+            SetStatus("Unity Services returned no player id.");
+            SetState(LobbyState.Idle);
+            return false;
         }
 
         void FailMatchmaking(Exception e, string what)

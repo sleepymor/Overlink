@@ -395,17 +395,26 @@ namespace Overlink.Net
         /// </summary>
         public Task EnsureServicesAsync()
         {
-            if (servicesTask == null)
-            {
-                servicesTask = SignInAsync();
-            }
+            if (servicesTask == null) servicesTask = SignInAsync();
             return servicesTask;
 
-            static async Task SignInAsync()
+            // A faulted task would otherwise be cached for the rest of the session and every
+            // later attempt would replay the same failure, so drop it and let the next click
+            // retry. Concurrent callers still share one attempt because the check above runs
+            // before the await.
+            async Task SignInAsync()
             {
-                await UnityServices.InitializeAsync();
-                if (!AuthenticationService.Instance.IsSignedIn)
-                    await AuthenticationService.Instance.SignInAnonymouslyAsync();
+                try
+                {
+                    await UnityServices.InitializeAsync();
+                    if (!AuthenticationService.Instance.IsSignedIn)
+                        await AuthenticationService.Instance.SignInAnonymouslyAsync();
+                }
+                catch
+                {
+                    servicesTask = null;
+                    throw;
+                }
             }
         }
     }
