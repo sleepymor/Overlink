@@ -1,0 +1,70 @@
+{
+  "plan": "docs/PLAN-v0.17.md",
+  "title": "Overlink — Implementation Plan for v0.17",
+  "status": "locked",
+  "lockedAt": "2026-10-17T12:33:00+08:00",
+  "lockedBy": "Hyperion",
+  "recordedBy": "Themis",
+  "gdd": {
+    "path": "GDD/GDD-Overlink-v0.17-PreDevDraft.pdf",
+    "version": "v0.17",
+    "stage": "Pre-Dev Draft"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "sha256": "506E9FB63B1A169F59B11DC5E5D337B23EC1D6E5E15A1349F0D28510C8FA0941",
+    "bytes": 12172,
+    "lines": 237
+  },
+  "repository": {
+    "baselineCommit": "c9e8d4b",
+    "branch": "master",
+    "remote": "https://github.com/sleepymor/Overlink.git"
+  },
+  "factions": [
+    {
+      "token": "fsti",
+      "short": "FSTI",
+      "name": "Frontier Science and Technology Institute",
+      "inspiration": "Fakultas Sains dan Teknologi Informasi (ITK)",
+      "identity": "Signal and data control — card draw, NP generation, Protocols, effect chaining"
+    },
+    {
+      "token": "frti",
+      "short": "FRTI",
+      "name": "Frontier Research and Technology Institute",
+      "inspiration": "Fakultas Rekayasa dan Teknologi Industri (ITK)",
+      "identity": "Industrial combat — high ATK, durable frames, Relays as structures"
+    },
+    {
+      "token": "fpb",
+      "short": "FPB",
+      "name": "Frontier Planning Bureau",
+      "inspiration": "Fakultas Pembangunan Berkelanjutan (ITK)",
+      "identity": "Attrition and defence — Shield, HP, healing, Repair, Node holding"
+    }
+  ],
+  "cardIdFormat": "card_<faction>_<nnn>",
+  "cardIdRules": [
+    "faction token is one of: fsti, frti, fpb",
+    "nnn is zero-padded to three digits",
+    "IDs are never renumbered or reused once a card is released"
+  ],
+  "budget": {
+    "unit": "planning points",
+    "total": 100,
+    "now": 30,
+    "remaining": 70,
+    "caveat": "The GDD defines no weighted completion metric. These are planning estimates, not a measurement of the game's completeness."
+  },
+  "milestones": [
+    { "id": "M0", "name": "Decisions", "points": 0, "status": "complete" },
+    { "id": "M1", "name": "Core schema", "points": 5, "status": "unblocked" },
+    { "id": "M2", "name": "Card Manager", "points": 8, "status": "pending" },
+    { "id": "M3", "name": "Match loop", "points": 12, "status": "pending" },
+    { "id": "M4", "name": "Playable slice", "points": 8, "status": "pending" },
+    { "id": "M5", "name": "Verification", "points": 3, "status": "pending" }
+  ],
+  "revisionPolicy": "Changes to a locked plan require an explicit revision note in the plan, a version bump of the filename, and a fresh digest recorded here. Silent edits are a policy violation.",
+  "verifyCommand": "Get-FileHash -LiteralPath docs/PLAN-v0.17.md -Algorithm SHA256"
+}

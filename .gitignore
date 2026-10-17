@@ -31,3 +31,13 @@ Desktop.ini
 *.userprefs
 *.suo
 .vs/
+
+# Unity extras
+*.apk
+*.aab
+*.unitypackage
+crashlytics-build.properties
+sysinfo.txt
+.vsconfig
+Recordings/
+Assets/AssetStoreTools*
