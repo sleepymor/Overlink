@@ -63,7 +63,7 @@ public class CardHandTests
         var card = CardView.Create(data, parent.transform, size);
         yield return null;
 
-        Assert.AreEqual(size, card.BaseScale, "BaseScale should match the requested size.");
+        Assert.AreEqual(Vector3.one, card.BaseScale, "Root animation scale should rest at one.");
         var body = card.transform.Find("Body");
         Assert.IsNotNull(body, "Card should have a Body child.");
         Assert.AreEqual(size, body.localScale, "Body should carry the requested size.");
@@ -72,7 +72,7 @@ public class CardHandTests
 
         var newSize = new Vector3(0.7f, 1.0f, 0.05f);
         card.SetSize(newSize);
-        Assert.AreEqual(newSize, card.BaseScale, "SetSize should update BaseScale.");
+        Assert.AreEqual(Vector3.one, card.BaseScale, "SetSize should not disturb the root animation scale.");
         Assert.AreEqual(newSize, body.localScale, "SetSize should resize the body.");
         Assert.AreEqual(newSize, col.size, "SetSize should resize the collider.");
 

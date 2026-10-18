@@ -76,6 +76,7 @@ namespace Overlink.Net
         Coroutine pollRoutine;
         bool leaving;
         bool polling;
+        int operationVersion;
 
         void Awake()
         {
@@ -89,11 +90,21 @@ namespace Overlink.Net
             net = FindObjectOfType<NetBootstrap>();
             if (net == null)
                 Debug.LogWarning("[Lobby] No NetBootstrap in the scene; starting a match will fail.");
+            else
+            {
+                net.OnNetworkConnected += OnNetworkConnected;
+                net.OnNetworkDisconnected += OnNetworkDisconnected;
+            }
         }
 
         void OnDestroy()
         {
             StopRoutines();
+            if (net != null)
+            {
+                net.OnNetworkConnected -= OnNetworkConnected;
+                net.OnNetworkDisconnected -= OnNetworkDisconnected;
+            }
             if (Instance == this) Instance = null;
         }
 
@@ -104,10 +115,12 @@ namespace Overlink.Net
         {
             if (IsBusy || CurrentLobby != null) return;
 
+            int version = ++operationVersion;
             SetState(LobbyState.Searching);
             try
             {
                 if (!await EnsureSignedInAsync()) return;
+                if (version != operationVersion) return;
 
                 Lobby lobby = null;
                 try
@@ -123,11 +136,13 @@ namespace Overlink.Net
                     lobby = null;
                 }
 
-                if (lobby == null) lobby = await CreatePrivateLobbyAsync(MaxPlayers);
+                if (lobby == null) lobby = await CreatePrivateLobbyAsync(MaxPlayers, false);
+                if (version != operationVersion) return;
                 AdoptLobby(lobby);
             }
             catch (Exception e)
             {
+                if (version != operationVersion) return;
                 FailMatchmaking(e, "Quick play");
             }
         }
@@ -137,14 +152,18 @@ namespace Overlink.Net
         {
             if (IsBusy || CurrentLobby != null) return;
 
+            int version = ++operationVersion;
             SetState(LobbyState.Creating);
             try
             {
                 if (!await EnsureSignedInAsync()) return;
-                AdoptLobby(await CreatePrivateLobbyAsync(MaxPlayers));
+                Lobby lobby = await CreatePrivateLobbyAsync(MaxPlayers, true);
+                if (version != operationVersion) return;
+                AdoptLobby(lobby);
             }
             catch (Exception e)
             {
+                if (version != operationVersion) return;
                 FailMatchmaking(e, "Create lobby");
             }
         }
@@ -162,16 +181,19 @@ namespace Overlink.Net
             }
 
             SetState(LobbyState.Joining);
+            int version = ++operationVersion;
             try
             {
                 if (!await EnsureSignedInAsync()) return;
 
                 Lobby lobby = await LobbyService.Instance.JoinLobbyByCodeAsync(
                     code, new JoinLobbyByCodeOptions { Player = new Player(playerId) });
+                if (version != operationVersion) return;
                 AdoptLobby(lobby);
             }
             catch (LobbyServiceException e)
             {
+                if (version != operationVersion) return;
                 // A full or locked lobby is the common user mistake, so name it directly.
                 SetStatus(e.Reason == LobbyExceptionReason.LobbyFull
                     ? "That match is already full."
@@ -180,6 +202,7 @@ namespace Overlink.Net
             }
             catch (Exception e)
             {
+                if (version != operationVersion) return;
                 FailMatchmaking(e, "Join lobby");
             }
         }
@@ -200,6 +223,7 @@ namespace Overlink.Net
             SetState(LobbyState.Starting);
             try
             {
+                int version = operationVersion;
                 string relayCode = await net.CreateRelayAndHostAsync(MaxPlayers);
                 if (string.IsNullOrEmpty(relayCode))
                 {
@@ -217,6 +241,12 @@ namespace Overlink.Net
                         },
                     });
 
+                if (version != operationVersion || CurrentLobby == null)
+                {
+                    if (net.IsListening) net.LeaveGame();
+                    return;
+                }
+
                 CurrentLobby = updated;
                 SetState(LobbyState.InGame);
                 SetStatus("Match started — waiting for the other player to connect.");
@@ -224,6 +254,7 @@ namespace Overlink.Net
             }
             catch (Exception e)
             {
+                if (net != null && net.IsListening) net.LeaveGame();
                 FailMatchmaking(e, "Start match");
             }
         }
@@ -236,6 +267,7 @@ namespace Overlink.Net
                 return;
             }
 
+            operationVersion++;
             SetStatus("Cancelled.");
             SetState(LobbyState.Idle);
         }
@@ -248,6 +280,7 @@ namespace Overlink.Net
         {
             if (leaving) return;
             leaving = true;
+            operationVersion++;
             StopRoutines();
 
             Lobby leavingLobby = CurrentLobby;
@@ -287,7 +320,7 @@ namespace Overlink.Net
 
         // --- Lobby plumbing -----------------------------------------------------
 
-        async Task<Lobby> CreatePrivateLobbyAsync(int maxPlayers)
+        async Task<Lobby> CreatePrivateLobbyAsync(int maxPlayers, bool isPrivate)
         {
             SetStatus("Creating a lobby…");
             return await LobbyService.Instance.CreateLobbyAsync(
@@ -295,7 +328,7 @@ namespace Overlink.Net
                 maxPlayers,
                 new CreateLobbyOptions
                 {
-                    IsPrivate = true,
+                    IsPrivate = isPrivate,
                     Player = new Player(playerId),
                     Data = new Dictionary<string, DataObject>
                     {
@@ -441,11 +474,11 @@ namespace Overlink.Net
                 bool started = GetData(refreshed, KeyStatus) == StatusInGame;
                 if (started && !string.IsNullOrEmpty(relayCode) && net != null && !net.IsListening)
                 {
-                    SetStatus("Match found — joining…");
+                    SetStatus("Match found — connecting…");
                     if (await net.JoinRelayAsync(relayCode))
                     {
                         SetState(LobbyState.InGame);
-                        SetStatus("Joined the match.");
+                        SetStatus("Connecting to the match…");
                     }
                 }
             }
@@ -459,18 +492,27 @@ namespace Overlink.Net
             return data.Value ?? "";
         }
 
+        void OnNetworkConnected()
+        {
+            if (State == LobbyState.InGame) SetStatus("Connected to the match.");
+        }
+
+        void OnNetworkDisconnected()
+        {
+            if (State == LobbyState.InGame) SetStatus("Disconnected from the match.");
+        }
+
         async Task<bool> EnsureSignedInAsync()
         {
-            if (net != null) await net.EnsureServicesAsync();
-
-            IAuthenticationService auth = AuthenticationService.Instance;
-            if (auth == null || !auth.IsSignedIn)
+            AccountManager account = AccountManager.EnsureInstance();
+            if (!await account.EnsureSignedInAsync())
             {
-                SetStatus("Could not sign in to Unity Services — see console.");
+                SetStatus(account.Status);
                 SetState(LobbyState.Idle);
                 return false;
             }
 
+            IAuthenticationService auth = AuthenticationService.Instance;
             playerId = auth.PlayerId;
             if (!string.IsNullOrEmpty(playerId)) return true;
 

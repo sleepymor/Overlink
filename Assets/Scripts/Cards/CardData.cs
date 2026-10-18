@@ -22,6 +22,11 @@ namespace Overlink.Cards
             this.accent = accent;
         }
 
+        // Note: identity is intentional. HandController.SetHand and GameCoordinator's lookup map reuse
+        // views by *reference* (one cached CardData per card instance), so two physical copies of the
+        // same definition must stay distinct objects. Do not add value-based Equals/GetHashCode here -
+        // it would collapse duplicate cards in the hand's HashSet.
+
         public static List<CardData> StarterDeck()
         {
             return new List<CardData>

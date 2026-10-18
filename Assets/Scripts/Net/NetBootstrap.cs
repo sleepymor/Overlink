@@ -63,9 +63,12 @@ namespace Overlink.Net
 
         NetworkManager mgr;
         UnityTransport transport;
-        Task servicesTask;
         Coroutine watchdog;
         bool ready;
+        bool relayOperation;
+
+        public event Action OnNetworkConnected;
+        public event Action OnNetworkDisconnected;
 
         readonly Stack<int> freeSeats = new Stack<int>();
         readonly Dictionary<ulong, int> clientSeats = new Dictionary<ulong, int>();
@@ -149,7 +152,13 @@ namespace Overlink.Net
                 SetStatus("Already hosting or connected — Leave before starting again.");
                 return null;
             }
+            if (relayOperation)
+            {
+                SetStatus("A session operation is already in progress.");
+                return null;
+            }
 
+            relayOperation = true;
             try
             {
                 SetStatus("Signing in…");
@@ -161,13 +170,16 @@ namespace Overlink.Net
                 string code = await RelayService.Instance.GetJoinCodeAsync(alloc.AllocationId);
 
                 transport.SetRelayServerData(new RelayServerData(alloc, RelayProtocol));
+                // StartHost invokes the local connected callback synchronously. Reset before
+                // starting so the host consumes seat zero and it cannot be reused by a guest.
+                ResetSeats(playerCount);
                 if (!mgr.StartHost())
                 {
+                    ResetSeats(playerCount);
                     SetStatus("Host failed to start — see console.");
                     return null;
                 }
 
-                ResetSeats(playerCount);
                 LastJoinCode = code;
                 OnJoinCodeChanged?.Invoke(code);
                 SetStatus($"Hosting — share code: {code}");
@@ -177,6 +189,10 @@ namespace Overlink.Net
             {
                 SetStatus($"Host failed: {e.Message}");
                 return null;
+            }
+            finally
+            {
+                relayOperation = false;
             }
         }
 
@@ -196,6 +212,11 @@ namespace Overlink.Net
                 SetStatus("Already hosting or connected — Leave before joining.");
                 return false;
             }
+            if (relayOperation)
+            {
+                SetStatus("A session operation is already in progress.");
+                return false;
+            }
 
             string code = NormalizeCode(rawCode);
             if (code.Length == 0)
@@ -204,6 +225,7 @@ namespace Overlink.Net
                 return false;
             }
 
+            relayOperation = true;
             try
             {
                 SetStatus("Signing in…");
@@ -228,6 +250,10 @@ namespace Overlink.Net
             {
                 SetStatus($"Join failed: {e.Message}");
                 return false;
+            }
+            finally
+            {
+                relayOperation = false;
             }
         }
 
@@ -258,6 +284,11 @@ namespace Overlink.Net
                 SetStatus($"Already hosting or connected — Leave before trying to {action}.");
                 return false;
             }
+            if (relayOperation)
+            {
+                SetStatus($"Already trying to {action.ToLowerInvariant()} — please wait.");
+                return false;
+            }
             return true;
         }
 
@@ -284,6 +315,7 @@ namespace Overlink.Net
                     watchdog = null;
                 }
                 SetStatus("Connected!");
+                OnNetworkConnected?.Invoke();
                 return;
             }
 
@@ -297,6 +329,7 @@ namespace Overlink.Net
             if (!mgr.IsServer)
             {
                 if (clientId == mgr.LocalClientId) SetStatus("Disconnected from host.");
+                if (clientId == mgr.LocalClientId) OnNetworkDisconnected?.Invoke();
                 return;
             }
 
@@ -393,29 +426,13 @@ namespace Overlink.Net
         /// during sign-in waits on the same work instead of initialising the SDK twice.
         /// LobbyManager reuses this so the Lobby and Relay paths share one signed-in player.
         /// </summary>
-        public Task EnsureServicesAsync()
+        public async Task EnsureServicesAsync()
         {
-            if (servicesTask == null) servicesTask = SignInAsync();
-            return servicesTask;
-
-            // A faulted task would otherwise be cached for the rest of the session and every
-            // later attempt would replay the same failure, so drop it and let the next click
-            // retry. Concurrent callers still share one attempt because the check above runs
-            // before the await.
-            async Task SignInAsync()
-            {
-                try
-                {
-                    await UnityServices.InitializeAsync();
-                    if (!AuthenticationService.Instance.IsSignedIn)
-                        await AuthenticationService.Instance.SignInAnonymouslyAsync();
-                }
-                catch
-                {
-                    servicesTask = null;
-                    throw;
-                }
-            }
+            // AccountManager owns the single-flight initialization task and resets it after
+            // failures, so a transient outage can be retried instead of poisoning this layer.
+            AccountManager account = AccountManager.EnsureInstance();
+            if (!await account.EnsureSignedInAsync())
+                throw new InvalidOperationException(account.Status);
         }
     }
 }

@@ -7,13 +7,22 @@ namespace Overlink.Cards
     [RequireComponent(typeof(BoxCollider))]
     public class CardView : MonoBehaviour
     {
-        public static readonly Vector3 CardSize = new Vector3(0.9f, 1.4f, 0.06f);
+        // Card face is a 5:7 portrait (width:height), the standard trading-card look. Keep the X:Y ratio at
+        // 5:7 when retuning the size so the Title/Cost/Desc layout below stays aligned.
+        public static readonly Vector3 CardSize = new Vector3(1.0f, 1.4f, 0.06f);
 
         public CardData Data { get; private set; }
         public int SlotIndex { get; set; }
         public bool IsDragging { get; private set; }
         public bool IsHovered { get; private set; }
-        public Vector3 BaseScale { get; private set; } = CardSize;
+
+        /// <summary>
+        /// Resting scale of this card's root transform. The root is only an animation container: the card's
+        /// real footprint lives on the <c>Body</c> child (see <see cref="SetSize"/>), so the root rests at
+        /// <see cref="Vector3.one"/> and every tween scales it uniformly. Keeping the root uniform is also
+        /// what stops the Title/Cost/Desc labels (children of the root) from being stretched.
+        /// </summary>
+        public Vector3 BaseScale { get; private set; } = Vector3.one;
 
         CardTween tween;
         Renderer bodyRenderer;
@@ -41,14 +50,17 @@ namespace Overlink.Cards
             col.size = size;
 
             var view = root.AddComponent<CardView>();
-            view.BaseScale = size;
+            view.BaseScale = Vector3.one;
             view.Setup(data);
             return view;
         }
 
+        /// <summary>
+        /// Resizes the card face. The visible size lives on the <c>Body</c> child and the root collider, not
+        /// on the root transform's scale, so <see cref="BaseScale"/> (the animation scale) is left alone.
+        /// </summary>
         public void SetSize(Vector3 size)
         {
-            BaseScale = size;
             var body = transform.Find("Body");
             if (body != null) body.localScale = size;
             var col = GetComponent<BoxCollider>();

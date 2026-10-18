@@ -11,4 +11,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/NetPresenceDemo.unity
     guid: 8cd5b3163fa1c5c40ab58386b2f6663a
+  - enabled: 1
+    path: Assets/Scenes/Gameplay.unity
+    guid: 39b4e159f6bec2448b1ab55257e517a9
   m_configObjects: {}

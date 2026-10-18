@@ -1,9 +1,17 @@
 {
     "name": "Overlink.Cards",
-    "references": ["Unity.TextMeshPro"],
+    "rootNamespace": "Overlink.Cards",
+    "references": [
+        "Overlink.Core",
+        "Unity.TextMeshPro"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
-    "autoReferenced": true
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

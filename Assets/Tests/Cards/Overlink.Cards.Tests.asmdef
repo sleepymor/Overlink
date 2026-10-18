@@ -1,7 +1,13 @@
 {
     "name": "Overlink.Cards.Tests",
-    "references": ["Overlink.Cards"],
-    "optionalUnityReferences": ["TestAssemblies"],
+    "rootNamespace": "Overlink.Cards.Tests",
+    "references": [
+        "Overlink.Cards",
+        "Overlink.Core"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

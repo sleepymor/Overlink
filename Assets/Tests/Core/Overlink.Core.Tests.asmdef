@@ -1,0 +1,14 @@
+{
+    "name": "Overlink.Core.Tests",
+    "references": [
+        "Overlink.Core"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": false
+}

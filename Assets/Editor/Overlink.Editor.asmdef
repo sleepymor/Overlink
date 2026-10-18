@@ -1,0 +1,20 @@
+{
+    "name": "Overlink.Editor",
+    "rootNamespace": "Overlink.EditorTools",
+    "references": [
+        "Overlink.Cards",
+        "Overlink.Core",
+        "Overlink.Match"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
