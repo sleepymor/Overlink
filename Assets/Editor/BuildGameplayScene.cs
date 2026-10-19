@@ -184,6 +184,22 @@ namespace Overlink.EditorTools
             presenterSo.FindProperty("hud").objectReferenceValue = hud;
             presenterSo.ApplyModifiedPropertiesWithoutUndo();
 
+            // The click layer: reading a card, picking an attacker, committing a block. It sits beside the
+            // presenter rather than inside it because the presenter is geometry-only and judges no rules,
+            // and it sits beside the coordinator because the coordinator owns the match.
+            var input = root.AddComponent<Overlink.Match.BattlefieldInput>();
+            var inputSo = new SerializedObject(input);
+            inputSo.FindProperty("coordinator").objectReferenceValue = coordinator;
+            inputSo.FindProperty("presenter").objectReferenceValue = presenter;
+            inputSo.FindProperty("hand").objectReferenceValue = hand;
+            inputSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // This scene is a local match against the AI, but the Net layer self-installs a Google / guest
+            // sign-in panel into every scene it loads into, where it draws across the board header. The guard
+            // hides it for the duration of this scene and puts it back on unload, so the Net demo scenes are
+            // unaffected. See the type's docs for why it is hidden rather than fixed.
+            root.AddComponent<Overlink.Match.NetAccountPanelGuard>();
+
             GameObject boardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BattlefieldPrefabPath);
             if (boardPrefab != null)
             {

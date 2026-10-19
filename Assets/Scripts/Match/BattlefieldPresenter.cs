@@ -145,11 +145,17 @@ namespace Overlink.Match
         // keep whatever stale string was baked into it the last time the prefab was rebuilt. Binding
         // re-applies both the size and the text so a key added to GameCoordinator shows up without a
         // prefab rebuild.
+        //
+        // Two lines, because the mouse layer doubled what the legend has to say: at 11pt a single line of
+        // this length is ~13 board units wide against a 16.5-unit table, and the third bullet point was
+        // already running off the edge.
         const float ControlsHintFontSize = 11f;
+        static readonly Vector2 ControlsHintSize = new Vector2(17f, 0.78f);
         const string ControlsHintText =
-            "DRAG onto a lit socket to play it there   \u2022   1-5 attack (Core, Node 1-4)   \u2022   " +
-            "P phase (plays need MAIN)   \u2022   E end turn   \u2022   Q concede   \u2022   " +
-            "Wheel zoom, out again for bird's eye   \u2022   RMB pan";
+            "Click a card to read it   \u2022   Click a Ready unit, then a red socket, to attack   \u2022   " +
+            "Drag onto a lit socket to deploy\n" +
+            "\u2190/\u2192 browse   \u2022   ESC cancel   \u2022   P phase (plays need MAIN)   \u2022   E end turn   \u2022   " +
+            "Q concede   \u2022   1-5 attack   \u2022   Wheel zoom   \u2022   RMB pan";
 
         static readonly string[] NodeCaption =
         {
@@ -173,6 +179,16 @@ namespace Overlink.Match
         static readonly Color NodePlayer = new Color(0.14f, 0.48f, 0.28f);
         static readonly Color NodeOpponent = new Color(0.56f, 0.38f, 0.12f);
         static readonly Color BlockMark = new Color(1f, 0.84f, 0.20f);
+
+        // Pointer marks. Chosen to be distinguishable from the owner tints they are drawn over - blue for the
+        // player's own units, warm red/orange for the enemy's - so "I picked this" and "I could hit this"
+        // never read as the same shade on opposite halves of the table.
+        static readonly Color SelectMark = new Color(0.45f, 0.95f, 1.00f);
+        static readonly Color AttackMark = new Color(1.00f, 0.42f, 0.32f);
+        static readonly Color BlockerMark = new Color(0.42f, 0.95f, 0.55f);
+        static readonly Color BlockTargetMark = new Color(1.00f, 0.72f, 0.30f);
+        static readonly Color CoreTargetMark = new Color(1.00f, 0.55f, 0.35f);
+        static readonly Color StatusIdle = new Color(0.92f, 0.95f, 1f);
 
         Transform boardRoot;
 
@@ -264,6 +280,7 @@ namespace Overlink.Match
             if (existing != null && TryBindBoard(existing))
             {
                 boardRoot = existing;
+                pickablesValid = false;
                 SyncPileAnchors();
                 return;
             }
@@ -276,6 +293,7 @@ namespace Overlink.Match
 
             boardRoot = new GameObject(BoardRootName).transform;
             boardRoot.SetParent(transform, false);
+            pickablesValid = false;
 
             // Tabletop backdrop.
             MakeBody(boardRoot, "Table", new Vector3(0f, TableCenterY, TableZ),
@@ -472,6 +490,7 @@ namespace Overlink.Match
             {
                 Body = renderer,
                 Label = label,
+                Name = name,
                 // Derived from the slot's NAME, never read back off its material. The prefab cannot be
                 // relied on to carry a per-tile colour (inline Materials are not assets, so a prefab save
                 // collapses them onto one shared material), but the name always identifies the slot kind,
@@ -479,7 +498,7 @@ namespace Overlink.Match
                 BaseColor = BaseColorForSlot(name),
                 EmptyLabel = label.text,
             };
-            ApplySlotIdentity(tile, name);
+            ApplyTileIdentity(tile, name);
             return tile;
         }
 
@@ -492,7 +511,7 @@ namespace Overlink.Match
         /// tiles are never drop targets, so they keep the default identity and are simply not probed.
         /// </para>
         /// </summary>
-        static void ApplySlotIdentity(Tile tile, string name)
+        static void ApplyTileIdentity(Tile tile, string name)
         {
             if (tile == null)
             {
@@ -505,6 +524,84 @@ namespace Overlink.Match
                 tile.SlotIndex = index;
                 tile.NodeIndex = nodeIndex;
             }
+
+            if (TryParseTileOwnership(name, out PlayerIndex owner, out TileRole role, out int ownedNode))
+            {
+                tile.Owner = owner;
+                tile.Role = role;
+                // A plate is the only recognised object whose node index the drop contract never fills in,
+                // so borrow it rather than parsing the name twice.
+                if (role == TileRole.Plate)
+                {
+                    tile.NodeIndex = ownedNode;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The name-keyed identity of <b>every</b> recognised tile on the table, for clicking. Broader than
+        /// <see cref="TryParseSlotIdentity"/>, which deliberately names only the player's own deployable
+        /// sockets: a drag may target four objects, whereas a click is meaningful on the opponent's ranks,
+        /// both Protocol sockets, the Node plates and the two piles too.
+        /// <para>
+        /// Keyed off names rather than off the hierarchy because both construction paths agree on them: the
+        /// procedural build creates the tiles with these names and the prefab-bind path resolves them by name
+        /// through the hierarchy index, so a board regrouped by hand still identifies itself correctly.
+        /// </para>
+        /// </summary>
+        public static bool TryParseTileOwnership(string name, out PlayerIndex owner, out TileRole role,
+            out int nodeIndex)
+        {
+            owner = PlayerIndex.Player;
+            role = TileRole.Other;
+            nodeIndex = -1;
+
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            if (name.StartsWith("NodePlate"))
+            {
+                role = TileRole.Plate;
+                nodeIndex = TrailingIndex(name, 0);
+                return true;
+            }
+
+            if (name == "DeckPile" || name == "DiscardPile")
+            {
+                role = TileRole.Pile;
+                return true;
+            }
+
+            // Node tiles are named Node{Play|Opp}{Active|Bench}{node}_{slot}; the plain Core ones are
+            // {Play|Opp}{CoreActive|CoreBench}{slot}. Both put the owner's initial at the front.
+            bool opponent = name.StartsWith("Opp") || name.StartsWith("NodeOpp");
+            bool player = name.StartsWith("Play") || name.StartsWith("NodePlay");
+            if (!opponent && !player)
+            {
+                return false;
+            }
+
+            owner = opponent ? PlayerIndex.Opponent : PlayerIndex.Player;
+
+            if (name.EndsWith("Protocol"))
+            {
+                role = TileRole.Protocol;
+                return true;
+            }
+
+            if (name.Contains("Active") || name.Contains("Bench"))
+            {
+                role = TileRole.Socket;
+                if (name.StartsWith("Node"))
+                {
+                    nodeIndex = TrailingIndex(name, 1);
+                }
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -844,31 +941,47 @@ namespace Overlink.Match
 
             for (int i = 0; i < tiles.Length; i++)
             {
-                Tile tile = tiles[i];
-                if (tile == null || tile.Body == null)
+                if (!TryHit(tiles[i], point, out float distance))
                 {
                     continue;
                 }
 
-                // Centre from the world transform and extent from the effective scale, both expressed in
-                // board-root units, so a tile buried inside the Core / Node / rank groups probes exactly
-                // like a flat one - and a group you scaled or moved in the editor is honoured as authored.
-                Vector3 center = boardRoot.InverseTransformPoint(tile.Body.transform.position);
-                Vector3 half = HalfExtentInBoardUnits(tile.Body.transform);
-                float dx = point.x - center.x;
-                float dy = point.y - center.y;
-                if (Mathf.Abs(dx) > half.x || Mathf.Abs(dy) > half.y)
-                {
-                    continue;
-                }
-
-                float distance = dx * dx + dy * dy;
                 if (best == null || distance < bestDistance)
                 {
-                    best = tile;
+                    best = tiles[i];
                     bestDistance = distance;
                 }
             }
+        }
+
+        /// <summary>
+        /// True when <paramref name="point"/> (in board-root units) lies inside this tile's footprint, with
+        /// the squared distance to its centre on output. Depth is ignored for the same reason
+        /// <see cref="FindDropTarget"/> ignores it: the tiles are laid out flat and the thing being tested
+        /// floats above them.
+        /// </summary>
+        bool TryHit(Tile tile, Vector3 point, out float distanceSquared)
+        {
+            distanceSquared = float.MaxValue;
+            if (tile == null || tile.Body == null)
+            {
+                return false;
+            }
+
+            // Centre from the world transform and extent from the effective scale, both expressed in
+            // board-root units, so a tile buried inside the Core / Node / rank groups probes exactly
+            // like a flat one - and a group you scaled or moved in the editor is honoured as authored.
+            Vector3 center = boardRoot.InverseTransformPoint(tile.Body.transform.position);
+            Vector3 half = HalfExtentInBoardUnits(tile.Body.transform);
+            float dx = point.x - center.x;
+            float dy = point.y - center.y;
+            if (Mathf.Abs(dx) > half.x || Mathf.Abs(dy) > half.y)
+            {
+                return false;
+            }
+
+            distanceSquared = dx * dx + dy * dy;
+            return true;
         }
 
         /// <summary>
@@ -892,6 +1005,542 @@ namespace Overlink.Match
         public void ClearDropHighlight()
         {
             highlightedTile = null;
+        }
+
+        // ---- Pointer targeting ------------------------------------------------------
+        // Everything above answers "where would a dragged card land", which only ever concerns the player's
+        // own deployable sockets. Clicking is a broader question - the opponent's ranks, both Protocol
+        // sockets, the Node plates, the two piles and the two Core counters are all worth knowing about - so
+        // it gets its own hit-test over every object on the table, sharing the footprint maths above.
+        //
+        // Like the drop test, this is geometry and nothing else. It reports what is under the pointer and
+        // whose it is; GameCoordinator decides whether the player may act on it.
+
+        // The two status strips double as the Core counters, and therefore as the target of an unblocked
+        // direct attack (GDD 2.1.6 Step 4). Their footprint is MakeStatusStrip's rect, in board-root units.
+        static readonly Vector2 PlayerCoreStripCenter = new Vector2(0f, PlayerStatusY);
+        static readonly Vector2 OpponentCoreStripCenter = new Vector2(0f, OpponentStatusY);
+        internal const float CoreStripHalfWidth = 3.5f;
+        internal const float CoreStripHalfHeight = 0.2f;
+
+        readonly List<Tile> pickables = new List<Tile>();
+        readonly Dictionary<Tile, CardInstance> cardByTile = new Dictionary<Tile, CardInstance>();
+        readonly Dictionary<int, Tile> tileByCard = new Dictionary<int, Tile>();
+        bool pickablesValid;
+        bool coreMarked;
+
+        /// <summary>The tile a unit is standing on, or null when the board has not painted it yet.</summary>
+        public Tile TileOf(CardInstance card)
+        {
+            return card != null && tileByCard.TryGetValue(card.InstanceId, out Tile tile) ? tile : null;
+        }
+
+        /// <summary>
+        /// Resolves a screen point to the tabletop object under it, by casting through the board's own plane.
+        /// <para>
+        /// Deliberately not a <c>Physics</c> raycast: the tile cubes have no colliders, because the hand's
+        /// drag raycast must never hit the board, and a collider added for clicking would change what a drag
+        /// can pass over. Projecting onto the board plane and reusing the drop test's footprint maths keeps
+        /// one geometry for both gestures.
+        /// </para>
+        /// </summary>
+        /// <returns>What is under the pointer, or null when the ray misses the table entirely.</returns>
+        public BoardHit FindHitAt(Camera cam, Vector2 screenPos)
+        {
+            if (boardRoot == null || playerCoreActive == null)
+            {
+                return null;
+            }
+
+            if (cam == null)
+            {
+                cam = Camera.main;
+            }
+
+            if (cam == null)
+            {
+                return null;
+            }
+
+            Ray ray = cam.ScreenPointToRay(screenPos);
+            // The board's local Z is the table normal: the Match root is tilted 90 degrees, so the plane has
+            // to come from the hierarchy rather than be assumed to be Vector3.forward.
+            var table = new Plane(boardRoot.forward, boardRoot.position);
+            if (!table.Raycast(ray, out float enter))
+            {
+                return null;
+            }
+
+            return FindHitInBoardSpace(boardRoot.InverseTransformPoint(ray.GetPoint(enter)));
+        }
+
+        /// <summary>
+        /// The same test in board-root coordinates, exposed for tests: the screen-space version needs a
+        /// camera and a viewport, and neither should be a precondition for asserting what is clickable.
+        /// </summary>
+        public BoardHit FindHitInBoardSpace(Vector3 point)
+        {
+            CollectPickables();
+
+            Tile best = null;
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < pickables.Count; i++)
+            {
+                if (!TryHit(pickables[i], point, out float distance))
+                {
+                    continue;
+                }
+
+                if (best == null || distance < bestDistance)
+                {
+                    best = pickables[i];
+                    bestDistance = distance;
+                }
+            }
+
+            BoardHit hit = best == null ? null : FromTile(best);
+
+            // The Core counters compete on the same nearest-centre rule, so a click that lands on both a
+            // strip and a socket gets the socket: it is the smaller, more specific target.
+            if (WithinStrip(OpponentCoreStripCenter, point, out float opponentDistance)
+                && (hit == null || opponentDistance < bestDistance))
+            {
+                hit = new BoardHit { Kind = BoardHitKind.OpponentCore, Owner = PlayerIndex.Opponent };
+                bestDistance = opponentDistance;
+            }
+
+            if (WithinStrip(PlayerCoreStripCenter, point, out float playerDistance)
+                && (hit == null || playerDistance < bestDistance))
+            {
+                hit = new BoardHit { Kind = BoardHitKind.PlayerCore, Owner = PlayerIndex.Player };
+            }
+
+            return hit;
+        }
+
+        static bool WithinStrip(Vector2 center, Vector3 point, out float distanceSquared)
+        {
+            float dx = point.x - center.x;
+            float dy = point.y - center.y;
+            distanceSquared = dx * dx + dy * dy;
+            return Mathf.Abs(dx) <= CoreStripHalfWidth && Mathf.Abs(dy) <= CoreStripHalfHeight;
+        }
+
+        BoardHit FromTile(Tile tile)
+        {
+            cardByTile.TryGetValue(tile, out CardInstance card);
+            return new BoardHit
+            {
+                Kind = KindFor(tile),
+                Owner = tile.Owner,
+                SlotType = tile.SlotType,
+                SlotIndex = tile.SlotIndex,
+                NodeIndex = tile.NodeIndex,
+                Card = card,
+                Tile = tile,
+            };
+        }
+
+        /// <summary>
+        /// Boards only carry the four recognised roles, since <see cref="CollectPickables"/> drops anything
+        /// else - the last arm exists for the compiler, not for a case that can happen.
+        /// </summary>
+        static BoardHitKind KindFor(Tile tile)
+        {
+            switch (tile.Role)
+            {
+                case TileRole.Protocol: return BoardHitKind.Protocol;
+                case TileRole.Plate: return BoardHitKind.Plate;
+                case TileRole.Pile: return tile.Name == "DeckPile" ? BoardHitKind.DeckPile : BoardHitKind.DiscardPile;
+                default: return BoardHitKind.Socket;
+            }
+        }
+
+        void CollectPickables()
+        {
+            if (pickablesValid)
+            {
+                return;
+            }
+
+            pickables.Clear();
+            Add(playerCoreActive);
+            Add(playerCoreBench);
+            Add(opponentCoreActive);
+            Add(opponentCoreBench);
+            AddTile(playerProtocol);
+            AddTile(opponentProtocol);
+
+            if (nodePlate != null)
+            {
+                for (int n = 0; n < nodePlate.Length; n++)
+                {
+                    AddTile(nodePlate[n]);
+                }
+            }
+
+            if (nodePlayerActive != null)
+            {
+                for (int n = 0; n < nodePlayerActive.Length; n++)
+                {
+                    Add(nodePlayerActive[n]);
+                    Add(nodePlayerBench[n]);
+                    Add(nodeOpponentActive[n]);
+                    Add(nodeOpponentBench[n]);
+                }
+            }
+
+            AddTile(deckPile);
+            AddTile(discardPile);
+
+            pickablesValid = true;
+
+            void Add(Tile[] tiles)
+            {
+                if (tiles == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    AddTile(tiles[i]);
+                }
+            }
+
+            void AddTile(Tile tile)
+            {
+                if (tile != null && tile.Body != null && tile.Role != TileRole.Other)
+                {
+                    pickables.Add(tile);
+                }
+            }
+        }
+
+        // ---- Pointer marks ------------------------------------------------------------
+
+        /// <summary>
+        /// Clears every attention mark, including the Core glow. Cheap and total on purpose: the pointer
+        /// layer rebuilds the marks from its own state whenever that state changes, so the way to stay
+        /// consistent is to start from nothing rather than to diff against what was lit last time.
+        /// </summary>
+        public void ClearMarks()
+        {
+            CollectPickables();
+            for (int i = 0; i < pickables.Count; i++)
+            {
+                pickables[i].Mark = PickMark.None;
+            }
+
+            coreMarked = false;
+        }
+
+        /// <summary>Marks one tile. Safe to call with a tile the board no longer has.</summary>
+        public void Mark(BattlefieldPresenter.Tile tile, PickMark mark)
+        {
+            if (tile != null)
+            {
+                tile.Mark = mark;
+            }
+        }
+
+        /// <summary>Marks the tiles every unit in the list is standing on, and reports how many were lit.</summary>
+        public int MarkCards(IReadOnlyList<CardInstance> cards, PickMark mark)
+        {
+            if (cards == null)
+            {
+                return 0;
+            }
+
+            int lit = 0;
+            for (int i = 0; i < cards.Count; i++)
+            {
+                Tile tile = TileOf(cards[i]);
+                if (tile == null)
+                {
+                    continue;
+                }
+
+                tile.Mark = mark;
+                lit++;
+            }
+
+            return lit;
+        }
+
+        /// <summary>Glows the opponent's Core counter, which is the click target for an unblocked direct attack.</summary>
+        public void MarkCoreTarget(bool on)
+        {
+            coreMarked = on;
+        }
+
+        /// <summary>
+        /// Whether the opponent's Core is currently lit as an attack target. It has no cube to tint - the
+        /// counter is a text strip - so this is how anything outside the view (a test, or a future cursor
+        /// state) can tell that the glow is on.
+        /// </summary>
+        public bool CoreTargetMarked => coreMarked;
+
+        /// <summary>
+        /// The tile the pointer is currently over, when it is something the player could act on. Kept
+        /// separate from <see cref="Tile.Mark"/> because hover is a transient sheen that must never
+        /// outsurvive a frame, whereas a mark is a commitment the click layer made and expects to still be
+        /// there when it resolves the pointer's release.
+        /// </summary>
+        public void SetHover(Tile tile)
+        {
+            if (hoveredTile == tile)
+            {
+                return;
+            }
+
+            hoveredTile = tile;
+        }
+
+        Tile hoveredTile;
+
+        /// <summary>
+        /// Rebuilds the marks for the current selection. Called by <see cref="BattlefieldInput"/> whenever the
+        /// player picks or un-picks a unit, and given the legal targets rather than computing them: the view
+        /// has no rules, so it cannot decide what a unit may hit.
+        /// </summary>
+        public void ShowAttack(CardInstance attacker, IReadOnlyList<CardInstance> targets, bool coreTargetable)
+        {
+            ClearMarks();
+            MarkCards(attacker == null ? null : new[] { attacker }, PickMark.Selected);
+            MarkCards(targets, PickMark.AttackTarget);
+            MarkCoreTarget(coreTargetable);
+        }
+
+        /// <summary>The blocking equivalent of <see cref="ShowAttack"/>.</summary>
+        public void ShowBlocks(IReadOnlyList<CardInstance> readyBlockers,
+            IReadOnlyList<CardInstance> blockableAttackers)
+        {
+            ClearMarks();
+            MarkCards(readyBlockers, PickMark.Blocker);
+            MarkCards(blockableAttackers, PickMark.BlockTarget);
+        }
+
+        /// <summary>
+        /// Lights the single tile a blocker is being aimed at, without disturbing the rest of the marks.
+        /// Used while the player has picked a blocker and is choosing which enemy attack to answer.
+        /// </summary>
+        public void ShowBlockPick(CardInstance blocker, IReadOnlyList<CardInstance> attackers)
+        {
+            ClearMarks();
+            MarkCards(new[] { blocker }, PickMark.Selected);
+            MarkCards(attackers, PickMark.BlockTarget);
+        }
+
+        // ---- Details ------------------------------------------------------------------
+
+        /// <summary>
+        /// Writes the details panel. Every reader write in the game funnels through here, because the HUD is a
+        /// reference the presenter resolves lazily and may not have yet: a caller reaching for
+        /// <c>presenter.hud</c> directly would be the one place a null HUD turned into an exception.
+        /// </summary>
+        /// <param name="title">What the panel is about. Null with a null <paramref name="body"/> dismisses it.</param>
+        /// <param name="body">The panel's text, TMP markup allowed.</param>
+        /// <param name="foot">The footer - a position in a pile, or a hint. Null clears the line.</param>
+        public void ShowInfo(string title, string body, string foot)
+        {
+            if (hud == null)
+            {
+                ResolveHud();
+            }
+
+            if (hud != null)
+            {
+                hud.ShowReader(title, body, foot);
+            }
+        }
+
+        /// <summary>
+        /// Puts a card that is (or was) on the table in the reader panel. Formatting lives here because the
+        /// panel is a view of Core state: it reads the same <see cref="CardInstance"/> the tiles are painted
+        /// from, so the details cannot disagree with the socket it came out of.
+        /// </summary>
+        public void ShowCard(CardInstance card, MatchState state, string where)
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            ShowInfo(card.Definition.Name, CardDetails(card, state), where);
+        }
+
+        /// <summary>
+        /// The full text of a card: everything the tile's two-line caption has to leave out. Stat lines are
+        /// skipped for the card types that have no stats rather than printed as <c>0/0</c>, which reads as a
+        /// bug on a Relay or a Protocol (GDD 4.15.1).
+        /// </summary>
+        static string CardDetails(CardInstance card, MatchState state)
+        {
+            var sb = new StringBuilder();
+            CardDefinition def = card.Definition;
+
+            sb.Append("<color=#8fa0b8>").Append(TypeLabel(def.Type)).Append("</color>");
+            if (def.Faction != 0 || def.Rarity != 0)
+            {
+                sb.Append("   \u2022   ").Append(def.Faction).Append(" / ").Append(def.Rarity);
+            }
+            sb.Append('\n');
+
+            sb.Append("Cost ").Append(def.Cost).Append(" NP");
+
+            // Gated on the card's <em>type</em>, not on whether its numbers happen to be non-zero. Only Units
+            // fight (GDD 4.15.1), so a Protocol carrying ATK 2 is a data bug, and printing "ATK 2" here would
+            // launder it into something that looks like a rule. The alternative - printing 0/0 for every Relay
+            // and Protocol - reads as a bug too, which is the one this line exists to avoid.
+            if (def.Type == CardType.Unit)
+            {
+                sb.Append('\n');
+                sb.Append("ATK ").Append(card.CurrentAtk);
+                if (card.NodeAtkBonus != 0)
+                {
+                    sb.Append("  (").Append(card.NodeAtkBonus > 0 ? "+" : "").Append(card.NodeAtkBonus)
+                      .Append(" node)");
+                }
+
+                sb.Append("   HP ").Append(card.CurrentHp).Append('/').Append(def.Hp);
+                if (card.NodeHpBonus != 0)
+                {
+                    sb.Append("  (+").Append(card.NodeHpBonus).Append(" node)");
+                }
+
+                if (card.CurrentShield > 0)
+                {
+                    sb.Append("   Shield ").Append(card.CurrentShield);
+                }
+            }
+
+            string status = StatusLine(card, state);
+            if (!string.IsNullOrEmpty(status))
+            {
+                sb.Append('\n').Append(status);
+            }
+
+            if (!string.IsNullOrEmpty(def.AbilityText))
+            {
+                sb.Append("\n\n").Append(def.AbilityText);
+            }
+
+            if (def.Keywords != null && def.Keywords.Count > 0)
+            {
+                sb.Append("\n\n<color=#8fa0b8>Keywords</color>   ");
+                for (int i = 0; i < def.Keywords.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        sb.Append(", ");
+                    }
+                    sb.Append('[').Append(def.Keywords[i]).Append(']');
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Where the card stands right now, in words the player can act on: its slot, whether it could take
+        /// an action this step, and whether somebody is already ready to block it.
+        /// </summary>
+        static string StatusLine(CardInstance card, MatchState state)
+        {
+            if (state == null)
+            {
+                return null;
+            }
+
+            BoardSlot slot = state.GetPlayer(card.Owner).Board.FindSlot(card);
+            var parts = new List<string>();
+
+            if (slot != null)
+            {
+                parts.Add(slot.Type.ToString().ToUpper());
+            }
+
+            if (card.HasSummoningDelay)
+            {
+                parts.Add("SUMMONING DELAY");
+            }
+            else if (card.State == UnitState.Exhausted)
+            {
+                parts.Add("EXHAUSTED");
+            }
+            else if (card.State == UnitState.Summoned)
+            {
+                parts.Add("SUMMONED");
+            }
+
+            return parts.Count == 0 ? null : string.Join("   •   ", parts);
+        }
+
+        static string TypeLabel(CardType type)
+        {
+            switch (type)
+            {
+                case CardType.Unit: return "UNIT";
+                case CardType.Ability: return "ABILITY";
+                case CardType.Relay: return "RELAY";
+                case CardType.Protocol: return "PROTOCOL";
+                default: return type.ToString().ToUpper();
+            }
+        }
+
+        /// <summary>
+        /// Shows one card of the discard, with its position in the pile. <paramref name="index"/> is the
+        /// browser's business, not the view's: the caller owns how far into the pile the player has stepped.
+        /// <para>
+        /// The discard is public knowledge, so it is read in full. The deck deliberately gets the opposite
+        /// treatment in <see cref="ShowDeck"/> - its order is secret, and a browser that stepped through it
+        /// would be a cheat with a nice interface.
+        /// </para>
+        /// </summary>
+        public void ShowPileEntry(string pileName, CardInstance card, int index, int count)
+        {
+            if (count == 0)
+            {
+                // No position in a pile that does not exist: "DISCARD 1 / 0" reads as an off-by-one bug.
+                ShowInfo(pileName, "Nothing has been spent yet.", pileName);
+                return;
+            }
+
+            string where = $"{pileName}  {index + 1} / {count}";
+            if (card == null)
+            {
+                ShowInfo(pileName, string.Empty, where);
+                return;
+            }
+
+            ShowInfo(card.Definition.Name, CardDetails(card, null), where);
+        }
+
+        /// <summary>
+        /// Reports the draw stack without revealing it. The count is information the table should be showing
+        /// anyway - Deck-Out is one of the four victory conditions - but which card is next is not the
+        /// player's to read, so the deck is the one clickable object on the table that refuses to open.
+        /// </summary>
+        public void ShowDeck(int count)
+        {
+            ShowInfo("DECK",
+                count == 0
+                    ? "Empty. Drawing from an empty deck is a loss (GDD 2.1.8 Deck-Out)."
+                    : $"{count} card{(count == 1 ? "" : "s")} left.\n\n" +
+                      "The top card is face down and the order is secret, so there is nothing here to leaf " +
+                      "through - unlike the discard, which is public knowledge.",
+                $"DECK  {count}");
+        }
+
+        /// <summary>Takes the details panel off screen.</summary>
+        public void ClearDetails()
+        {
+            if (hud != null)
+            {
+                hud.HideReader();
+            }
         }
 
         // ---- Notice ---------------------------------------------------------------------
@@ -950,14 +1599,40 @@ namespace Overlink.Match
             }
         }
 
+        /// <summary>
+        /// Repaints from an explicit match state, without a coordinator.
+        /// <para>
+        /// The runtime path is <see cref="LateUpdate"/> reading the state off the coordinator, and that is the
+        /// right coupling for a game. It is the wrong one for a test: proving that a unit on a Core Active
+        /// resolves to that socket's tile needs a painted board and nothing else, and manufacturing a
+        /// <see cref="GameCoordinator"/> - which boots its match from a coroutine half a second into play mode
+        /// - would couple the view's tests to the match's startup. Editor tooling that previews a board outside
+        /// play mode gets the same seam for the same reason.
+        /// </para>
+        /// </summary>
+        public void Repaint(MatchState state)
+        {
+            // The card-to-tile map is rebuilt as tiles are painted, and a stale map survives a rebuild only
+            // because the tiles themselves are the same objects. Dropping validity here means a repaint after
+            // a manual hierarchy edit re-collects the pickables rather than clicking on ghosts.
+            pickablesValid = false;
+            Refresh(state);
+        }
+
         void Refresh()
+        {
+            Refresh(coordinator != null ? coordinator.GetMatchState() : null);
+        }
+
+        void Refresh(MatchState state)
         {
             if (noticeText != null && Time.unscaledTime > noticeUntil)
             {
                 noticeText.text = "";
             }
 
-            MatchState state = coordinator != null ? coordinator.GetMatchState() : null;
+            // Rebuilt from the tiles this frame paints, so a unit that moved slots cannot keep an old tile.
+            tileByCard.Clear();
             if (state == null)
             {
                 headerText.text = "Waiting for the match to initialize...";
@@ -965,7 +1640,9 @@ namespace Overlink.Match
                 return;
             }
 
-            MatchEngine engine = coordinator.GetMatchEngine();
+            // A board with no coordinator (a test fixture, or an editor preview) still paints: the engine is
+            // only ever consulted for the pending-block shading, which PaintTile null-guards.
+            MatchEngine engine = coordinator != null ? coordinator.GetMatchEngine() : null;
             bool over = state.IsMatchOver();
 
             string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
@@ -975,6 +1652,13 @@ namespace Overlink.Match
             PaintCore(state, engine, PlayerIndex.Player, playerCoreActive, playerCoreBench, playerProtocol);
             PaintNodes(state, engine);
             PaintPiles(state);
+
+            // The opponent's Core counter is a click target for an unblocked direct attack, so it is the one
+            // piece of board furniture that takes a pointer mark. It has no cube to tint, only its text.
+            if (opponentStatus != null)
+            {
+                opponentStatus.color = coreMarked ? CoreTargetMark : StatusIdle;
+            }
 
             RefreshLog(state);
 
@@ -1020,7 +1704,8 @@ namespace Overlink.Match
                 return;
             }
 
-            tile.Body.material.color = count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f);
+            SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile,
+                count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f))));
             tile.Label.text = caption + "\n" + count;
             tile.Label.color = count > 0 ? new Color(0.80f, 0.85f, 0.92f) : new Color(0.46f, 0.48f, 0.54f);
         }
@@ -1086,10 +1771,11 @@ namespace Overlink.Match
                 bool pControls = player.Board.IsNodeControlled(n, PlayerIndex.Player);
                 bool oControls = opp.Board.IsNodeControlled(n, PlayerIndex.Opponent);
 
-                nodePlate[n].Body.material.color = pControls && oControls ? NodeFree
+                SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForMark(nodePlate[n],
+                    pControls && oControls ? NodeFree
                     : pControls ? NodePlayer
                     : oControls ? NodeOpponent
-                    : NodeFree;
+                    : NodeFree)));
 
                 for (int i = 0; i < Board.NodeActiveSlots; i++)
                 {
@@ -1119,6 +1805,58 @@ namespace Overlink.Match
 
         // ---- Tile painting ----------------------------------------------------------
 
+        /// <summary>
+        /// Shader property id for a body's colour, resolved from whatever shader the board was built with.
+        /// URP Lit spells it <c>_BaseColor</c>; the built-in fallback spells it <c>_Color</c>.
+        /// </summary>
+        static int bodyColorId = -1;
+
+        /// <summary>
+        /// Reused across every tile in a repaint, which is the point: allocating one of these per renderer per
+        /// frame is exactly the garbage the per-frame repaint exists to avoid. Created lazily rather than in an
+        /// instance field initializer, because Unity forbids native-object construction (<c>CreateImpl</c>)
+        /// there - the board is built straight out of <c>BuildBoard()</c> in tests and editor menus, with no
+        /// <c>Awake</c> guaranteed to have run first.
+        /// </summary>
+        MaterialPropertyBlock tintBlock;
+
+        /// <summary>
+        /// Colours one tile body, without touching its material.
+        /// <para>
+        /// The obvious <c>renderer.material.color = c</c> is wrong twice over here. In edit mode it raises
+        /// <em>"Instantiating material due to calling renderer.material during edit mode"</em>, which the test
+        /// runner promotes to a failure and which leaks a material into the scene every time a board is built
+        /// from a menu. In play mode it silently clones one material per renderer, so 35 tiles become 35
+        /// material instances and the batch the board was built around is gone. A property block overrides the
+        /// colour at draw time instead: no clone, no leak, and the shared asset keeps rendering every tile in
+        /// one pass.
+        /// </para>
+        /// </summary>
+        void SetBodyColor(Renderer renderer, Color color)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            if (tintBlock == null)
+            {
+                tintBlock = new MaterialPropertyBlock();
+            }
+
+            if (bodyColorId < 0)
+            {
+                Material shared = renderer.sharedMaterial;
+                bool urp = shared != null && shared.shader != null &&
+                    shared.shader.name.StartsWith("Universal", System.StringComparison.Ordinal);
+                bodyColorId = Shader.PropertyToID(urp ? "_BaseColor" : "_Color");
+            }
+
+            tintBlock.Clear();
+            tintBlock.SetColor(bodyColorId, color);
+            renderer.SetPropertyBlock(tintBlock);
+        }
+
         void PaintTile(Tile tile, CardInstance card, MatchEngine engine)
         {
             if (tile == null)
@@ -1126,9 +1864,25 @@ namespace Overlink.Match
                 return;
             }
 
+            // The pointer layer resolves a unit to the tile under it on every click, so the pairing is
+            // refreshed with the rest of the view rather than cached across frames: a card promoted from
+            // Bench to Active moves, and a stale tile would light the wrong socket.
+            if (card != null)
+            {
+                tileByCard[card.InstanceId] = tile;
+                cardByTile[tile] = card;
+            }
+            else
+            {
+                cardByTile.Remove(tile);
+            }
+
             if (card == null)
             {
-                tile.Body.material.color = highlightedTile == tile ? Color.Lerp(tile.BaseColor, new Color(1f, 0.9f, 0.5f), 0.4f) : tile.BaseColor;
+                Color empty = highlightedTile == tile
+                    ? Color.Lerp(tile.BaseColor, new Color(1f, 0.9f, 0.5f), 0.4f)
+                    : tile.BaseColor;
+                SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, empty)));
                 tile.Label.text = tile.EmptyLabel;
                 tile.Label.color = new Color(0.62f, 0.66f, 0.74f);
                 return;
@@ -1149,9 +1903,36 @@ namespace Overlink.Match
                 baseTint = Color.Lerp(baseTint, new Color(1f, 0.85f, 0.35f), 0.5f);
             }
 
-            tile.Body.material.color = baseTint;
+            SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, baseTint)));
             tile.Label.color = Color.white;
             tile.Label.text = CardText(card);
+        }
+
+        /// <summary>
+        /// Pushes a tile's colour towards whatever its pointer mark means. Applied last, so a mark always
+        /// wins over the state shading: the whole point of lighting a socket is that the player can see it
+        /// through an exhausted unit's dimming.
+        /// </summary>
+        static Color TintForMark(Tile tile, Color baseTint)
+        {
+            switch (tile.Mark)
+            {
+                case PickMark.Selected: return Color.Lerp(baseTint, SelectMark, 0.62f);
+                case PickMark.AttackTarget: return Color.Lerp(baseTint, AttackMark, 0.52f);
+                case PickMark.Blocker: return Color.Lerp(baseTint, BlockerMark, 0.52f);
+                case PickMark.BlockTarget: return Color.Lerp(baseTint, BlockTargetMark, 0.52f);
+                default: return baseTint;
+            }
+        }
+
+        /// <summary>
+        /// The hover sheen, applied after every other colour. A quarter of the way to white is enough to
+        /// read as "the pointer is here" without competing with the marks, which say something the player
+        /// has to act on.
+        /// </summary>
+        static Color TintForHover(Tile tile, Color tint)
+        {
+            return tile == null ? tint : Color.Lerp(tint, Color.white, 0.22f);
         }
 
         static string CardText(CardInstance card)
@@ -1241,9 +2022,10 @@ namespace Overlink.Match
         /// In <b>edit mode</b> this must resolve to a real <c>.mat</c> asset on disk. A Material built in
         /// memory is not an asset, so saving the board as a prefab silently collapses every one of them
         /// onto a single shared material - and every tile then reads back the same colour at bind time.
-        /// In <b>play mode</b> an in-memory Material is enough: nothing is being serialized, and the
-        /// per-frame repaint instantiates it per renderer through <c>Renderer.material</c>, so the tiles
-        /// never bleed colour into each other.
+        /// In <b>play mode</b> an in-memory Material is enough: nothing is being serialized. The per-frame
+        /// repaint never writes to it either - <see cref="SetBodyColor"/> overrides the colour through a
+        /// <c>MaterialPropertyBlock</c> - so one instance serves every tile on the board and they all still
+        /// draw in the same pass.
         /// </para>
         /// </summary>
         static Material MaterialFor(Color color)
@@ -1395,12 +2177,13 @@ namespace Overlink.Match
             {
                 Body = body,
                 Label = label,
+                Name = name,
                 BaseColor = emptyColor,
                 EmptyLabel = emptyLabel,
             };
             // Same name-keyed identity as the prefab-bind path, so a board built from scratch and a board
             // bound from the prefab resolve drop targets identically.
-            ApplySlotIdentity(tile, name);
+            ApplyTileIdentity(tile, name);
             return tile;
         }
 
@@ -1419,6 +2202,70 @@ namespace Overlink.Match
             public SlotType SlotType;
             public int SlotIndex;
             public int NodeIndex;
+
+            /// <summary>
+            /// The tile holder's name, which is the one thing both construction paths agree on and therefore
+            /// what the click layer reads to tell the deck pile from the discard pile.
+            /// </summary>
+            public string Name;
+
+            /// <summary>Whose side of the table this tile is on. Meaningless for plates, piles and furniture.</summary>
+            public PlayerIndex Owner;
+
+            /// <summary>What the tile is, which is broader than the drop contract above.</summary>
+            public TileRole Role = TileRole.Other;
+
+            /// <summary>How the pointer layer should paint this tile. None leaves the ordinary state colours alone.</summary>
+            public PickMark Mark = PickMark.None;
+        }
+
+        /// <summary>
+        /// What a tile <em>is</em>, read off its name. The drop contract
+        /// (<see cref="TryParseSlotIdentity"/>) only recognises the player's own hosting sockets, because
+        /// nothing else may be deployed onto; clicking is much broader, so the view needs a coarser label for
+        /// every object on the table.
+        /// </summary>
+        public enum TileRole
+        {
+            /// <summary>Board furniture: the tabletop, the header, the status strips.</summary>
+            Other,
+
+            /// <summary>An Active or Bench socket, either player's.</summary>
+            Socket,
+
+            /// <summary>The Protocol socket, one per player.</summary>
+            Protocol,
+
+            /// <summary>A Node's plate, behind its two ranks.</summary>
+            Plate,
+
+            /// <summary>The deck or the discard stack.</summary>
+            Pile,
+        }
+
+        /// <summary>
+        /// Why the pointer layer is drawing attention to a tile. The colours are chosen so a tile can only
+        /// ever carry one of these at a time, which is what makes <see cref="Tile.Mark"/> a single field
+        /// rather than a set of overlapping flags an editor could author into a contradiction.
+        /// </summary>
+        public enum PickMark
+        {
+            None,
+
+            /// <summary>The unit the player has picked to attack or block with.</summary>
+            Selected,
+
+            /// <summary>A unit the selected attacker may hit.</summary>
+            AttackTarget,
+
+            /// <summary>A unit that may be committed as a blocker.</summary>
+            Blocker,
+
+            /// <summary>An enemy attacker that may be blocked.</summary>
+            BlockTarget,
+
+            /// <summary>The opponent's Core, when the selected attacker may hit it.</summary>
+            CoreTarget,
         }
     }
 }

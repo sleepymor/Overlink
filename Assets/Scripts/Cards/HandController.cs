@@ -489,6 +489,24 @@ namespace Overlink.Cards
             return null;
         }
 
+        /// <summary>
+        /// True while the pointer belongs to the hand: either a card is under it, or a drag is in flight.
+        /// <para>
+        /// The board's click layer asks this before it takes a click. The hand fan lies inside the tabletop's
+        /// footprint, so a click on a card also lands on a socket behind it, and without this guard picking a
+        /// card up would simultaneously select the unit standing on the tile beneath it.
+        /// </para>
+        /// </summary>
+        public bool IsPointerOverHand()
+        {
+            if (dragged != null)
+            {
+                return true;
+            }
+
+            return cam != null && RaycastCard() != null;
+        }
+
         Vector3 MouseOnPlane()
         {
             // Work in the hand's local space so the same drag math serves both the upright prototype hand

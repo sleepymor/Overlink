@@ -28,27 +28,49 @@ namespace Overlink.Match
         /// Runs this player's whole turn: skips the entry phases, plays what it can afford, attacks with
         /// every ready unit, then ends the turn. Safe to call once per frame from the coordinator because
         /// it returns immediately when it is not this player's turn.
+        /// <para>
+        /// Split into <see cref="TakeTurnUntilCombat"/> and <see cref="FinishTurn"/> so a caller that wants to
+        /// hand the defender a block window can stop in the middle. Composing the two here keeps every
+        /// existing caller - and every test - on exactly the behaviour they always had.
+        /// </para>
         /// </summary>
         public void TakeTurn()
         {
-            if (state.ActivePlayer != player || state.IsMatchOver())
+            if (!TakeTurnUntilCombat())
             {
                 return;
             }
 
+            FinishTurn();
+        }
+
+        /// <summary>
+        /// Advances this player through Upkeep, Draw and Main and stops on the threshold of Combat, leaving
+        /// the phase untouched. Returns false when it is not this player's turn (or the match is over), in
+        /// which case nothing ran.
+        /// <para>
+        /// The pause point matters: combat resolution in this engine is immediate, so an opponent that walks
+        /// into Combat and attacks in the same frame leaves the defender no moment in which to commit a
+        /// blocker. Stopping here is what gives the coordinator somewhere to hold the door open.
+        /// </para>
+        /// </summary>
+        public bool TakeTurnUntilCombat()
+        {
+            if (state.ActivePlayer != player || state.IsMatchOver())
+            {
+                return false;
+            }
+
             PlayerState playerState = state.GetPlayer(player);
 
-            // A single call must complete the turn, not advance one phase: passing Cleanup flips
-            // ActivePlayer, and if we only handled one phase per call the opponent could never reach Main.
             int guard = 0;
-            while (state.ActivePlayer == player && !state.IsMatchOver() && guard++ < 64)
+            while (state.ActivePlayer == player && !state.IsMatchOver()
+                   && state.CurrentPhase != TurnPhase.Combat && guard++ < 32)
             {
                 switch (state.CurrentPhase)
                 {
                     case TurnPhase.Upkeep:
                     case TurnPhase.Draw:
-                    case TurnPhase.End:
-                    case TurnPhase.Cleanup:
                         engine.ExecuteCommand(new PassPhaseCommand(player));
                         break;
 
@@ -57,8 +79,57 @@ namespace Overlink.Match
                         engine.ExecuteCommand(new PassPhaseCommand(player));
                         break;
 
+                    default:
+                        // End and Cleanup on the way in means the turn was handed over mid-walk; passing
+                        // them keeps this half-turn as total as the old single loop was, and the guard stops
+                        // it from spinning if a phase ever refuses to advance.
+                        engine.ExecuteCommand(new PassPhaseCommand(player));
+                        break;
+                }
+            }
+
+            return state.ActivePlayer == player && state.CurrentPhase == TurnPhase.Combat;
+        }
+
+        /// <summary>
+        /// The back half of the turn: attack with everything ready, then pass out of Combat and run End and
+        /// Cleanup, which hands initiative to the opponent. Safe to call when it is not our turn; it does
+        /// nothing, exactly as <see cref="TakeTurn"/> would.
+        /// </summary>
+        public void FinishTurn()
+        {
+            if (state.ActivePlayer != player || state.IsMatchOver())
+            {
+                return;
+            }
+
+            PlayerState playerState = state.GetPlayer(player);
+
+            int guard = 0;
+            while (state.ActivePlayer == player && !state.IsMatchOver() && guard++ < 32)
+            {
+                switch (state.CurrentPhase)
+                {
                     case TurnPhase.Combat:
                         TryAttack(playerState);
+                        engine.ExecuteCommand(new PassPhaseCommand(player));
+                        break;
+
+                    case TurnPhase.Upkeep:
+                    case TurnPhase.Draw:
+                    case TurnPhase.Main:
+                        // Reachable only if a combat effect bounced the turn back a phase; advancing rather
+                        // than looping forever is the whole point of the guard, so treat it as the AI playing
+                        // what it can and moving on.
+                        if (state.CurrentPhase == TurnPhase.Main)
+                        {
+                            TryPlayCards(playerState);
+                        }
+                        engine.ExecuteCommand(new PassPhaseCommand(player));
+                        break;
+
+                    case TurnPhase.End:
+                    case TurnPhase.Cleanup:
                         engine.ExecuteCommand(new PassPhaseCommand(player));
                         break;
 

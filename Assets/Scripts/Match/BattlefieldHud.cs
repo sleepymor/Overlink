@@ -53,6 +53,21 @@ namespace Overlink.Match
         public Color textColor = new Color(0.80f, 0.85f, 0.93f);
         public Color headerColor = new Color(0.62f, 0.70f, 0.84f);
 
+        [Header("Reader")]
+        [Tooltip("The card-details panel, pinned to the left edge where the log's column is mirrored. It shows " +
+                 "whatever the player clicked on: a board unit's full card, or one card out of the discard " +
+                 "pile. Like the log it is display-only - no close button, because a button needs a raycaster " +
+                 "and a raycaster would eat card drags. Click anywhere else, or press Escape, to dismiss it.")]
+        public Vector2 readerSize = new Vector2(340f, 300f);
+        public Vector2 readerOffset = new Vector2(14f, 0f);
+        public float readerPadding = 14f;
+        public Color readerColor = new Color(0.10f, 0.12f, 0.18f, 0.90f);
+        public float readerTitleSize = 22f;
+        public float readerBodySize = 16f;
+        public float readerFootSize = 13f;
+        public Color readerTitleColor = new Color(0.95f, 0.97f, 1f);
+        public Color readerFootColor = new Color(0.58f, 0.66f, 0.80f);
+
         Canvas canvas;
 
         // Serialized rather than plain private: the scene ships this object already built, and a reference
@@ -63,8 +78,18 @@ namespace Overlink.Match
         [SerializeField] TextMeshProUGUI header;
         [SerializeField] TextMeshProUGUI body;
 
+        // The reader is a second panel on the same canvas: one overlay is cheaper than two, and the canvas
+        // has no raycaster so nothing about the drag contract changes.
+        [SerializeField] RectTransform reader;
+        [SerializeField] TextMeshProUGUI readerTitle;
+        [SerializeField] TextMeshProUGUI readerBody;
+        [SerializeField] TextMeshProUGUI readerFoot;
+
         /// <summary>The panel's rectangle, exposed so the editor (and tests) can move it.</summary>
         public RectTransform Panel => panel;
+
+        /// <summary>The details panel's rectangle, likewise.</summary>
+        public RectTransform Reader => reader;
 
         /// <summary>
         /// True once the canvas has its panel and text objects resolved. A HUD loaded from the scene is not
@@ -72,6 +97,14 @@ namespace Overlink.Match
         /// therefore not serialized.
         /// </summary>
         public bool IsBuilt => panel != null && body != null;
+
+        /// <summary>
+        /// True once the details panel exists too. A HUD loaded from the scene has its log references
+        /// serialized and therefore reports <see cref="IsBuilt"/>, but the reader is newer than the shipped
+        /// scene file, so <see cref="Ensure"/> checks this separately rather than assuming a built log means
+        /// a built reader.
+        /// </summary>
+        public bool IsReaderBuilt => reader != null && readerTitle != null && readerBody != null;
 
         /// <summary>
         /// What the panel currently shows. Exposed for tests and for anything that wants to copy the log out;
@@ -96,7 +129,7 @@ namespace Overlink.Match
                 // are not serialized, and only Awake wires them - which never runs in the editor. An EditMode
                 // test (or an editor script) asking for the HUD would get an object with no panel and no way
                 // to show anything, so Ensure completes it instead of assuming play mode.
-                if (!existing.IsBuilt)
+                if (!existing.IsBuilt || !existing.IsReaderBuilt)
                 {
                     existing.Build();
                 }
@@ -170,6 +203,7 @@ namespace Overlink.Match
             scaler.matchWidthOrHeight = 0.5f;
 
             EnsurePanel();
+            EnsureReader();
         }
 
         RectTransform EnsurePanel()
@@ -233,6 +267,74 @@ namespace Overlink.Match
             SetRect(bodyRect, panelPadding, panelPadding, panelPadding, panelPadding + headerHeight);
 
             return panel;
+        }
+
+        /// <summary>
+        /// The card-details / pile-browser panel on the left edge, mirrored from the log. Built alongside it
+        /// but kept hidden until something is clicked, because an empty slab over the player's own Bench
+        /// rank would hide sockets for no reason.
+        /// </summary>
+        RectTransform EnsureReader()
+        {
+            Transform existing = transform.Find("ReaderPanel");
+            if (existing != null)
+            {
+                reader = existing as RectTransform;
+                var image = existing.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = readerColor;
+                    image.raycastTarget = false;
+                }
+            }
+            else
+            {
+                var go = new GameObject("ReaderPanel", typeof(RectTransform));
+                go.transform.SetParent(transform, false);
+                reader = go.GetComponent<RectTransform>();
+                var image = go.AddComponent<Image>();
+                image.color = readerColor;
+                image.raycastTarget = false;
+            }
+
+            // Left edge, vertically centred: the mirror of the log, so the two panels read as one instrument
+            // row flanking the table rather than as two unrelated popups.
+            reader.anchorMin = new Vector2(0f, 0.5f);
+            reader.anchorMax = new Vector2(0f, 0.5f);
+            reader.pivot = new Vector2(0f, 0.5f);
+            reader.sizeDelta = readerSize;
+            reader.anchoredPosition = readerOffset;
+
+            float titleHeight = readerTitleSize * 2.4f;
+            float footHeight = readerFootSize * 2.4f;
+
+            readerTitle = EnsureText("ReaderTitle", reader, readerTitleSize, FontStyles.Bold, readerTitleColor,
+                TextAlignmentOptions.TopLeft, out RectTransform titleRect);
+            titleRect.anchorMin = new Vector2(0f, 1f);
+            titleRect.anchorMax = new Vector2(1f, 1f);
+            titleRect.pivot = new Vector2(0f, 1f);
+            titleRect.sizeDelta = new Vector2(0f, titleHeight);
+            titleRect.anchoredPosition = new Vector2(readerPadding, -readerPadding);
+
+            readerBody = EnsureText("ReaderBody", reader, readerBodySize, FontStyles.Normal, textColor,
+                TextAlignmentOptions.TopLeft, out RectTransform bodyRect);
+            bodyRect.anchorMin = Vector2.zero;
+            bodyRect.anchorMax = Vector2.one;
+            SetRect(bodyRect, readerPadding, readerPadding + footHeight, readerPadding,
+                readerPadding + titleHeight);
+
+            // The footer carries the browsing affordance ("◄ ►" for a pile, "ESC to close" for a card), which
+            // is the only way to advertise a control on a panel that cannot hold a button.
+            readerFoot = EnsureText("ReaderFoot", reader, readerFootSize, FontStyles.Normal, readerFootColor,
+                TextAlignmentOptions.BottomLeft, out RectTransform footRect);
+            footRect.anchorMin = new Vector2(0f, 0f);
+            footRect.anchorMax = new Vector2(1f, 0f);
+            footRect.pivot = new Vector2(0f, 0f);
+            footRect.sizeDelta = new Vector2(0f, footHeight);
+            footRect.anchoredPosition = new Vector2(readerPadding, readerPadding);
+
+            reader.gameObject.SetActive(false);
+            return reader;
         }
 
         TextMeshProUGUI EnsureText(string name, RectTransform parent, float size, FontStyles style,
@@ -317,6 +419,57 @@ namespace Overlink.Match
 
         /// <summary>How many entries this panel is configured to keep.</summary>
         public int MaxLines => Mathf.Max(1, maxLines);
+
+        // ---- Reader -------------------------------------------------------------------
+
+        /// <summary>True while the details panel is on screen.</summary>
+        public bool IsReaderVisible => reader != null && reader.gameObject.activeSelf;
+
+        /// <summary>What the reader currently says, for tests and for anything that mirrors it.</summary>
+        public string ReaderTitle => readerTitle != null ? readerTitle.text : string.Empty;
+        public string ReaderBody => readerBody != null ? readerBody.text : string.Empty;
+        public string ReaderFoot => readerFoot != null ? readerFoot.text : string.Empty;
+
+        /// <summary>
+        /// Puts a card in front of the player: the title band names it, the body carries its stats and text,
+        /// and the footer says what the panel is being used for (browsing a pile, or nothing at all).
+        /// <para>
+        /// A null <paramref name="title"/> or body clears the panel instead, which is the same call path the
+        /// dismiss uses - there is no second code path for hiding that can drift from it.
+        /// </para>
+        /// </summary>
+        public void ShowReader(string title, string body, string foot = null)
+        {
+            if (readerTitle == null || readerBody == null)
+            {
+                Build();
+            }
+
+            if (reader == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(body))
+            {
+                HideReader();
+                return;
+            }
+
+            readerTitle.text = title ?? string.Empty;
+            readerBody.text = body ?? string.Empty;
+            readerFoot.text = foot ?? string.Empty;
+            reader.gameObject.SetActive(true);
+        }
+
+        /// <summary>Takes the details panel off screen. Safe when it was never shown.</summary>
+        public void HideReader()
+        {
+            if (reader != null)
+            {
+                reader.gameObject.SetActive(false);
+            }
+        }
 
         /// <summary>
         /// True when this canvas would swallow a mouse-down. It must always be false: the one interaction the

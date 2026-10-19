@@ -26,6 +26,11 @@ namespace Overlink.Match
         public bool enableAI = true;
         public int aiSeed = 42;
 
+        [Tooltip("How long the opponent holds its Combat step so the player can commit blockers, in seconds. " +
+                 "Zero skips the pause entirely and the opponent attacks in one frame, which is how the slice " +
+                 "behaved before blocking was clickable.")]
+        public float blockWindowSeconds = 4f;
+
         [Header("Keyboard controls")]
         [Tooltip("1-5: attack from that battlefield's Active unit (1 = Core, 2-5 = Node 1-4). P: pass phase. E: end turn. L: log state. Q: concede.")]
         public KeyCode attackCoreKey = KeyCode.Alpha1;
@@ -198,17 +203,22 @@ namespace Overlink.Match
                 StartCoroutine(ExecuteAITurn());
             }
 
-            // Handle phase advancement (for testing)
-            if (Input.GetKeyDown(passPhaseKey))
+            // Handle phase advancement (for testing).
+            //
+            // Gated on the player's own turn, which the old unconditional form was not: P and E fired
+            // whatever ActivePlayer happened to be, so during the opponent's turn - now four seconds long
+            // while the block window is open - they drove the opponent's phases for it. Concede stays
+            // ungated, because conceding is legal on either player's turn (GDD 2.1.8).
+            if (Input.GetKeyDown(passPhaseKey) && matchState.ActivePlayer == PlayerIndex.Player)
             {
-                matchEngine.ExecuteCommand(new PassPhaseCommand(matchState.ActivePlayer));
+                matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
                 SyncHand();
                 LogMatchState();
             }
 
-            if (Input.GetKeyDown(endTurnKey))
+            if (Input.GetKeyDown(endTurnKey) && matchState.ActivePlayer == PlayerIndex.Player)
             {
-                matchEngine.ExecuteCommand(new EndTurnCommand(matchState.ActivePlayer));
+                matchEngine.ExecuteCommand(new EndTurnCommand(PlayerIndex.Player));
                 SyncHand();
                 LogMatchState();
             }
@@ -246,7 +256,22 @@ namespace Overlink.Match
             if (enableAI && aiOpponent != null)
             {
                 Debug.Log("[GameCoordinator] AI taking turn...");
-                aiOpponent.TakeTurn();
+
+                if (blockWindowSeconds > 0f)
+                {
+                    // Walk the opponent up to the threshold of its Combat step, hold the door open for the
+                    // player to commit blockers, then let it swing. Combat resolves immediately in this
+                    // engine, so without the pause the whole turn lands in one frame and the defender's block
+                    // rule - the one rule that is theirs to use on the opponent's turn - is unreachable.
+                    aiOpponent.TakeTurnUntilCombat();
+                    yield return WaitForBlocks();
+                    SetBlockWindow(false);
+                    aiOpponent.FinishTurn();
+                }
+                else
+                {
+                    aiOpponent.TakeTurn();
+                }
             }
 
             yield return new WaitForSeconds(0.5f);
@@ -257,6 +282,64 @@ namespace Overlink.Match
             SyncHand();
             LogMatchState();
         }
+
+        /// <summary>
+        /// Holds the opponent's Combat step until the player has had their say: every legal blocker is
+        /// offered, and the window closes on the done-blocking key or the timeout, whichever comes first.
+        /// <para>
+        /// Nothing else closes it. A committed block leaves it open, because a player with two units in two
+        /// contested battlefields has two answers to give, and cancelling a selection must not be the same
+        /// gesture as giving up the rest of them.
+        /// </para>
+        /// <para>
+        /// A timeout rather than an unconditional wait, because a player with no blockers or no interest in
+        /// losing four seconds per turn would feel it as a stall. The window is never left open past the
+        /// opponent's Combat step, so a leaked flag cannot wedge the match.
+        /// </para>
+        /// </summary>
+        IEnumerator WaitForBlocks()
+        {
+            if (matchState == null || matchState.IsMatchOver()
+                || matchState.CurrentPhase != TurnPhase.Combat
+                || matchState.ActivePlayer != PlayerIndex.Opponent)
+            {
+                yield break;
+            }
+
+            PlayerState player = matchState.Players[0];
+            List<CardInstance> ready = ReadyBlockers();
+
+            if (ready.Count == 0)
+            {
+                yield break;
+            }
+
+            SetBlockWindow(true);
+            if (presenter != null)
+            {
+                presenter.ShowBlocks(ready, null);
+                presenter.ShowNotice("Ready to block? Click one of your green units, then the attacker it answers.");
+            }
+
+            float deadline = Time.unscaledTime + blockWindowSeconds;
+            while (Time.unscaledTime < deadline && !blockWindowClosed)
+            {
+                yield return null;
+            }
+
+            blockWindowClosed = false;
+        }
+
+        /// <summary>
+        /// Set by the click layer to end the block window early: the player is done committing blockers and
+        /// does not want to sit through the timeout.
+        /// </summary>
+        public void CloseBlockWindow()
+        {
+            blockWindowClosed = true;
+        }
+
+        private bool blockWindowClosed;
 
         void LogMatchState()
         {
@@ -531,6 +614,211 @@ namespace Overlink.Match
             }
         }
 
+        // ---- Point-and-click combat ---------------------------------------------------
+        // The keyboard path above attacks whatever the coordinator chooses for the player, which is fine for
+        // a smoke test and useless as a game. These are the entry points the click layer drives: what may act,
+        // what it may hit, and then the same DeclareAttackCommand the AI already goes through.
+        //
+        // The legality arithmetic itself lives in CombatLegality, in the headless Core assembly: it is derived
+        // state with no Unity dependency, so it is unit-testable without a scene, and netplay will want the
+        // same enumeration when it needs to validate a remote player's options. What is left here is the match
+        // plumbing - whose state it is, and where a rejection gets surfaced.
+
+        /// <summary>See <see cref="CombatLegality.CanAttack"/>. The player's view of it.</summary>
+        public bool CanPlayerAttackWith(CardInstance card)
+        {
+            return CombatLegality.CanAttack(matchState, PlayerIndex.Player, card);
+        }
+
+        /// <summary>See <see cref="CombatLegality.AttackTargets"/>. The player's view of it.</summary>
+        public List<CardInstance> TargetsForPlayerAttack(CardInstance attacker)
+        {
+            return CombatLegality.AttackTargets(matchState, PlayerIndex.Player, attacker);
+        }
+
+        /// <summary>
+        /// True when the direct Core strike is worth offering alongside the unit targets. See
+        /// <see cref="CombatLegality.CanAttackCore"/> for why this is not "the opponent has nothing to block".
+        /// </summary>
+        public bool CanPlayerAttackCore(CardInstance attacker)
+        {
+            return CombatLegality.CanAttackCore(matchState, PlayerIndex.Player, attacker);
+        }
+
+        /// <summary>
+        /// Declares an attack through the engine. <paramref name="target"/> null means the direct Core hit
+        /// of GDD 2.1.6 Step 4. Returns false, and paints the reason on the board, when the engine refuses.
+        /// </summary>
+        public bool TryPlayerAttackWith(CardInstance attacker, CardInstance target)
+        {
+            if (matchState == null || matchEngine == null)
+            {
+                return false;
+            }
+
+            if (attacker == null)
+            {
+                return Reject("there is no unit selected to attack with.");
+            }
+
+            // Re-ask the rules rather than trusting the click: the marks were computed from this same query
+            // when the player picked the unit up, and anything that happened since - the unit dying to an
+            // effect, the turn changing hands - makes them stale. The engine's declare-attack path checks the
+            // phase and the attacker's readiness but not <em>whose</em> turn it is, so a command issued off a
+            // stale highlight would otherwise go through on the opponent's Combat step.
+            if (!CanPlayerAttackWith(attacker))
+            {
+                return Reject($"{attacker.Definition.Name} cannot attack right now.");
+            }
+
+            var command = new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId,
+                target != null ? target.InstanceId : -1);
+
+            CommandResult result = matchEngine.ExecuteCommand(command);
+            if (result != CommandResult.Success)
+            {
+                return Reject(AttackFailure(attacker, target, result));
+            }
+
+            string what = target != null ? target.Definition.Name : "the enemy Core";
+            Debug.Log($"[GameCoordinator] {attacker.Definition.Name} attacks {what}");
+            SyncHand();
+
+            if (matchState.IsMatchOver())
+            {
+                if (presenter != null)
+                {
+                    presenter.ClearDropHighlight();
+                }
+                LogMatchState();
+            }
+
+            return true;
+        }
+
+        static string AttackFailure(CardInstance attacker, CardInstance target, CommandResult result)
+        {
+            string what = target != null ? target.Definition.Name : "the enemy Core";
+            switch (result)
+            {
+                case CommandResult.InvalidPhase: return $"{attacker.Definition.Name} cannot attack outside the Combat phase.";
+                case CommandResult.UnitCannotAct: return $"{attacker.Definition.Name} cannot act - it is exhausted, summoned this step, or not in an Active socket.";
+                case CommandResult.InvalidTarget: return $"{attacker.Definition.Name} cannot attack {what}.";
+                default: return $"attack by {attacker.Definition.Name} was rejected by the engine ({result}).";
+            }
+        }
+
+        /// <summary>
+        /// True when the player may commit this card as a blocker right now. See
+        /// <see cref="CombatLegality.CanBlock"/> for the rules; this is the match-plumbing wrapper.
+        /// </summary>
+        public bool CanPlayerBlockWith(CardInstance card)
+        {
+            return CombatLegality.CanBlock(matchState, matchEngine, PlayerIndex.Player, card);
+        }
+
+        /// <summary>
+        /// The enemy attacks one of our units could legally answer. See
+        /// <see cref="CombatLegality.BlockableAttackers"/> - the placement rule lives there so it can be
+        /// tested headlessly against the engine that enforces it on consumption.
+        /// </summary>
+        public List<CardInstance> AttackersBlockableBy(CardInstance blocker)
+        {
+            return CombatLegality.BlockableAttackers(matchState, matchEngine, PlayerIndex.Player, blocker);
+        }
+
+        /// <summary>
+        /// Every unit the player could commit as a blocker right now <em>and</em> that has an attack to answer.
+        /// <para>
+        /// The second half of that is what makes it worth being a method rather than a loop at the one call
+        /// site: a Ready unit in a battlefield where nothing is swinging cannot block anything, so offering it
+        /// would light a socket whose target list is empty. Both the window-opening coroutine and the click
+        /// layer ask this, which is why committing one block and re-offering the rest cannot disagree with
+        /// how the window was opened in the first place.
+        /// </para>
+        /// </summary>
+        public List<CardInstance> ReadyBlockers()
+        {
+            var ready = new List<CardInstance>();
+
+            // Deliberately not gated on PlayerBlockWindowOpen: CanPlayerBlockWith already encodes the rules
+            // (whose turn, which phase, which slots), and the window flag is about whether the click layer is
+            // listening. Asking this before opening the window is exactly what decides whether the window is
+            // worth opening at all.
+            if (matchState == null)
+            {
+                return ready;
+            }
+
+            foreach (CardInstance card in matchState.Players[0].Board.GetActiveUnits(PlayerIndex.Player))
+            {
+                if (CanPlayerBlockWith(card) && AttackersBlockableBy(card).Count > 0)
+                {
+                    ready.Add(card);
+                }
+            }
+
+            return ready;
+        }
+
+        /// <summary>Commits a block through the engine. See <see cref="TryPlayerAttackWith"/> for the shape.</summary>
+        public bool TryPlayerBlockWith(CardInstance blocker, CardInstance attacker)
+        {
+            if (matchState == null || matchEngine == null || blocker == null || attacker == null)
+            {
+                return false;
+            }
+
+            // Same stale-highlight guard as the attack path, and it matters more here: the block window is a
+            // four-second gap in which the board can change underneath the player, and the engine's own
+            // declaration check happily records a block from the wrong battlefield that
+            // <c>ConsumePendingBlocker</c> will then silently ignore.
+            if (!PlayerBlockWindowOpen || !CanPlayerBlockWith(blocker)
+                || !AttackersBlockableBy(blocker).Contains(attacker))
+            {
+                return Reject($"{blocker.Definition.Name} cannot answer that attack from where it stands.");
+            }
+
+            CommandResult result = matchEngine.ExecuteCommand(
+                new DeclareBlockCommand(PlayerIndex.Player, blocker.InstanceId, attacker.InstanceId));
+
+            if (result != CommandResult.Success)
+            {
+                return result switch
+                {
+                    CommandResult.CannotBlock => Reject($"{blocker.Definition.Name} cannot block (exhausted, or it has [Cannot Block])."),
+                    CommandResult.InvalidPhase => Reject("blocking happens during the opponent's Combat phase."),
+                    CommandResult.InvalidCommand => Reject($"{blocker.Definition.Name} is already committed, or {attacker.Definition.Name} already has a blocker."),
+                    _ => Reject($"block by {blocker.Definition.Name} was rejected by the engine ({result})."),
+                };
+            }
+
+            Debug.Log($"[GameCoordinator] Player readies {blocker.Definition.Name} to block {attacker.Definition.Name}");
+            return true;
+        }
+
+        /// <summary>
+        /// True while the player is entitled to declare blocks: it is the opponent's turn, they are in their
+        /// Combat phase, and the coordinator has opened the window rather than letting the AI attack straight
+        /// through it. The click layer reads this to decide whether a click on one of the player's units
+        /// picks a blocker or just opens the card.
+        /// </summary>
+        public bool PlayerBlockWindowOpen { get; private set; }
+
+        /// <summary>
+        /// Opens or closes the player's block window. Called by the AI-turn coroutine, which pauses on it:
+        /// without a pause the opponent's whole turn runs in one frame and the player never gets to commit a
+        /// blocker, which is the reason blocking was AI-only until the click layer arrived.
+        /// </summary>
+        void SetBlockWindow(bool open)
+        {
+            PlayerBlockWindowOpen = open;
+            if (!open && presenter != null)
+            {
+                presenter.ClearMarks();
+            }
+        }
+
         private CardInstance FindHandCard(PlayerState player, CardData cardData)
         {
             if (cardData == null)
@@ -578,7 +866,7 @@ namespace Overlink.Match
         }
 
         /// <summary>Writes a transient line on the battlefield. No-op when the view is absent.</summary>
-        private void ShowNotice(string message)
+        public void ShowNotice(string message)
         {
             if (presenter != null)
             {
