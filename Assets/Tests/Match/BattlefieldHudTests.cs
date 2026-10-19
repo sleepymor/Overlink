@@ -115,6 +115,11 @@ namespace Overlink.Match.Tests
             Assert.IsNotNull(ensured, "Ensure must never return nothing.");
             Assert.IsTrue(ensured.IsBuilt, "Ensure must hand back a built panel, not a bare component.");
 
+            // The reader is newer than the shipped scene file, and a scene-loaded HUD reports IsBuilt from its
+            // serialized log references alone - so Ensure has to check the second panel separately or a card
+            // click in the editor opens nothing.
+            Assert.IsTrue(ensured.IsReaderBuilt, "and the details panel must be there too.");
+
             if (scene != null)
             {
                 Assert.AreSame(scene, ensured,
@@ -180,6 +185,95 @@ namespace Overlink.Match.Tests
 
             Assert.DoesNotThrow(() => hud.SetLog(Events("turn 1", "turn 2")));
             Assert.AreEqual("turn 1\nturn 2", hud.BodyText, "and the write must not be lost.");
+        }
+
+        // ---- The reader panel ---------------------------------------------------------------
+        // Clicking a card, a pile, a Node or a Core counter opens a second panel on the opposite edge. It is
+        // the same kind of object as the log - display only, no EventSystem anywhere in the project - so the
+        // properties worth locking are that it cannot eat a drag, and that it can be dismissed by the caller
+        // rather than by a button nobody can press.
+
+        [Test]
+        public void Build_AlsoProducesTheReader()
+        {
+            BattlefieldHud hud = NewHud();
+
+            Assert.IsTrue(hud.IsReaderBuilt, "A built HUD must carry the details panel too.");
+            Assert.IsFalse(hud.IsReaderVisible, "and it starts closed: nothing was clicked yet.");
+            Assert.IsNotNull(hud.Reader);
+            Assert.AreEqual(0f, hud.Reader.anchorMin.x, 1e-4f,
+                "The reader is pinned to the left edge, opposite the log, so the two never cover each other.");
+        }
+
+        [Test]
+        public void Ensure_CompletesASceneLoadedHud()
+        {
+            // The scene's copy has its log references serialized, so IsBuilt is true before anything has run -
+            // and the reader is newer than the shipped scene file. Ensure checks both, or a scene-loaded HUD
+            // would open a card and show nothing.
+            BattlefieldHud hud = BattlefieldHud.Ensure();
+            Assert.IsTrue(hud.IsBuilt, "the log panel");
+            Assert.IsTrue(hud.IsReaderBuilt, "the details panel");
+        }
+
+        [Test]
+        public void ShowReader_OpensThePanelAndWritesAllThreeParts()
+        {
+            BattlefieldHud hud = NewHud();
+
+            hud.ShowReader("Shadow Operative", "ATK 3   HP 4", "DISCARD  2 / 9");
+
+            Assert.IsTrue(hud.IsReaderVisible);
+            Assert.AreEqual("Shadow Operative", hud.ReaderTitle);
+            Assert.AreEqual("ATK 3   HP 4", hud.ReaderBody);
+            Assert.AreEqual("DISCARD  2 / 9", hud.ReaderFoot);
+        }
+
+        [Test]
+        public void ShowReader_WithNothingToSayClosesItInstead()
+        {
+            // Dismissal has one code path, so the "clear" a caller issues cannot drift from the hide the footer
+            // advertises. A null body is a close, not an empty panel left on screen.
+            BattlefieldHud hud = NewHud();
+            hud.ShowReader("Shadow Operative", "ATK 3   HP 4");
+            Assert.IsTrue(hud.IsReaderVisible);
+
+            hud.ShowReader(null, null);
+            Assert.IsFalse(hud.IsReaderVisible, "an empty write must dismiss, not blank the panel in place");
+        }
+
+        [Test]
+        public void HideReader_IsSafeBeforeAnythingWasShown()
+        {
+            BattlefieldHud hud = NewHud();
+            Assert.DoesNotThrow(hud.HideReader);
+            Assert.IsFalse(hud.IsReaderVisible);
+        }
+
+        [Test]
+        public void ShowReader_BeforeBuildIsSafe()
+        {
+            // Same reasoning as SetLog: a scene-loaded HUD has no reader until something builds it, and the
+            // first write has to trigger that build rather than throw.
+            var go = new GameObject(TestRootName, typeof(RectTransform));
+            spawned.Add(go);
+            BattlefieldHud hud = go.AddComponent<BattlefieldHud>();
+
+            Assert.DoesNotThrow(() => hud.ShowReader("Relay", "Holds Node 2.", "YOUR NODE 2 ACTIVE"));
+            Assert.AreEqual("Relay", hud.ReaderTitle);
+            Assert.IsTrue(hud.IsReaderVisible);
+        }
+
+        [Test]
+        public void Reader_CannotSwallowACardDrag()
+        {
+            // The reader sits over the left half of the screen, which is where the hand's own column is. One
+            // GraphicRaycaster here would eat card drags for the rest of the match.
+            BattlefieldHud hud = NewHud();
+            hud.ShowReader("Shadow Operative", "ATK 3   HP 4");
+
+            Assert.IsFalse(hud.InterceptsPointerInput,
+                "Both panels are display-only: dismissal is a click elsewhere or Escape, never a button.");
         }
     }
 }

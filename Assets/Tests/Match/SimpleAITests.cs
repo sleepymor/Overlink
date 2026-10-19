@@ -60,6 +60,118 @@ namespace Overlink.Match.Tests
                 "The ready unit should have attacked.");
         }
 
+        // ---- The turn split -------------------------------------------------------------
+        // TakeTurn() used to be one loop, which meant the opponent's whole turn landed in a single frame. That
+        // is fine for the AI and fatal for the defender: blocking is the one rule the player gets to use on
+        // the opponent's turn, and with no pause in the middle of Combat there is nowhere to ask them. So the
+        // turn is now two calls, and the seam between them is the block window.
+
+        [Test]
+        public void TakeTurnUntilCombat_StopsOnTheThresholdAndClaimsItReachedIt()
+        {
+            var state = new MatchState();
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            CardDefinition attackerDef = CreateTestCardDefinition("ai_unit", "AI Unit");
+            attackerDef.Atk = 3;
+            var unit = new CardInstance(attackerDef, PlayerIndex.Opponent);
+            unit.State = UnitState.Ready;
+            state.Players[1].Board.CoreActive[0].Card = unit;
+
+            HandOverToOpponent(state, engine, TurnPhase.Main);
+            int coreBefore = state.Players[0].CoreDurability;
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+
+            Assert.IsTrue(ai.TakeTurnUntilCombat(),
+                "The AI played its Main step and walked into Combat, so the seam reports success.");
+            Assert.AreEqual(TurnPhase.Combat, state.CurrentPhase, "and it stops *at* Combat, not past it.");
+            Assert.AreEqual(PlayerIndex.Opponent, state.ActivePlayer);
+            Assert.AreEqual(coreBefore, state.Players[0].CoreDurability,
+                "Nothing has swung yet - that is the entire point of stopping here.");
+            Assert.AreEqual(UnitState.Ready, unit.State, "The attacker is still Ready for the block window.");
+
+            ai.FinishTurn();
+
+            Assert.AreEqual(PlayerIndex.Player, state.ActivePlayer,
+                "The second half hands control back, exactly as the whole turn always did.");
+            Assert.IsTrue(unit.State == UnitState.Exhausted || state.Players[0].CoreDurability < coreBefore,
+                "and the attack that was withheld has now happened.");
+        }
+
+        [Test]
+        public void TakeTurnUntilCombat_AlreadyInCombat_StopsImmediatelyWithoutAttacking()
+        {
+            // The block window opens on a turn that was handed over mid-stride. If the first half attacked on
+            // the way past Combat, the window would be offering blocks against an attack already resolved.
+            var state = new MatchState();
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            CardDefinition attackerDef = CreateTestCardDefinition("ai_unit", "AI Unit");
+            attackerDef.Atk = 3;
+            var unit = new CardInstance(attackerDef, PlayerIndex.Opponent);
+            unit.State = UnitState.Ready;
+            state.Players[1].Board.CoreActive[0].Card = unit;
+
+            HandOverToOpponent(state, engine, TurnPhase.Combat);
+            int coreBefore = state.Players[0].CoreDurability;
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+
+            Assert.IsTrue(ai.TakeTurnUntilCombat(), "Already at Combat counts as having reached it.");
+            Assert.AreEqual(coreBefore, state.Players[0].CoreDurability, "without attacking on the way in.");
+            Assert.AreEqual(UnitState.Ready, unit.State);
+        }
+
+        [Test]
+        public void TakeTurnUntilCombat_NotOurTurn_RunsNothingAndSaysSo()
+        {
+            var state = new MatchState();
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            int handBefore = state.Players[1].Hand.Count;
+
+            Assert.IsFalse(ai.TakeTurnUntilCombat(),
+                "It is the player's turn, so the opponent may not even draw.");
+            Assert.AreEqual(handBefore, state.Players[1].Hand.Count);
+            Assert.AreEqual(PlayerIndex.Player, state.ActivePlayer);
+
+            // FinishTurn is the same contract: called out of turn it does nothing rather than passing a phase
+            // belonging to somebody else.
+            Assert.DoesNotThrow(ai.FinishTurn);
+            Assert.AreEqual(PlayerIndex.Player, state.ActivePlayer);
+        }
+
+        [Test]
+        public void TakeTurn_ComposesTheTwoHalvesIdenticallyToTheOldSingleLoop()
+        {
+            // The regression guard for the split itself: composing the halves must be indistinguishable from
+            // what TakeTurn always did, so every pre-existing caller keeps the behaviour it was written for.
+            var state = new MatchState();
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            CardDefinition attackerDef = CreateTestCardDefinition("ai_unit", "AI Unit");
+            attackerDef.Atk = 3;
+            var unit = new CardInstance(attackerDef, PlayerIndex.Opponent);
+            unit.State = UnitState.Ready;
+            state.Players[1].Board.CoreActive[0].Card = unit;
+
+            HandOverToOpponent(state, engine, TurnPhase.Main);
+            int coreBefore = state.Players[0].CoreDurability;
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            ai.TakeTurn();
+
+            Assert.AreEqual(PlayerIndex.Player, state.ActivePlayer, "Control returns to the player.");
+            Assert.IsTrue(unit.State == UnitState.Exhausted || state.Players[0].CoreDurability < coreBefore,
+                "The whole turn ran, front half and back.");
+        }
+
         [Test]
         public void SimpleAI_DeclaresBlocksWhileDefending()
         {
