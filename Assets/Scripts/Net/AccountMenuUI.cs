@@ -54,19 +54,19 @@ namespace Overlink.Net
             panelRect.anchorMax = new Vector2(0f, 1f);
             panelRect.pivot = new Vector2(0f, 1f);
             panelRect.anchoredPosition = new Vector2(18f, -18f);
-            panelRect.sizeDelta = new Vector2(270f, 170f);
+            panelRect.sizeDelta = new Vector2(290f, 200f);
             var image = panel.AddComponent<Image>();
             image.color = new Color(0.04f, 0.06f, 0.1f, 0.92f);
             var layout = panel.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 10, 10);
-            layout.spacing = 6f;
+            layout.padding = new RectOffset(16, 16, 12, 12);
+            layout.spacing = 8f;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
             var title = CreateLabel(panel.transform, "Account");
-            title.fontSize = 18f;
+            title.fontSize = 20f;
             status = CreateLabel(panel.transform, "Not signed in.");
-            status.fontSize = 12f;
+            status.fontSize = 13f;
             googleButton = CreateButton(panel.transform, "Continue with Google", OnGoogleClicked);
             guestButton = CreateButton(panel.transform, "Play as Guest", OnGuestClicked);
             signOutButton = CreateButton(panel.transform, "Sign Out", OnSignOutClicked);
@@ -99,6 +99,8 @@ namespace Overlink.Net
             layout.minHeight = 28f;
             var text = CreateLabel(go.transform, label);
             text.alignment = TextAlignmentOptions.Center;
+            text.fontSize = 14f;
+            text.enableWordWrapping = false;
             text.raycastTarget = false;
             return button;
         }
