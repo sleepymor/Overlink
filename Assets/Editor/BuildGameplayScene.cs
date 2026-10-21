@@ -194,11 +194,8 @@ namespace Overlink.EditorTools
             inputSo.FindProperty("hand").objectReferenceValue = hand;
             inputSo.ApplyModifiedPropertiesWithoutUndo();
 
-            // This scene is a local match against the AI, but the Net layer self-installs a Google / guest
-            // sign-in panel into every scene it loads into, where it draws across the board header. The guard
-            // hides it for the duration of this scene and puts it back on unload, so the Net demo scenes are
-            // unaffected. See the type's docs for why it is hidden rather than fixed.
-            root.AddComponent<Overlink.Match.NetAccountPanelGuard>();
+            // No account panel here: sign-in lives in the Auth scene behind ProtectedSceneGuard, so the
+            // board never has to hide somebody else's UI again.
 
             GameObject boardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BattlefieldPrefabPath);
             if (boardPrefab != null)
