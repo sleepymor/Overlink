@@ -29,10 +29,10 @@ jobs:
             buildPath: build/StandaloneWindows64
             zipName: Overlink-Windows.zip
             itchChannel: windows
+          # WebGL is published for in-browser play, not as a downloadable zip.
           - targetPlatform: WebGL
             buildName: Overlink
             buildPath: build/WebGL
-            zipName: Overlink-WebGL.zip
             itchChannel: web
 
     steps:
@@ -65,11 +65,11 @@ jobs:
           buildsPath: build
           versioning: Tag
 
-      - name: Zip build
+      - name: Resolve content root
+        id: root
         run: |
           set -euo pipefail
           BUILD_DIR="${{ matrix.buildPath }}"
-          ZIP_NAME="${{ matrix.zipName }}"
 
           if [ ! -d "$BUILD_DIR" ]; then
             echo "::error::Build output directory '$BUILD_DIR' not found. Contents of build/:"
@@ -77,14 +77,48 @@ jobs:
             exit 1
           fi
 
-          if [ -z "$(ls -A "$BUILD_DIR")" ]; then
-            echo "::error::Build output directory '$BUILD_DIR' is empty"
+          # unity-builder nests WebGL output one level down, e.g.
+          # build/WebGL/Overlink/index.html. itch.io only serves an HTML5 project
+          # when index.html sits at the ROOT of the pushed channel, so a nested
+          # layout silently lands as a download instead of a playable game.
+          if [ -f "$BUILD_DIR/index.html" ]; then
+            ROOT="$BUILD_DIR"
+          else
+            INDEX="$(find "$BUILD_DIR" -maxdepth 2 -name index.html | head -n 1)"
+            if [ -n "$INDEX" ]; then
+              ROOT="$(dirname "$INDEX")"
+            else
+              ROOT="$BUILD_DIR"
+            fi
+          fi
+
+          # A WebGL build without a root-level index.html can never be playable,
+          # so fail loudly rather than pushing a broken channel.
+          if [ "${{ matrix.targetPlatform }}" = "WebGL" ] && [ ! -f "$ROOT/index.html" ]; then
+            echo "::error::WebGL content root '$ROOT' has no index.html"
+            ls -laR "$BUILD_DIR" | head -50
             exit 1
           fi
 
-          # Zip the CONTENTS of the build dir (not the dir itself) so players
+          if [ -z "$(ls -A "$ROOT")" ]; then
+            echo "::error::Content root '$ROOT' is empty"
+            exit 1
+          fi
+
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+          echo "Content root: $ROOT"
+          ls -la "$ROOT"
+
+      - name: Zip Windows build
+        if: matrix.targetPlatform != 'WebGL'
+        run: |
+          set -euo pipefail
+          ROOT="${{ steps.root.outputs.root }}"
+          ZIP_NAME="${{ matrix.zipName }}"
+
+          # Zip the CONTENTS of the content root (not the dir itself) so players
           # get Overlink.exe at the archive root.
-          ( cd "$BUILD_DIR" && zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" . )
+          ( cd "$ROOT" && zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" . )
 
           ls -lh "$GITHUB_WORKSPACE/$ZIP_NAME"
 
@@ -102,6 +136,7 @@ jobs:
           echo "Resolved tag: $TAG"
 
       - name: Upload build to release
+        if: matrix.targetPlatform != 'WebGL'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
@@ -125,6 +160,8 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
-          ./butler push "${{ matrix.buildPath }}" \
+          # Push the resolved content root so index.html (WebGL) and
+          # Overlink.exe (Windows) sit at the root of the itch.io channel.
+          ./butler push "${{ steps.root.outputs.root }}" \
             "${{ secrets.ITCH_USERNAME }}/${{ secrets.ITCH_GAME_SLUG }}:${{ matrix.itchChannel }}" \
             --userversion "${{ steps.meta.outputs.tag }}"
