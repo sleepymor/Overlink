@@ -109,10 +109,14 @@ jobs:
 
       - name: Install Butler
         run: |
-          curl -L -o butler.zip https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
+          # broth moved from broth.itch.ovh to broth.itch.zone; the .ovh host
+          # no longer resolves (curl exit 6), which failed the v0.18.1 runs.
+          set -euo pipefail
+          curl -sSfL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
           unzip -o butler.zip
+          rm -f butler.zip
           chmod +x butler
-          ./butler --version
+          ./butler version
 
       - name: Push to itch.io
         env:
