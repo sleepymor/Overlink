@@ -152,7 +152,9 @@ namespace Overlink.Match
 
         bool IsHandBusy()
         {
-            return hand != null && hand.IsPointerOverHand();
+            BattlefieldHud hud = BattlefieldHud.Find();
+            return (hud != null && hud.IsPointerOverControls(Input.mousePosition))
+                || (hand != null && hand.IsPointerOverHand());
         }
 
         /// <summary>
@@ -292,12 +294,15 @@ namespace Overlink.Match
 
                 if (targets.Count == 0)
                 {
-                    coordinator.ShowNotice($"{name} has nothing to attack. Click the opponent's Core instead.");
+                    coordinator.ShowNotice(coordinator.CanPlayerActivateWith(hit.Card)
+                        ? $"{name} selected. Click the same card to use SKILL, or the opponent's Core to attack."
+                        : $"{name} has nothing to attack. Click the opponent's Core instead.");
                 }
                 else
                 {
-                    coordinator.ShowNotice($"{name} is selected. Click a red socket, or the opponent's Core, " +
-                        "to attack.");
+                    coordinator.ShowNotice(coordinator.CanPlayerActivateWith(hit.Card)
+                        ? $"{name} selected. Click the same card for SKILL, or a red socket to attack."
+                        : $"{name} is selected. Click a red socket, or the opponent's Core, to attack.");
                 }
 
                 return true;
@@ -335,6 +340,16 @@ namespace Overlink.Match
         bool TryCommitAttack(BoardHit hit)
         {
             CardInstance attacker = selected;
+
+            // A second click on the selected card chooses its printed Activate skill directly from the card.
+            // A different target keeps the normal attack flow, so the interaction remains point-and-click:
+            // click the unit, then either click the same unit for Skill or an enemy for Attack.
+            if (hit.Card == attacker && coordinator.CanPlayerActivateWith(attacker))
+            {
+                ClearSelection();
+                coordinator.TryPlayerActivateWith(attacker);
+                return true;
+            }
 
             if (hit.Kind == BoardHitKind.OpponentCore)
             {

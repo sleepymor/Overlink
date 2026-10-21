@@ -39,9 +39,19 @@ namespace Overlink.Cards
         public float tiltFactor = 0.6f;
         public float maxTilt = 18f;
 
+        [Header("Pointer interaction")]
+        [Tooltip("Holding a card still for this long magnifies it; moving the pointer begins a drag instead.")]
+        public float holdToZoomSeconds = 0.35f;
+        public float dragThresholdPixels = 14f;
+        public float heldScale = 1.85f;
+
         readonly List<CardView> cards = new List<CardView>();
         CardView hovered;
         CardView dragged;
+        CardView pressed;
+        Vector2 pressPosition;
+        float pressTime;
+        bool showingHeldZoom;
         Camera cam;
         Plane dragPlane = new Plane(Vector3.forward, Vector3.zero);
         Vector3 grabOffset;
@@ -79,6 +89,9 @@ namespace Overlink.Cards
 
         /// <summary>Clears the owner's drop highlight when a drag ends for any reason.</summary>
         public Action dropTargetCleared;
+
+        /// <summary>Injected by the match UI to keep a screen-space button from also grabbing a hand card.</summary>
+        public Func<Vector2, bool> pointerOverControls;
 
         // The slot under the card as of the last drag update, replayed to the gate on release.
         BoardSlot pendingDropSlot;
@@ -175,6 +188,11 @@ namespace Overlink.Cards
         void Update()
         {
             if (cam == null) return;
+            if (dragged == null && pointerOverControls != null && pointerOverControls(Input.mousePosition))
+            {
+                if (hovered != null) { Unhover(hovered); hovered = null; }
+                return;
+            }
 
             // Debug draw/discard only makes sense for the standalone presentation scene. When a match
             // owns the hand, these keys would desync the view from the authoritative state.
@@ -191,8 +209,56 @@ namespace Overlink.Cards
                 return;
             }
 
+            if (pressed != null)
+            {
+                if (Input.GetMouseButtonUp(0))
+                {
+                    CardView heldCard = pressed;
+                    bool wasZoomed = showingHeldZoom;
+                    pressed = null;
+                    showingHeldZoom = false;
+                    if (wasZoomed && heldCard != null)
+                    {
+                        // A hold is a preview, not a new hover state. Return to the normal fan scale before
+                        // the next hover pass so the card never remains permanently enlarged after release.
+                        Unhover(heldCard);
+                        Hover(heldCard);
+                    }
+                    UpdateHover();
+                    return;
+                }
+
+                if ((new Vector2(Input.mousePosition.x, Input.mousePosition.y) - pressPosition).sqrMagnitude
+                    > dragThresholdPixels * dragThresholdPixels)
+                {
+                    CardView card = pressed;
+                    pressed = null;
+                    showingHeldZoom = false;
+                    BeginDrag(card);
+                    UpdateDrag();
+                    return;
+                }
+
+                if (!showingHeldZoom && Time.unscaledTime - pressTime >= holdToZoomSeconds)
+                {
+                    showingHeldZoom = true;
+                    ComputeSlot(pressed.SlotIndex, cards.Count, fanSpacing, arcHeight, maxYaw, handY,
+                        out Vector3 pos, out _);
+                    pos.y += hoverLift + 0.65f;
+                    pos.z = -1.1f;
+                    pressed.Tween.Play(pos, Quaternion.identity, pressed.BaseScale * heldScale,
+                        hoverDuration, CardEase.OutCubic);
+                }
+                return;
+            }
+
             UpdateHover();
-            if (hovered != null && Input.GetMouseButtonDown(0)) BeginDrag(hovered);
+            if (hovered != null && Input.GetMouseButtonDown(0))
+            {
+                pressed = hovered;
+                pressPosition = Input.mousePosition;
+                pressTime = Time.unscaledTime;
+            }
         }
 
         public void DrawOne()
@@ -310,6 +376,7 @@ namespace Overlink.Cards
             cards.Remove(card);
             if (hovered == card) hovered = null;
             if (dragged == card) dragged = null;
+            if (pressed == card) { pressed = null; showingHeldZoom = false; }
             Destroy(card.gameObject);
         }
 
@@ -329,7 +396,7 @@ namespace Overlink.Cards
             {
                 var card = cards[i];
                 card.SlotIndex = i;
-                if (card == dragged || card == hovered) continue;
+            if (card == dragged || card == hovered || card == pressed) continue;
                 ComputeSlot(i, cards.Count, fanSpacing, arcHeight, maxYaw, handY,
                     out Vector3 pos, out Quaternion rot);
                 card.Tween.Play(pos, rot, card.BaseScale, layoutDuration, CardEase.OutCubic);
@@ -368,6 +435,8 @@ namespace Overlink.Cards
         void BeginDrag(CardView card)
         {
             if (hovered == card) hovered = null;
+            pressed = null;
+            showingHeldZoom = false;
             card.SetHovered(false);
             card.SetDragging(true);
             card.Tween.Stop();
@@ -407,7 +476,9 @@ namespace Overlink.Cards
 
             // Either a resolved socket or the classic fling past the play line. The socket route is what
             // makes the player's own ranks - which sit below that line - reachable at all.
-            if (pendingDropSlot != null || card.transform.localPosition.y > playLineY)
+            if (pendingDropSlot != null || (dropTargetResolver == null && card.transform.localPosition.y > playLineY)
+                || (dropTargetResolver != null && card.transform.localPosition.y > playLineY
+                    && playResolverWithSlot == null))
             {
                 PlayCard(card);
             }
@@ -460,7 +531,7 @@ namespace Overlink.Cards
         {
             var done = false;
             card.Tween.Play(playSlot.localPosition, Quaternion.identity,
-                card.BaseScale * 1.15f, resolveDuration, CardEase.OutCubic, () => done = true);
+                card.BaseScale * 1.35f, resolveDuration, CardEase.OutBack, () => done = true);
             yield return new WaitUntil(() => done);
             Debug.Log($"[Hand] Played {card.Data.title} (cost {card.Data.cost}): {card.Data.description}");
             CardPlayed?.Invoke(card.Data);
@@ -504,7 +575,7 @@ namespace Overlink.Cards
                 return true;
             }
 
-            return cam != null && RaycastCard() != null;
+            return pressed != null || cam != null && RaycastCard() != null;
         }
 
         Vector3 MouseOnPlane()

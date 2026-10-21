@@ -45,8 +45,8 @@ namespace Overlink.Match
                     "A wall with no text. Just holds the line."),
                 Unit("card_fsti_010", "Bulwark Sentry", 4, 2, 5, 2, new[] { Keyword.Shield },
                     "Shield 2. Expensive but hard to shift."),
-                Unit("card_fsti_011", "Debilitator", 3, 2, 2, 0, new Keyword[0],
-                    "Deploy-style debuff text: deal 1 less ATK to the enemy line is handled by its effect.",
+                Unit("card_fsti_011", "Debilitator", 3, 2, 2, 0, new[] { Keyword.Activate },
+                    "Activate: weaken an enemy active unit by 1 ATK.",
                     new EffectDescriptor(EffectType.Debuff, TargetKind.EnemyActive, 1)),
 
                 // ---- Abilities --------------------------------------------------------

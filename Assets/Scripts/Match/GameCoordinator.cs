@@ -51,6 +51,11 @@ namespace Overlink.Match
         private bool aiBlocksDeclared;
         private bool initializing;
         private BattlefieldPresenter presenter;
+        private BattlefieldHud battlefieldHud;
+
+        [Header("Phase flow")]
+        [Tooltip("Upkeep, Draw, End and Cleanup advance automatically. Main and Combat remain player-controlled.")]
+        public bool autoAdvanceNonInteractivePhases = true;
 
         // Serialized on purpose: unlike the fields above it survives a domain reload, which is how we
         // tell "the match has not booted yet" apart from "the match booted but its state was wiped".
@@ -67,6 +72,12 @@ namespace Overlink.Match
                 presenter = GetComponent<BattlefieldPresenter>();
             }
             WireHand();
+            battlefieldHud = BattlefieldHud.Ensure();
+            if (battlefieldHud != null)
+            {
+                battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
+                battlefieldHud.EndPhaseRequested += EndPlayerPhase;
+            }
         }
 
         /// <summary>
@@ -101,12 +112,15 @@ namespace Overlink.Match
             handController.playResolverWithSlot = TryPlayFromUISlot;
             handController.dropTargetResolver = ResolveDropTarget;
             handController.dropTargetCleared = ClearDropTarget;
+            handController.pointerOverControls = position =>
+                battlefieldHud != null && battlefieldHud.IsPointerOverControls(position);
             handController.CardPlayed -= OnCardPlayedAnimated;
             handController.CardPlayed += OnCardPlayedAnimated;
         }
 
         void OnDestroy()
         {
+            if (battlefieldHud != null) battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
             if (handController != null)
             {
                 handController.CardPlayed -= OnCardPlayedAnimated;
@@ -184,6 +198,8 @@ namespace Overlink.Match
                 return;
             }
 
+            AdvanceAutomaticPhases();
+
             bool inCombat = matchState.CurrentPhase == TurnPhase.Combat;
 
             // AI defends on the player's Combat step; blocks only live for that step.
@@ -211,9 +227,7 @@ namespace Overlink.Match
             // ungated, because conceding is legal on either player's turn (GDD 2.1.8).
             if (Input.GetKeyDown(passPhaseKey) && matchState.ActivePlayer == PlayerIndex.Player)
             {
-                matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
-                SyncHand();
-                LogMatchState();
+                EndPlayerPhase();
             }
 
             if (Input.GetKeyDown(endTurnKey) && matchState.ActivePlayer == PlayerIndex.Player)
@@ -245,6 +259,51 @@ namespace Overlink.Match
                     SyncHand();
                     LogMatchState();
                 }
+            }
+        }
+
+        /// <summary>Passes only the non-interactive phases. Main and Combat are deliberately left visible and manual.</summary>
+        void AdvanceAutomaticPhases()
+        {
+            if (!autoAdvanceNonInteractivePhases || matchState.ActivePlayer != PlayerIndex.Player)
+            {
+                return;
+            }
+
+            int guard = 0;
+            while (guard++ < 8 && !matchState.IsMatchOver()
+                && matchState.CurrentPhase != TurnPhase.Main
+                && matchState.CurrentPhase != TurnPhase.Combat)
+            {
+                CommandResult result = matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
+                if (result != CommandResult.Success)
+                {
+                    break;
+                }
+            }
+
+            if (battlefieldHud != null)
+            {
+                battlefieldHud.SetEndPhaseAvailable(matchState.ActivePlayer == PlayerIndex.Player
+                    && (matchState.CurrentPhase == TurnPhase.Main || matchState.CurrentPhase == TurnPhase.Combat));
+            }
+        }
+
+        /// <summary>Callback for the in-game End Phase button.</summary>
+        public void EndPlayerPhase()
+        {
+            if (!matchStarted || matchState == null || matchEngine == null
+                || matchState.ActivePlayer != PlayerIndex.Player || matchState.IsMatchOver())
+            {
+                return;
+            }
+
+            if (matchState.CurrentPhase == TurnPhase.Main || matchState.CurrentPhase == TurnPhase.Combat)
+            {
+                matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
+                SyncHand();
+                LogMatchState();
+                AdvanceAutomaticPhases();
             }
         }
 
@@ -520,6 +579,10 @@ namespace Overlink.Match
             }
 
             Debug.Log($"[GameCoordinator] Player played {card.Definition.Name}");
+            if (presenter != null && card.Definition.Type != CardType.Ability)
+            {
+                presenter.PlayDeployAnimation(card);
+            }
             SyncHand();
             LogMatchState();
             return true;
@@ -628,6 +691,34 @@ namespace Overlink.Match
         public bool CanPlayerAttackWith(CardInstance card)
         {
             return CombatLegality.CanAttack(matchState, PlayerIndex.Player, card);
+        }
+
+        public bool CanPlayerActivateWith(CardInstance card)
+        {
+            return matchState != null && matchState.ActivePlayer == PlayerIndex.Player
+                && matchState.CurrentPhase == TurnPhase.Combat && card != null
+                && card.Owner == PlayerIndex.Player && card.Definition.Type == CardType.Unit
+                && card.HasKeyword(Keyword.Activate) && card.CanAct();
+        }
+
+        public bool TryPlayerActivateWith(CardInstance card)
+        {
+            if (!CanPlayerActivateWith(card))
+            {
+                return Reject(card == null ? "there is no unit selected to activate."
+                    : $"{card.Definition.Name} cannot activate its skill right now.");
+            }
+
+            CommandResult result = matchEngine.ExecuteCommand(
+                new ActivateAbilityCommand(PlayerIndex.Player, card.InstanceId));
+            if (result != CommandResult.Success)
+            {
+                return Reject($"skill activation was rejected by the engine ({result}).");
+            }
+
+            Debug.Log($"[GameCoordinator] Player activated {card.Definition.Name}'s skill");
+            SyncHand();
+            return true;
         }
 
         /// <summary>See <see cref="CombatLegality.AttackTargets"/>. The player's view of it.</summary>

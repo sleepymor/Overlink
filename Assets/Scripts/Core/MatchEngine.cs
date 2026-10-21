@@ -72,6 +72,8 @@ namespace Overlink.Core
                     return ExecutePlayCard(playCard);
                 case DeclareAttackCommand attack:
                     return ExecuteDeclareAttack(attack);
+                case ActivateAbilityCommand ability:
+                    return ExecuteActivateAbility(ability);
                 case DeclareBlockCommand block:
                     return ExecuteDeclareBlock(block);
                 case ConcedeCommand concede:
@@ -243,6 +245,39 @@ namespace Overlink.Core
             }
 
             attacker.Exhaust();
+            State.ResolveDestructionAndPromotion();
+            State.CheckVictoryConditions();
+            return CommandResult.Success;
+        }
+
+        /// <summary>
+        /// Resolves a unit's printed Activate skill during its controller's Combat phase. Activation is a
+        /// separate command from attacking: the player chooses one of the two actions and a used unit becomes
+        /// Exhausted, so the same unit cannot attack and activate in one combat step.
+        /// </summary>
+        private CommandResult ExecuteActivateAbility(ActivateAbilityCommand command)
+        {
+            if (State.CurrentPhase != TurnPhase.Combat)
+            {
+                return CommandResult.InvalidPhase;
+            }
+
+            PlayerState player = State.GetPlayer(command.Player);
+            CardInstance card = FindActiveCardInstance(player.Board, command.CardInstanceId);
+            if (card == null || !card.CanAct())
+            {
+                return CommandResult.UnitCannotAct;
+            }
+
+            if (card.Definition.Type != CardType.Unit || !card.HasKeyword(Keyword.Activate)
+                || card.Definition.Effects == null || card.Definition.Effects.Count == 0)
+            {
+                return CommandResult.InvalidCommand;
+            }
+
+            Effects.Resolve(card, command.Player, card.Definition.Effects, $"Activate {card.Definition.Name}");
+            card.Exhaust();
+            State.LogEvent($"{card.Definition.Name} activates its skill");
             State.ResolveDestructionAndPromotion();
             State.CheckVictoryConditions();
             return CommandResult.Success;

@@ -1368,7 +1368,15 @@ namespace Overlink.Match
                 return;
             }
 
-            ShowInfo(card.Definition.Name, CardDetails(card, state), where);
+            if (hud == null)
+            {
+                ResolveHud();
+            }
+
+            if (hud != null)
+            {
+                hud.ShowReader(card.Definition.Name, CardDetails(card, state), where, CardAccent(card.Definition.Type));
+            }
         }
 
         /// <summary>
@@ -1515,7 +1523,26 @@ namespace Overlink.Match
                 return;
             }
 
-            ShowInfo(card.Definition.Name, CardDetails(card, null), where);
+            if (hud == null)
+            {
+                ResolveHud();
+            }
+
+            if (hud != null)
+            {
+                hud.ShowReader(card.Definition.Name, CardDetails(card, null), where, CardAccent(card.Definition.Type));
+            }
+        }
+
+        static Color CardAccent(CardType type)
+        {
+            switch (type)
+            {
+                case CardType.Ability: return new Color(0.92f, 0.48f, 0.25f, 1f);
+                case CardType.Relay: return new Color(0.25f, 0.78f, 0.58f, 1f);
+                case CardType.Protocol: return new Color(0.60f, 0.43f, 0.95f, 1f);
+                default: return new Color(0.35f, 0.63f, 1f, 1f);
+            }
         }
 
         /// <summary>
@@ -1550,6 +1577,8 @@ namespace Overlink.Match
 
         TextMeshPro noticeText;
         float noticeUntil;
+        int deployPulseCardId = -1;
+        float deployPulseUntil;
 
         /// <summary>
         /// Shows a short-lived explanation under the header. The play gate routes every rejected drag
@@ -1617,6 +1646,19 @@ namespace Overlink.Match
             // a manual hierarchy edit re-collects the pickables rather than clicking on ghosts.
             pickablesValid = false;
             Refresh(state);
+        }
+
+        /// <summary>Starts a short board-side pulse after a hand card is accepted as a deployment.</summary>
+        public void PlayDeployAnimation(CardInstance card)
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            deployPulseCardId = card.InstanceId;
+            deployPulseUntil = Time.unscaledTime + 0.55f;
+            ShowNotice($"Deploying {card.Definition.Name}...");
         }
 
         void Refresh()
@@ -1901,6 +1943,12 @@ namespace Overlink.Match
             if (highlightedTile == tile)
             {
                 baseTint = Color.Lerp(baseTint, new Color(1f, 0.85f, 0.35f), 0.5f);
+            }
+
+            if (card.InstanceId == deployPulseCardId && Time.unscaledTime < deployPulseUntil)
+            {
+                float pulse = 0.5f + 0.5f * Mathf.Sin((deployPulseUntil - Time.unscaledTime) * 18f);
+                baseTint = Color.Lerp(baseTint, new Color(1f, 0.85f, 0.35f), pulse * 0.62f);
             }
 
             SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, baseTint)));

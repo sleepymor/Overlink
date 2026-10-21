@@ -1,6 +1,9 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Overlink.Match
@@ -53,22 +56,26 @@ namespace Overlink.Match
         public Color textColor = new Color(0.80f, 0.85f, 0.93f);
         public Color headerColor = new Color(0.62f, 0.70f, 0.84f);
 
-        [Header("Reader")]
-        [Tooltip("The card-details panel, pinned to the left edge where the log's column is mirrored. It shows " +
-                 "whatever the player clicked on: a board unit's full card, or one card out of the discard " +
-                 "pile. Like the log it is display-only - no close button, because a button needs a raycaster " +
-                 "and a raycaster would eat card drags. Click anywhere else, or press Escape, to dismiss it.")]
-        public Vector2 readerSize = new Vector2(340f, 300f);
-        public Vector2 readerOffset = new Vector2(14f, 0f);
-        public float readerPadding = 14f;
-        public Color readerColor = new Color(0.10f, 0.12f, 0.18f, 0.90f);
-        public float readerTitleSize = 22f;
-        public float readerBodySize = 16f;
-        public float readerFootSize = 13f;
+        [Header("Floating card preview")]
+        [Tooltip("The enlarged card that floats in the centre when a board or discard card is inspected. It is " +
+                 "display-only: the transparent overlay has no raycaster, so card dragging still works behind it.")]
+        public Vector2 readerSize = new Vector2(500f, 650f);
+        public Vector2 readerOffset = Vector2.zero;
+        public float readerPadding = 28f;
+        public Color readerColor = new Color(0.07f, 0.09f, 0.15f, 0.98f);
+        public Color readerAccentColor = new Color(0.95f, 0.70f, 0.25f, 1f);
+        public float readerTitleSize = 32f;
+        public float readerBodySize = 22f;
+        public float readerFootSize = 16f;
         public Color readerTitleColor = new Color(0.95f, 0.97f, 1f);
         public Color readerFootColor = new Color(0.58f, 0.66f, 0.80f);
 
         Canvas canvas;
+        Button endPhaseButton;
+        TextMeshProUGUI endPhaseLabel;
+        Coroutine readerMotion;
+
+        public event Action EndPhaseRequested;
 
         // Serialized rather than plain private: the scene ships this object already built, and a reference
         // that is not serialized arrives null from disk. That would make every Ensure() call rewrite the
@@ -81,6 +88,7 @@ namespace Overlink.Match
         // The reader is a second panel on the same canvas: one overlay is cheaper than two, and the canvas
         // has no raycaster so nothing about the drag contract changes.
         [SerializeField] RectTransform reader;
+        [SerializeField] RectTransform readerCard;
         [SerializeField] TextMeshProUGUI readerTitle;
         [SerializeField] TextMeshProUGUI readerBody;
         [SerializeField] TextMeshProUGUI readerFoot;
@@ -88,7 +96,7 @@ namespace Overlink.Match
         /// <summary>The panel's rectangle, exposed so the editor (and tests) can move it.</summary>
         public RectTransform Panel => panel;
 
-        /// <summary>The details panel's rectangle, likewise.</summary>
+        /// <summary>The floating preview overlay's rectangle, likewise.</summary>
         public RectTransform Reader => reader;
 
         /// <summary>
@@ -204,6 +212,74 @@ namespace Overlink.Match
 
             EnsurePanel();
             EnsureReader();
+            if (Application.isPlaying)
+            {
+                EnsurePhaseControls();
+            }
+        }
+
+        void EnsurePhaseControls()
+        {
+            if (endPhaseButton != null) return;
+
+            Transform existing = transform.Find("PhaseControls");
+            GameObject root = existing != null ? existing.gameObject
+                : new GameObject("PhaseControls", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            if (existing == null) root.transform.SetParent(transform, false);
+            var nestedCanvas = root.GetComponent<Canvas>();
+            nestedCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            nestedCanvas.overrideSorting = true;
+            nestedCanvas.sortingOrder = 11;
+
+            Transform buttonTransform = root.transform.Find("EndPhaseButton");
+            GameObject buttonObject = buttonTransform != null ? buttonTransform.gameObject
+                : new GameObject("EndPhaseButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            if (buttonTransform == null) buttonObject.transform.SetParent(root.transform, false);
+            var rect = buttonObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, 175f);
+            rect.sizeDelta = new Vector2(210f, 54f);
+            buttonObject.GetComponent<Image>().color = new Color(0.18f, 0.40f, 0.60f, 0.96f);
+            endPhaseButton = buttonObject.GetComponent<Button>();
+            endPhaseButton.onClick.AddListener(() => EndPhaseRequested?.Invoke());
+
+            Transform labelTransform = rect.Find("Label");
+            GameObject label = labelTransform != null ? labelTransform.gameObject
+                : new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            if (labelTransform == null) label.transform.SetParent(rect, false);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            endPhaseLabel = label.GetComponent<TextMeshProUGUI>();
+            endPhaseLabel.alignment = TextAlignmentOptions.Center;
+            endPhaseLabel.fontSize = 25f;
+            endPhaseLabel.fontStyle = FontStyles.Bold;
+            endPhaseLabel.raycastTarget = false;
+            endPhaseLabel.text = "END PHASE";
+
+            if (EventSystem.current == null)
+            {
+                new GameObject("Battlefield EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            }
+            SetEndPhaseAvailable(false);
+        }
+
+        public void SetEndPhaseAvailable(bool available)
+        {
+            if (endPhaseButton == null) return;
+            endPhaseButton.gameObject.SetActive(available);
+        }
+
+        /// <summary>Only the small action button, not the log or reader, consumes board/hand pointer input.</summary>
+        public bool IsPointerOverControls(Vector2 screenPosition)
+        {
+            return endPhaseButton != null && endPhaseButton.gameObject.activeInHierarchy
+                && RectTransformUtility.RectangleContainsScreenPoint(
+                    endPhaseButton.GetComponent<RectTransform>(), screenPosition);
         }
 
         RectTransform EnsurePanel()
@@ -283,7 +359,9 @@ namespace Overlink.Match
                 var image = existing.GetComponent<Image>();
                 if (image != null)
                 {
-                    image.color = readerColor;
+                    // ReaderPanel is now a transparent full-screen overlay. The visible card is its centered
+                    // CardFace child, which lets the preview float over the table without tinting the whole view.
+                    image.color = Color.clear;
                     image.raycastTarget = false;
                 }
             }
@@ -293,22 +371,69 @@ namespace Overlink.Match
                 go.transform.SetParent(transform, false);
                 reader = go.GetComponent<RectTransform>();
                 var image = go.AddComponent<Image>();
-                image.color = readerColor;
+                image.color = Color.clear;
                 image.raycastTarget = false;
             }
 
-            // Left edge, vertically centred: the mirror of the log, so the two panels read as one instrument
-            // row flanking the table rather than as two unrelated popups.
-            reader.anchorMin = new Vector2(0f, 0.5f);
-            reader.anchorMax = new Vector2(0f, 0.5f);
-            reader.pivot = new Vector2(0f, 0.5f);
-            reader.sizeDelta = readerSize;
-            reader.anchoredPosition = readerOffset;
+            // The root covers the screen but does not intercept input. This keeps the child card responsive to
+            // any resolution while the board, hand, and the transparent area around the card remain clickable.
+            reader.anchorMin = Vector2.zero;
+            reader.anchorMax = Vector2.one;
+            reader.pivot = new Vector2(0.5f, 0.5f);
+            reader.sizeDelta = Vector2.zero;
+            reader.anchoredPosition = Vector2.zero;
+
+            Transform existingCard = reader.Find("CardFace");
+            if (existingCard != null)
+            {
+                readerCard = existingCard as RectTransform;
+            }
+            else
+            {
+                var cardGo = new GameObject("CardFace", typeof(RectTransform), typeof(Image), typeof(Outline));
+                cardGo.transform.SetParent(reader, false);
+                readerCard = cardGo.GetComponent<RectTransform>();
+            }
+
+            var cardImage = readerCard.GetComponent<Image>();
+            cardImage.color = readerColor;
+            cardImage.raycastTarget = false;
+            var outline = readerCard.GetComponent<Outline>();
+            outline.effectColor = new Color(1f, 0.82f, 0.35f, 0.78f);
+            outline.effectDistance = new Vector2(5f, 5f);
+            outline.useGraphicAlpha = true;
+
+            readerCard.anchorMin = new Vector2(0.5f, 0.5f);
+            readerCard.anchorMax = new Vector2(0.5f, 0.5f);
+            readerCard.pivot = new Vector2(0.5f, 0.5f);
+            readerCard.sizeDelta = readerSize;
+            readerCard.anchoredPosition = readerOffset;
+
+            // A slim gold band gives the preview the visual language of a physical trading card before the
+            // title and rules text are read.
+            Transform accentTransform = readerCard.Find("Accent");
+            GameObject accent = accentTransform != null ? accentTransform.gameObject
+                : new GameObject("Accent", typeof(RectTransform), typeof(Image));
+            if (accentTransform == null) accent.transform.SetParent(readerCard, false);
+            var accentRect = accent.GetComponent<RectTransform>();
+            accentRect.anchorMin = new Vector2(0f, 1f);
+            accentRect.anchorMax = new Vector2(1f, 1f);
+            accentRect.pivot = new Vector2(0.5f, 1f);
+            accentRect.sizeDelta = new Vector2(-readerPadding * 2f, 10f);
+            accentRect.anchoredPosition = new Vector2(0f, -readerPadding + 4f);
+            accent.GetComponent<Image>().color = readerAccentColor;
+            accent.GetComponent<Image>().raycastTarget = false;
 
             float titleHeight = readerTitleSize * 2.4f;
             float footHeight = readerFootSize * 2.4f;
 
-            readerTitle = EnsureText("ReaderTitle", reader, readerTitleSize, FontStyles.Bold, readerTitleColor,
+            // Older scene files put these text objects directly under ReaderPanel. Move them into CardFace so
+            // the same serialized HUD upgrades in place instead of creating duplicate labels.
+            MoveReaderTextIntoCard("ReaderTitle");
+            MoveReaderTextIntoCard("ReaderBody");
+            MoveReaderTextIntoCard("ReaderFoot");
+
+            readerTitle = EnsureText("ReaderTitle", readerCard, readerTitleSize, FontStyles.Bold, readerTitleColor,
                 TextAlignmentOptions.TopLeft, out RectTransform titleRect);
             titleRect.anchorMin = new Vector2(0f, 1f);
             titleRect.anchorMax = new Vector2(1f, 1f);
@@ -316,7 +441,7 @@ namespace Overlink.Match
             titleRect.sizeDelta = new Vector2(0f, titleHeight);
             titleRect.anchoredPosition = new Vector2(readerPadding, -readerPadding);
 
-            readerBody = EnsureText("ReaderBody", reader, readerBodySize, FontStyles.Normal, textColor,
+            readerBody = EnsureText("ReaderBody", readerCard, readerBodySize, FontStyles.Normal, textColor,
                 TextAlignmentOptions.TopLeft, out RectTransform bodyRect);
             bodyRect.anchorMin = Vector2.zero;
             bodyRect.anchorMax = Vector2.one;
@@ -325,7 +450,7 @@ namespace Overlink.Match
 
             // The footer carries the browsing affordance ("◄ ►" for a pile, "ESC to close" for a card), which
             // is the only way to advertise a control on a panel that cannot hold a button.
-            readerFoot = EnsureText("ReaderFoot", reader, readerFootSize, FontStyles.Normal, readerFootColor,
+            readerFoot = EnsureText("ReaderFoot", readerCard, readerFootSize, FontStyles.Normal, readerFootColor,
                 TextAlignmentOptions.BottomLeft, out RectTransform footRect);
             footRect.anchorMin = new Vector2(0f, 0f);
             footRect.anchorMax = new Vector2(1f, 0f);
@@ -333,8 +458,34 @@ namespace Overlink.Match
             footRect.sizeDelta = new Vector2(0f, footHeight);
             footRect.anchoredPosition = new Vector2(readerPadding, readerPadding);
 
+            Transform hintTransform = readerCard.Find("ReaderHint");
+            GameObject hint = hintTransform != null ? hintTransform.gameObject
+                : new GameObject("ReaderHint", typeof(RectTransform), typeof(TextMeshProUGUI));
+            if (hintTransform == null) hint.transform.SetParent(readerCard, false);
+            var hintText = hint.GetComponent<TextMeshProUGUI>();
+            hintText.text = "ESC  /  CLICK ELSEWHERE  TO CLOSE";
+            hintText.fontSize = Mathf.Max(11f, readerFootSize * 0.72f);
+            hintText.color = new Color(0.62f, 0.69f, 0.82f, 0.9f);
+            hintText.alignment = TextAlignmentOptions.Center;
+            hintText.raycastTarget = false;
+            var hintRect = hint.GetComponent<RectTransform>();
+            hintRect.anchorMin = new Vector2(0f, 0f);
+            hintRect.anchorMax = new Vector2(1f, 0f);
+            hintRect.pivot = new Vector2(0.5f, 0f);
+            hintRect.sizeDelta = new Vector2(-readerPadding * 2f, readerFootSize * 1.8f);
+            hintRect.anchoredPosition = new Vector2(0f, readerPadding * 0.35f);
+
             reader.gameObject.SetActive(false);
             return reader;
+        }
+
+        void MoveReaderTextIntoCard(string objectName)
+        {
+            Transform old = reader.Find(objectName);
+            if (old != null && readerCard != null)
+            {
+                old.SetParent(readerCard, false);
+            }
         }
 
         TextMeshProUGUI EnsureText(string name, RectTransform parent, float size, FontStyles style,
@@ -438,7 +589,7 @@ namespace Overlink.Match
         /// dismiss uses - there is no second code path for hiding that can drift from it.
         /// </para>
         /// </summary>
-        public void ShowReader(string title, string body, string foot = null)
+        public void ShowReader(string title, string body, string foot = null, Color? accent = null)
         {
             if (readerTitle == null || readerBody == null)
             {
@@ -459,7 +610,59 @@ namespace Overlink.Match
             readerTitle.text = title ?? string.Empty;
             readerBody.text = body ?? string.Empty;
             readerFoot.text = foot ?? string.Empty;
+            if (readerCard != null)
+            {
+                Image cardImage = readerCard.GetComponent<Image>();
+                if (cardImage != null)
+                {
+                    cardImage.color = readerColor;
+                }
+
+                Transform accentTransform = readerCard.Find("Accent");
+                Image accentImage = accentTransform != null ? accentTransform.GetComponent<Image>() : null;
+                if (accentImage != null)
+                {
+                    accentImage.color = accent ?? readerAccentColor;
+                }
+            }
             reader.gameObject.SetActive(true);
+
+            if (Application.isPlaying && readerCard != null)
+            {
+                if (readerMotion != null)
+                {
+                    StopCoroutine(readerMotion);
+                }
+
+                readerMotion = StartCoroutine(FloatReaderIn());
+            }
+        }
+
+        IEnumerator FloatReaderIn()
+        {
+            readerCard.localScale = Vector3.one * 0.84f;
+            readerCard.anchoredPosition = readerOffset + new Vector2(0f, -42f);
+            Vector2 start = readerCard.anchoredPosition;
+            float elapsed = 0f;
+            const float duration = 0.22f;
+
+            while (elapsed < duration && readerCard != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                readerCard.localScale = Vector3.LerpUnclamped(Vector3.one * 0.84f, Vector3.one, eased);
+                readerCard.anchoredPosition = Vector2.LerpUnclamped(start, readerOffset, eased);
+                yield return null;
+            }
+
+            if (readerCard != null)
+            {
+                readerCard.localScale = Vector3.one;
+                readerCard.anchoredPosition = readerOffset;
+            }
+
+            readerMotion = null;
         }
 
         /// <summary>Takes the details panel off screen. Safe when it was never shown.</summary>
@@ -467,6 +670,11 @@ namespace Overlink.Match
         {
             if (reader != null)
             {
+                if (readerMotion != null)
+                {
+                    StopCoroutine(readerMotion);
+                    readerMotion = null;
+                }
                 reader.gameObject.SetActive(false);
             }
         }

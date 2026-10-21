@@ -75,6 +75,18 @@ namespace Overlink.Core
         }
     }
 
+    /// <summary>Use a printed Activate skill instead of this unit's attack this Combat step.</summary>
+    public sealed class ActivateAbilityCommand : GameCommand
+    {
+        public int CardInstanceId { get; }
+
+        public ActivateAbilityCommand(PlayerIndex player, int cardInstanceId)
+            : base(player, CommandType.ActivateAbility)
+        {
+            CardInstanceId = cardInstanceId;
+        }
+    }
+
     public sealed class SwitchPositionCommand : GameCommand
     {
         public int CardInstanceId { get; }

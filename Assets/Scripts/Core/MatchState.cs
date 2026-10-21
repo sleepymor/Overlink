@@ -425,7 +425,7 @@ namespace Overlink.Core
 
         /// <summary>
         /// GDD 2.1.2 Phase 1 Upkeep: ready the acting player's units (clearing Summoning Delay), gain NP
-        /// (+1 base, +1 per controlled Node) up to the 10 + Nodes cap, then check Node Domination.
+        /// (+3 base, +1 per controlled Node) up to the 10 + Nodes cap, then check Node Domination.
         /// </summary>
         private void OnUpkeepPhase()
         {
@@ -439,8 +439,8 @@ namespace Overlink.Core
 
             int controlledNodes = player.Board.CountControlledNodes(ActivePlayer);
             int cap = PlayerState.NpCap(controlledNodes);
-            player.GainNP(1 + controlledNodes, cap);
-            LogEvent($"{ActivePlayer} gains {1 + controlledNodes} NP (1 base + {controlledNodes} Nodes), now {player.CurrentNP}/{cap}");
+            player.GainNP(3 + controlledNodes, cap);
+            LogEvent($"{ActivePlayer} gains {3 + controlledNodes} NP (3 base + {controlledNodes} Nodes), now {player.CurrentNP}/{cap}");
 
             CheckNodeDomination();
         }
