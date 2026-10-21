@@ -68,6 +68,8 @@ namespace Overlink.Match
                     "Occupy a Node slot. Its Active slot controls that Node for you."),
                 Relay("card_fsti_017", "Node Beacon", 3,
                     "Occupy a Node slot. Second copy so the deck has enough Relay presence."),
+                // CA-01: Interdiction Net's text promises a mechanic not yet implemented. The validator does not
+                // check prose against mechanics. Either implement Node-scoped "CannotBlock" or update the text.
                 Relay("card_fsti_020", "Interdiction Net", 4,
                     "Occupy a Node slot. While present, enemy units deployed to that Node cannot be blocked."),
 

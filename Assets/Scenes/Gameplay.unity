@@ -202,6 +202,7 @@ MonoBehaviour:
   endTurnKey: 101
   logStateKey: 108
   concedeKey: 113
+  autoAdvanceNonInteractivePhases: 1
   matchBooted: 0
 --- !u!114 &29733379
 MonoBehaviour:
@@ -235,6 +236,9 @@ MonoBehaviour:
   playLineY: -2.8
   tiltFactor: 0.6
   maxTilt: 18
+  holdToZoomSeconds: 0.35
+  dragThresholdPixels: 14
+  heldScale: 1.85
 --- !u!114 &29733380
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -491,7 +495,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 10
@@ -521,6 +525,7 @@ MonoBehaviour:
   readerOffset: {x: 14, y: 0}
   readerPadding: 14
   readerColor: {r: 0.1, g: 0.12, b: 0.18, a: 0.9}
+  readerAccentColor: {r: 0.95, g: 0.7, b: 0.25, a: 1}
   readerTitleSize: 22
   readerBodySize: 16
   readerFootSize: 13
@@ -530,6 +535,7 @@ MonoBehaviour:
   header: {fileID: 588769091}
   body: {fileID: 511915992}
   reader: {fileID: 1326222664}
+  readerCard: {fileID: 0}
   readerTitle: {fileID: 46234368}
   readerBody: {fileID: 2042135104}
   readerFoot: {fileID: 1706462493}
@@ -645,7 +651,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -934,7 +940,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4292260510
   m_fontColor: {r: 0.62, g: 0.7, b: 0.84, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -947,7 +953,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2

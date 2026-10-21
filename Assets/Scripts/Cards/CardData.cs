@@ -4,6 +4,17 @@ using UnityEngine;
 
 namespace Overlink.Cards
 {
+    /// <summary>
+    /// Hand-view adapter for CardInstance. This is a reduced projection of CardDefinition used by HandController
+    /// and CardView to render cards in the player's hand.
+    /// <para>
+    /// PR-04: This class is LOAD-BEARING. It serves as the instance-identity key in GameCoordinator.instanceByData,
+    /// which pins physical card copies when the hand holds duplicates. Do not delete CardData without migrating
+    /// its callers and the physical-copy identity handling. The current hand face (CardView) only renders
+    /// Title, Cost, Description, and type-derived accent. Faction, Rarity, Type label, ATK, HP, Shield, Keywords,
+    /// and ArtPath are not exposed by this adapter. The battlefield reader does show those fields from CardDefinition.
+    /// </para>
+    /// </summary>
     [Serializable]
     public class CardData
     {

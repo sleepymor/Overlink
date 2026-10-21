@@ -216,10 +216,11 @@ namespace Overlink.Core
             // Resolve the declared target (if any) up front so a pre-declared block can be validated
             // against it: only Core Actives block a Core attack, and a unit attack is only blocked by an
             // Active in the same battlefield as the target (GDD 2.1.6 Step 2).
+            // CR-01: Only Active slots are legal attack targets; benched cards cannot be attacked.
             CardInstance target = null;
             if (command.DefenderInstanceId > 0)
             {
-                target = FindCardInstance(opponent.Board, command.DefenderInstanceId);
+                target = FindActiveCardInstance(opponent.Board, command.DefenderInstanceId);
                 if (target == null || !target.IsAlive())
                 {
                     return CommandResult.InvalidTarget;
@@ -320,6 +321,17 @@ namespace Overlink.Core
             if (attacker == null || !attacker.IsAlive())
             {
                 return CommandResult.InvalidTarget;
+            }
+
+            // CR-02: Validate block placement before recording. A Core attack must be blocked by a Core Active,
+            // and a unit attack must be blocked by an Active in the same battlefield as the attacker.
+            // Checking this at declaration time prevents recording a block that will later be silently ignored.
+            int attackerBattlefieldIndex = GetBattlefieldIndex(attackerOwner.Board, attacker);
+            int blockerBattlefieldIndex = GetBattlefieldIndex(blockerOwner.Board, blocker);
+
+            if (attackerBattlefieldIndex != blockerBattlefieldIndex)
+            {
+                return CommandResult.InvalidCommand;
             }
 
             if (pendingBlocks.ContainsKey(attacker.InstanceId) || pendingBlocks.ContainsValue(blocker.InstanceId))
@@ -646,6 +658,31 @@ namespace Overlink.Core
             }
 
             return sa.Type == sb.Type && sa.NodeIndex == sb.NodeIndex;
+        }
+
+        /// <summary>
+        /// Returns the battlefield index for a unit: -1 for Core (Active or Bench), 0-3 for Nodes.
+        /// Used by block validation to ensure blockers and attackers are in the same battlefield.
+        /// </summary>
+        private static int GetBattlefieldIndex(Board board, CardInstance unit)
+        {
+            BoardSlot slot = board.FindSlot(unit);
+            if (slot == null)
+            {
+                return -2; // Not on board
+            }
+
+            switch (slot.Type)
+            {
+                case SlotType.CoreActive:
+                case SlotType.CoreBench:
+                    return -1; // Core battlefield
+                case SlotType.NodeActive:
+                case SlotType.NodeBench:
+                    return slot.NodeIndex; // Node 0-3
+                default:
+                    return -2;
+            }
         }
 
         private BoardSlot GetTargetSlot(Board board, SlotType slotType, int index, int nodeIndex)

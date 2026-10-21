@@ -92,8 +92,10 @@ namespace Overlink.Core
                     break;
 
                 case EffectType.GainNP:
-                    own.GainNP(effect.Amount);
-                    state.LogEvent($"{prefix}: {controller} gains {effect.Amount} NP");
+                    int controlledNodes = own.Board.CountControlledNodes(controller);
+                    int cap = PlayerState.NpCap(controlledNodes);
+                    own.GainNP(effect.Amount, cap);
+                    state.LogEvent($"{prefix}: {controller} gains {effect.Amount} NP (capped at {cap})");
                     break;
 
                 case EffectType.Buff:

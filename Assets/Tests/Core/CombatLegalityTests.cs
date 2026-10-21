@@ -386,12 +386,11 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
-        public void MisplacedBlock_IsOfferedByNowhereYetStillRecordedByTheEngine()
+        public void MisplacedBlock_IsRejectedByBothTheQueryAndTheEngine()
         {
-            // The reason BlockableAttackers repeats the placement rule instead of trusting the engine's
-            // declaration check: ExecuteDeclareBlock happily records a block from the wrong battlefield, and
-            // ConsumePendingBlocker then ignores it. Lighting that socket would promise the player a save
-            // their unit never makes.
+            // CR-02: ExecuteDeclareBlock now validates placement at declaration time. A block from the wrong
+            // battlefield returns InvalidCommand instead of being recorded and then silently ignored by
+            // ConsumePendingBlocker. The query and the engine now agree, so a lit socket always means a real save.
             MatchState state = TheirCombat();
             var engine = new MatchEngine(state);
 
@@ -402,17 +401,17 @@ namespace Overlink.Core.Tests
             Assert.AreEqual(0, CombatLegality.BlockableAttackers(state, engine, PlayerIndex.Player, nodeBlocker).Count,
                 "The query must not offer a Core attack to a Node 3 blocker.");
 
-            // The engine still accepts it, which is exactly the trap the query exists to avoid.
-            Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
-                new DeclareBlockCommand(PlayerIndex.Player, nodeBlocker.InstanceId, enemyCore.InstanceId)));
+            // The engine rejects it too - the declaration never records a block it cannot honour.
+            Assert.AreEqual(CommandResult.InvalidCommand, engine.ExecuteCommand(
+                new DeclareBlockCommand(PlayerIndex.Player, nodeBlocker.InstanceId, enemyCore.InstanceId)),
+                "A block from another battlefield must be rejected at declaration time.");
 
             int victimBefore = victim.CurrentHp;
             engine.ExecuteCommand(new DeclareAttackCommand(
                 PlayerIndex.Opponent, enemyCore.InstanceId, victim.InstanceId));
 
             Assert.AreEqual(victimBefore - 3, victim.CurrentHp,
-                "The misplaced block is ignored, so the attack lands on its target - a lit socket here would " +
-                "have been a lie.");
+                "No block was recorded, so the attack lands on its target.");
             Assert.AreEqual(5, nodeBlocker.CurrentHp, "The blocker never entered the fight.");
         }
 

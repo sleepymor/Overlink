@@ -1977,10 +1977,11 @@ namespace Overlink.Match
         /// The hover sheen, applied after every other colour. A quarter of the way to white is enough to
         /// read as "the pointer is here" without competing with the marks, which say something the player
         /// has to act on.
+        /// PR-01: Only apply hover brightening to the actual hovered tile, not every tile.
         /// </summary>
-        static Color TintForHover(Tile tile, Color tint)
+        Color TintForHover(Tile tile, Color tint)
         {
-            return tile == null ? tint : Color.Lerp(tint, Color.white, 0.22f);
+            return tile != null && tile == hoveredTile ? Color.Lerp(tint, Color.white, 0.22f) : tint;
         }
 
         static string CardText(CardInstance card)
@@ -1992,11 +1993,21 @@ namespace Overlink.Match
                 name = name.Substring(0, 13) + "\u2026";
             }
             sb.Append(name).Append('\n');
-            sb.Append(card.CurrentAtk).Append('/').Append(card.CurrentHp);
-            if (card.CurrentShield > 0)
+            
+            // PR-02: Only show combat stats for Units, not Relays/Protocols.
+            if (card.Definition.Type == CardType.Unit)
             {
-                sb.Append(" +").Append(card.CurrentShield).Append('S');
+                sb.Append(card.CurrentAtk).Append('/').Append(card.CurrentHp);
+                if (card.CurrentShield > 0)
+                {
+                    sb.Append(" +").Append(card.CurrentShield).Append('S');
+                }
             }
+            else
+            {
+                sb.Append(card.Definition.Type);
+            }
+            
             if (card.State == UnitState.Summoned)
             {
                 sb.Append(" (S)");

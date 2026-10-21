@@ -554,6 +554,13 @@ namespace Overlink.Match
                     ? player.Board.GetSlot(chosenSlot.Type, chosenSlot.Index, chosenSlot.NodeIndex)
                     : null;
 
+                // PR-05: If a slot was nominated but resolution returned null, reject rather than auto-placing.
+                // An invalid nominated socket should not silently deploy elsewhere.
+                if (chosenSlot != null && slot == null)
+                {
+                    return Reject($"The chosen slot is no longer available.");
+                }
+
                 if (slot != null && !slot.CanHost(card.Definition.Type))
                 {
                     return Reject($"{card.Definition.Name} cannot be deployed to that socket.");
@@ -922,13 +929,17 @@ namespace Overlink.Match
             if (instanceByData.TryGetValue(cardData, out int instanceId))
             {
                 CardInstance exact = player.Hand.Find(c => c.InstanceId == instanceId);
+                // PR-03: If the cached instance is gone, return null rather than falling back to another copy.
+                // A stale cached action should not select a different physical card.
                 if (exact != null)
                 {
                     return exact;
                 }
+                return null;
             }
 
-            // Fallback keeps the coordinator usable if the view was built outside SyncHand.
+            // Fallback keeps the coordinator usable if the view was built outside SyncHand and the CardData
+            // was never in our identity map.
             return string.IsNullOrEmpty(cardData.id)
                 ? null
                 : player.Hand.Find(c => c.Definition.Id == cardData.id);

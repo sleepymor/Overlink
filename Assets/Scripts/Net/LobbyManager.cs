@@ -477,6 +477,13 @@ namespace Overlink.Net
                     SetStatus("Match found — connecting…");
                     if (await net.JoinRelayAsync(relayCode))
                     {
+                        // NET-01: Revalidate lobby state after the async join. If the player left while
+                        // the join was in flight, disconnect rather than putting the client in InGame.
+                        if (CurrentLobby == null || CurrentLobby.Id != lobbyId || leaving)
+                        {
+                            if (net != null) net.LeaveGame();
+                            return;
+                        }
                         SetState(LobbyState.InGame);
                         SetStatus("Connecting to the match…");
                     }
