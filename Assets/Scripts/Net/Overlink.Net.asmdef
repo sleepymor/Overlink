@@ -7,6 +7,7 @@
         "Unity.Burst",
         "Unity.Services.Core",
         "Unity.Services.Authentication",
+        "Unity.Services.CloudSave",
         "Unity.Services.Relay",
         "Unity.Services.Lobbies",
         "Unity.TextMeshPro"

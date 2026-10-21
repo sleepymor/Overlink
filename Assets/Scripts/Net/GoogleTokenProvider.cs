@@ -61,7 +61,9 @@ namespace Overlink.Net
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         static async Task<string> RequestWindowsAsync(string clientId)
         {
-            int port = FindFreePort();
+            // Use a fixed port instead of dynamic to avoid redirect_uri_mismatch.
+            // Google OAuth requires exact redirect URIs to be whitelisted.
+            const int port = 7777;
             string redirect = $"http://127.0.0.1:{port}/callback/";
             using (var listener = new HttpListener())
             {
@@ -103,19 +105,40 @@ namespace Overlink.Net
             }
         }
 
-        static int FindFreePort()
-        {
-            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            return port;
-        }
-
         static async Task<string> ReadBodyAsync(HttpListenerRequest request)
         {
+            // NET-04: Bound request size, check method, and add a read timeout to prevent local stall/abuse.
+            const int maxBodySize = 16384; // 16KB is more than enough for OAuth callback form data
+            
+            if (request.HttpMethod != "POST")
+            {
+                return string.Empty;
+            }
+            
+            if (request.ContentLength64 > maxBodySize)
+            {
+                throw new InvalidOperationException($"OAuth callback body exceeds {maxBodySize} bytes.");
+            }
+            
             using (var reader = new System.IO.StreamReader(request.InputStream, request.ContentEncoding ?? Encoding.UTF8))
-                return await reader.ReadToEndAsync();
+            {
+                var readTask = reader.ReadToEndAsync();
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5));
+                var completed = await Task.WhenAny(readTask, timeoutTask);
+                
+                if (completed == timeoutTask)
+                {
+                    throw new TimeoutException("OAuth callback body read timed out.");
+                }
+                
+                string body = await readTask;
+                if (body.Length > maxBodySize)
+                {
+                    throw new InvalidOperationException($"OAuth callback body exceeds {maxBodySize} bytes.");
+                }
+                
+                return body;
+            }
         }
 
         static Dictionary<string, string> ParseForm(string body)
