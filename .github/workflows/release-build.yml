@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to attach build assets to (e.g. v0.18.1). Leave blank to use the branch ref."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -17,9 +22,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # game-ci/unity-builder always writes to <buildsPath>/<targetPlatform>.
+          # buildPath here MUST match that, or the Zip step has nothing to find.
           - targetPlatform: StandaloneWindows64
             buildName: Overlink
-            buildPath: build/Windows
+            buildPath: build/StandaloneWindows64
             zipName: Overlink-Windows.zip
             itchChannel: windows
           - targetPlatform: WebGL
@@ -53,18 +60,51 @@ jobs:
         with:
           targetPlatform: ${{ matrix.targetPlatform }}
           buildName: ${{ matrix.buildName }}
-          buildPath: ${{ matrix.buildPath }}
+          # `buildPath` is NOT a valid input for game-ci/unity-builder@v4
+          # (it was silently ignored, which caused the v0.18.1 failure).
+          buildsPath: build
           versioning: Tag
 
       - name: Zip build
         run: |
-          cd ${{ matrix.buildPath }}
-          zip -r ../../${{ matrix.zipName }} .
-          cd ../..
+          set -euo pipefail
+          BUILD_DIR="${{ matrix.buildPath }}"
+          ZIP_NAME="${{ matrix.zipName }}"
+
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "::error::Build output directory '$BUILD_DIR' not found. Contents of build/:"
+            ls -la build || true
+            exit 1
+          fi
+
+          if [ -z "$(ls -A "$BUILD_DIR")" ]; then
+            echo "::error::Build output directory '$BUILD_DIR' is empty"
+            exit 1
+          fi
+
+          # Zip the CONTENTS of the build dir (not the dir itself) so players
+          # get Overlink.exe at the archive root.
+          ( cd "$BUILD_DIR" && zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" . )
+
+          ls -lh "$GITHUB_WORKSPACE/$ZIP_NAME"
+
+      - name: Resolve release tag
+        id: meta
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ inputs.tag }}"
+          fi
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
 
       - name: Upload build to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag }}
           files: ${{ matrix.zipName }}
 
       - name: Install Butler
@@ -78,8 +118,6 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          if [ -z "$VERSION" ]; then
-            VERSION="${{ github.ref_name }}"
-          fi
-          ./butler push ${{ matrix.buildPath }} ${{ secrets.ITCH_USERNAME }}/${{ secrets.ITCH_GAME_SLUG }}:${{ matrix.itchChannel }} --userversion "$VERSION"
+          ./butler push "${{ matrix.buildPath }}" \
+            "${{ secrets.ITCH_USERNAME }}/${{ secrets.ITCH_GAME_SLUG }}:${{ matrix.itchChannel }}" \
+            --userversion "${{ steps.meta.outputs.tag }}"
