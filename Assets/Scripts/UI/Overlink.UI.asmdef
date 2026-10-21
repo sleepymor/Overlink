@@ -3,7 +3,9 @@
     "rootNamespace": "Overlink.UI",
     "references": [
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Overlink.Net",
+        "Unity.Services.Lobbies"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
