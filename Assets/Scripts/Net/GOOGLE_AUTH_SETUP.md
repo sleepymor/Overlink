@@ -43,6 +43,13 @@ translated to player-facing text by `AuthResult.FromException`.
    and on itch.io it *can't*, because One Tap in a cross-origin iframe requires the embedder to delegate
    `publickey-credentials-get` and itch.io delegates nothing. Expect the button to be the working path
    there. Every outcome is reported as a coded diagnostic rather than a bare cancellation.
+   The button carries its own trap: with FedCM enabled for it, Google completes the exchange by calling
+   `navigator.credentials.get()` from inside the game's iframe, and a third-party frame is refused unless
+   the embedder delegated that permission. The chooser therefore opens, sits on *Processing your request*,
+   and closes itself with no token. `use_fedcm_for_button: false` keeps the button on the legacy
+   transport, which finishes the exchange in its own top-level popup instead. The two FedCM flags are
+   deliberately opposite; do not tidy them into agreement. When Google removes the opt-out, the overlay's
+   **Sign in in a new tab** is the path, because a top-level tab has no embedder to negotiate with.
    See `docs/GOOGLE-AUTH-SETUP.md`.
 4. For Windows, add the loopback redirect `http://127.0.0.1:7777/callback/` to the OAuth client's
    authorized redirect URIs. The game opens the system browser and listens on that **fixed** port

@@ -1,21 +1,28 @@
 // Google Identity Services bridge for the WebGL player.
 //
-// The first version of this file had exactly one strategy: One Tap via
-// google.accounts.id.prompt(). That is the most constrained thing GIS does, because it assumes it can
-// draw its own floating UI over the page, which a game embedded in a third-party iframe, like every
-// itch.io web play, cannot allow. When prompt() declines, GIS reports a *reason*, and the old code
-// threw that reason away and sent an empty token, which C# turned into "Google sign-in was cancelled."
-// So the player saw a lie (nobody cancelled) and the developer saw nothing actionable.
+// This file has been rewritten twice, and each rewrite bought a fact that the previous version could
+// not have known. The order matters, because it explains why the flow tries things in this sequence:
 //
-// Three changes follow from that:
-//   1. FedCM is opted in, so a first-party tab gets the browser's native account picker. Inside a
-//      third-party iframe it is not enough on its own - FedCM needs the embedder to delegate
-//      publickey-credentials-get, and itch.io does not - so expect One Tap to still decline there.
-//   2. When One Tap cannot display, a real Sign in with Google button is rendered into a DOM overlay as
-//      the fallback, because the button flow is user-initiated and does not depend on GIS being able to
-//      paint over the top-level page. On itch.io this is the path that actually runs.
-//   3. Failures carry a machine-readable code plus the raw GIS reason, split by C# into player-facing
-//      text and a console log respectively.
+//   1. One Tap via google.accounts.id.prompt() - the first version's only strategy. It assumes GIS may
+//      paint its own floating UI over the top-level page, which a game embedded in a third-party iframe
+//      (every itch.io web play) cannot allow. The old code threw GIS's *reason* away and sent an empty
+//      token, so the player was told "you cancelled" when nobody had, and the developer saw nothing.
+//
+//   2. A real Sign in with Google button rendered into a DOM overlay - the second version's fallback,
+//      and on itch.io the path that actually runs, because the button is user-initiated and opens as an
+//      ordinary popup rather than depending on GIS being allowed to draw over the page.
+//
+//   3. Getting the button's own credential exchange to survive the iframe - what the third version is
+//      for. With the origin finally registered, the button drew and the account chooser opened, and then
+//      closed itself on "Processing your request..." with no token. That is FedCM: see use_fedcm_for_button
+//      below. It is a second, independent reason the same flow dies inside a third-party frame, and it
+//      needed the previous two fixes to be visible at all.
+//
+// Two lessons generalise out of this, both baked into the code below:
+//   - Every failure carries a machine-readable code plus GIS's raw words, split by C# into player-facing
+//     text and a console log. A silent empty token is how this took three rounds.
+//   - Nothing terminal is assumed until GIS itself gives up. A dead *attempt* must leave the button on
+//     screen, because tearing down the overlay the player is looking at turns a retry into a relaunch.
 //
 // Nothing here is covered by Unity's test runner - a .jslib belongs to no assembly, so there is no
 // Assets/Tests file that can reference it. Control flow is covered by Tools/WebGL/gsi-bridge-test.mjs
@@ -30,6 +37,8 @@ mergeInto(LibraryManager.library, {
 
     var done = false;
     var overlay = null;
+    var failureLine = null;
+    var newTabButton = null;
 
     // GIS reports the single most useful diagnostic in this whole flow, "The given origin is not
     // allowed for the given client ID", only to the browser console, which a shipped WebGL build has
@@ -42,8 +51,8 @@ mergeInto(LibraryManager.library, {
     function installConsoleTap() {
       if (consoleTap || typeof console === 'undefined') return;
       var originals = { error: console.error, warn: console.warn };
-      var lastLine = '';
-      consoleTap = { originals: originals, lastLine: function () { return lastLine; } };
+      var last = { error: '', warn: '' };
+      consoleTap = { originals: originals, last: last };
       function tap(level) {
         return function () {
           try {
@@ -51,7 +60,7 @@ mergeInto(LibraryManager.library, {
             for (var i = 0; i < arguments.length; i++) {
               if (typeof arguments[i] === 'string') text += (text ? ' ' : '') + arguments[i];
             }
-            if (text.indexOf('GSI_LOGGER') >= 0) lastLine = text;
+            if (text.indexOf('GSI_LOGGER') >= 0) last[level] = text;
           } catch (e) {}
           return originals[level].apply(console, arguments);
         };
@@ -67,9 +76,15 @@ mergeInto(LibraryManager.library, {
       consoleTap = null;
     }
 
-    // GIS's own words, when it had any.
+    // GIS's own words, when it had any, with the level named. Errors are preferred over warnings rather
+    // than merely "most recent": the button transport opt-out logs a deprecation notice on every single
+    // flow, so quoting whichever line arrived last would staple that warning onto an unrelated origin
+    // failure and send whoever reads it next chasing a red herring.
     function gsiComplaint() {
-      return consoleTap && consoleTap.lastLine() ? '; GIS said: ' + consoleTap.lastLine() : '';
+      if (!consoleTap) return '';
+      if (consoleTap.last.error) return '; GIS said (error): ' + consoleTap.last.error;
+      if (consoleTap.last.warn) return '; GIS said (warning): ' + consoleTap.last.warn;
+      return '';
     }
 
     // GIS rejects a prompt whose calling origin is not in the OAuth client's Authorized JavaScript
@@ -86,6 +101,10 @@ mergeInto(LibraryManager.library, {
 
     // Diagnostic channel: "<code>|<detail>". The code picks the sentence the player sees; the detail
     // is GIS's own wording and goes to the log for whoever is debugging this.
+    //
+    // Non-terminal by design - it informs C# without ending the flow, so a fallback notice can be
+    // superseded by a later outcome. Once the flow is over it says nothing at all: a late async report
+    // would otherwise overwrite the reason C# already handed to the player.
     function report(code, detail) {
       if (done) return;
       try {
@@ -111,12 +130,93 @@ mergeInto(LibraryManager.library, {
       try { return (notification[getter] && notification[getter]()) || ''; } catch (e) { return ''; }
     }
 
+    // Flattens GIS's error_callback payload, which has shipped with at least three shapes: a bare
+    // {type}, a {type, details:{}}, and {type, metadata:{}} with the interesting text buried a level
+    // down. Anything unrecognised is dumped rather than dropped, because the whole point of this
+    // channel is that nobody has to guess which of them a given build got.
+    function detailOf(err) {
+      if (!err) return 'no error object';
+      var nested = err.details || err.metadata || null;
+      var parts = [];
+      if (nested) {
+        for (var key in nested) {
+          if (!Object.prototype.hasOwnProperty.call(nested, key)) continue;
+          var value = nested[key];
+          if (value === null || value === undefined) continue;
+          parts.push(key + '=' + (typeof value === 'object' ? JSON.stringify(value) : value));
+        }
+      }
+      if (!parts.length && typeof err === 'object') {
+        for (var top in err) {
+          if (!Object.prototype.hasOwnProperty.call(err, top) || top === 'type') continue;
+          parts.push(top + '=' + JSON.stringify(err[top]));
+        }
+      }
+      return parts.length ? parts.join(', ') : 'no detail';
+    }
+
+    // The failure line and the escape hatch stay in the DOM but invisible until GIS gives a reason to
+    // show them. Reserving the space up front would put a blank gap under a button that is working.
+    function revealFailure(message) {
+      if (failureLine) {
+        failureLine.textContent = message;
+        failureLine.style.display = 'block';
+      }
+      if (newTabButton) newTabButton.style.display = 'inline-block';
+    }
+
+    // A top-level tab is first-party: no embedder, no permissions-policy delegation, no third-party
+    // storage partitioning, so One Tap, FedCM and the button all behave there. It is the one route that
+    // still works when the iframe itself is the obstruction, which is a property of how itch.io embeds
+    // the game and not something any amount of JS can negotiate. Costs the player a reload of the game,
+    // which is cheaper than a sign-in that cannot complete.
+    function openInNewTab() {
+      var url = (window.location && window.location.href) || '';
+      var opened = null;
+      try {
+        opened = window.open(url, '_blank');
+      } catch (e) {
+        opened = null;
+      }
+      if (!opened) {
+        finish('', 'unavailable',
+          'the browser refused to open a new tab for this embedded frame; allow pop-ups for this page, ' +
+          'or use itch.io\u2019s own New window control beside the game frame');
+        return;
+      }
+      // Not a cancellation the player chose, but the closest honest code: this attempt is over, and the
+      // sign-in continues in the window they are now looking at.
+      finish('', 'cancelled', 'continued in a new tab');
+    }
+
+    // FedCM in a cross-origin frame is only available if the embedder delegates publickey-credentials-get
+    // via allow=. itch.io's embed iframe does not, and when it is missing Google's chooser opens, shows
+    // "Processing your request...", and closes itself with no token - which looks like a mystery from
+    // the outside. Logging the state turns that into one line. Best-effort: the query itself rejects on
+    // browsers that do not implement the permission name.
+    function probeFedCM() {
+      try {
+        if (!window.navigator || !window.navigator.permissions || !window.navigator.permissions.query) return;
+        var verdict = window.navigator.permissions.query({ name: 'publickey-credentials-get' });
+        if (!verdict || !verdict.then) return;
+        verdict.then(
+          function (status) {
+            report('fallback', 'FedCM availability in this frame: publickey-credentials-get=' +
+              ((status && status.state) || 'unknown'));
+          },
+          function () {}
+        );
+      } catch (e) {}
+    }
+
     // The fallback. A button is the only GIS surface that reliably works when the page is an iframe,
     // because the player clicks it themselves and the account chooser opens as a normal popup.
     function showButton() {
       if (done) return;
       var id = gsi();
       try { id.cancel(); } catch (e) {}
+
+      probeFedCM();
 
       overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483647;' +
@@ -134,15 +234,37 @@ mergeInto(LibraryManager.library, {
       var host = document.createElement('div');
       host.id = 'overlink-gsi-button';
 
+      failureLine = document.createElement('div');
+      failureLine.id = 'overlink-gsi-failure';
+      failureLine.style.cssText = 'display:none;color:#b3261e;font-size:12px;line-height:1.5;' +
+        'max-width:320px;text-align:center;';
+
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:12px;align-items:center;';
+
+      newTabButton = document.createElement('button');
+      newTabButton.id = 'overlink-gsi-newtab';
+      newTabButton.textContent = 'Sign in in a new tab';
+      // Hidden until GIS fails. Offering it alongside a working button invites the player out of the
+      // iframe, and back into the game, for no reason.
+      newTabButton.style.cssText = 'display:none;background:none;border:1px solid #dadce0;border-radius:6px;' +
+        'color:#1a73e8;font-size:13px;cursor:pointer;font-family:inherit;padding:6px 12px;';
+      newTabButton.onclick = openInNewTab;
+
       var close = document.createElement('button');
+      close.id = 'overlink-gsi-cancel';
       close.textContent = 'Cancel';
       close.style.cssText = 'background:none;border:0;color:#5f6368;font-size:13px;cursor:pointer;' +
-        'font-family:inherit;padding:4px 8px;';
+        'font-family:inherit;padding:6px 8px;';
       close.onclick = function () { finish('', 'cancelled', 'the player dismissed the Google button'); };
+
+      actions.appendChild(newTabButton);
+      actions.appendChild(close);
 
       card.appendChild(title);
       card.appendChild(host);
-      card.appendChild(close);
+      card.appendChild(failureLine);
+      card.appendChild(actions);
       overlay.appendChild(card);
       // Clicking the dimmed backdrop dismisses too, but the card must not leak the click to the canvas.
       overlay.onclick = function (event) {
@@ -193,18 +315,41 @@ mergeInto(LibraryManager.library, {
         nonce: nonce,
         // FedCM is the modern transport for the account picker, and it is the only route by which One
         // Tap could appear inside an iframe at all, but it is not sufficient on its own. FedCM in a
-        // cross-origin frame requires the *embedder* to delegate publickey-credentials-get via allow=,
-        // and itch.io does not delegate it, so on itch.io this still yields isNotDisplayed and the
-        // button below is what actually runs. It is worth having anyway: the same build played from a
-        // first-party tab (or "open in new window") gets the native picker with no overlay at all, and
-        // without this flag GIS uses a transport Google is retiring.
+        // cross-origin frame requires the *embedder* to delegate publickey-credentials-get, and itch.io
+        // does not, so on itch.io this still yields isNotDisplayed and the button below is what actually
+        // runs. Worth having anyway: the same build played from a first-party tab gets the native picker
+        // with no overlay at all.
         use_fedcm_for_prompt: true,
+        // The opposite choice, deliberately. This is the fix for a chooser that opens, sits on
+        // "Processing your request", and then closes itself with no token. With FedCM for the button,
+        // Google's chooser completes the exchange by calling navigator.credentials.get() from GIS's
+        // iframe inside this page; in a third-party frame that call is refused unless the embedder
+        // delegates publickey-credentials-get, the promise rejects, and the chooser dismisses itself
+        // having authenticated the player and thrown the result away. The legacy transport completes the
+        // exchange in its own top-level popup, where none of that applies - which is precisely why the
+        // button is the iframe-safe surface in the first place. Google is retiring this opt-out, so
+        // expect it to stop being an option and let the new-tab escape hatch become the primary path on
+        // this embed; error_callback and probeFedCM's log line say which world a build is in.
+        use_fedcm_for_button: false,
         auto_select: false,
         cancel_on_tap_outside: true,
         callback: function (response) {
           var credential = response && response.credential;
           if (credential) finish(credential);
           else finish('', 'failed', 'GIS invoked the callback with no credential');
+        },
+        // GIS's private error channel, and the only place the button flow's own failures get named:
+        // popup_blocked, popup_closed, idp_timeout, issued_failed, gep_error. Before this existed, a
+        // chooser that opened and died silently left C# waiting out its three-minute deadline with the
+        // player staring at a card that could no longer do anything.
+        //
+        // Deliberately non-terminal. Every one of these is a failed attempt rather than a failed
+        // session, and the button on screen still works, so the card stays up, the reason is shown, and
+        // the player either retries or takes the new-tab exit.
+        error_callback: function (err) {
+          var type = (err && err.type) || 'unknown';
+          report('failed', 'Google chooser error: ' + type + ' (' + detailOf(err) + ')' + gsiComplaint());
+          revealFailure('Google closed the sign-in window (' + type + '). Try again, or continue in a new tab.');
         }
       });
 

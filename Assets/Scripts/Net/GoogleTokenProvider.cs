@@ -64,9 +64,7 @@ namespace Overlink.Net
                 throw Declined(GoogleDecline.TimedOut,
                     $"the bridge sent nothing within {(int)InteractionTimeout.TotalSeconds} seconds");
             string token = await tokenTask;
-            if (!string.Equals(ReadJwtClaim(token), nonce, StringComparison.Ordinal))
-                throw Declined(GoogleDecline.Failed, "Google returned an ID token with the wrong nonce");
-            return token;
+            return VerifyNonce(token, nonce);
         }
 #endif
 
@@ -111,9 +109,7 @@ namespace Overlink.Net
                     throw Declined(GoogleDecline.Failed, "Google returned a mismatched OAuth state");
                 if (string.IsNullOrWhiteSpace(token))
                     throw Declined(GoogleDecline.Cancelled, "the loopback callback carried no ID token");
-                if (!string.Equals(ReadJwtClaim(token), nonce, StringComparison.Ordinal))
-                    throw Declined(GoogleDecline.Failed, "Google returned an ID token with the wrong nonce");
-                return token;
+                return VerifyNonce(token, nonce);
             }
         }
 
@@ -178,6 +174,7 @@ namespace Overlink.Net
 
         static string ReadJwtClaim(string token)
         {
+            if (string.IsNullOrEmpty(token)) return "";
             string[] parts = token.Split('.');
             if (parts.Length != 3) return "";
             string encoded = parts[1].Replace('-', '+').Replace('_', '/');
@@ -197,6 +194,38 @@ namespace Overlink.Net
         sealed class JwtClaims
         {
             public string nonce;
+        }
+
+        /// <summary>
+        /// Returns <paramref name="token"/> once it is confirmed to carry the nonce this process asked
+        /// for, or throws a <see cref="GoogleDeclineException"/> explaining why it cannot be used.
+        /// <para>
+        /// Shared on purpose and deliberately outside the platform <c>#if</c>s: the WebGL path is the one
+        /// that no EditMode test can enter, so the check it relies on lives here where tests can reach it
+        /// and a WebGL build cannot be the first to run it.
+        /// </para>
+        /// <para>
+        /// "carries no nonce" and "carries a different nonce" are separated because they are different
+        /// bugs with different owners. The first means GIS ignored the nonce it was initialised with -
+        /// a bridge or client-configuration problem. The second means the token did not come from this
+        /// request at all. Both are worth the raw values in the log, since the alternative is diagnosing
+        /// either one from a build cycle away.
+        /// </para>
+        /// </summary>
+        public static string VerifyNonce(string token, string nonce)
+        {
+            string returned = ReadJwtClaim(token);
+            // Both sides have to actually exist. An unset nonce paired with a token that carries no claim
+            // would otherwise compare equal on "" and hand back a token worth nothing.
+            if (!string.IsNullOrEmpty(nonce) && !string.IsNullOrEmpty(returned) &&
+                string.Equals(returned, nonce, StringComparison.Ordinal))
+                return token;
+            Debug.Log($"[Account] Google ID token rejected: wanted nonce {nonce}, " +
+                      $"got \"{returned}\" from a {token?.Length ?? 0}-character token");
+            throw Declined(GoogleDecline.Failed,
+                string.IsNullOrEmpty(returned)
+                    ? "Google returned an ID token carrying no nonce, so this sign-in request cannot be matched to it"
+                    : "Google returned an ID token with the wrong nonce");
         }
 
         /// <summary>How a Google sign-in attempt ended without producing a usable ID token.</summary>

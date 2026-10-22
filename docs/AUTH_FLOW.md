@@ -117,41 +117,65 @@ somebody else's page:
 | --- | --- | --- |
 | Transport | system browser + loopback `HttpListener` | `Assets/Plugins/WebGL/OverlinkGoogleAuth.jslib` |
 | Grant | `response_type=id_token`, `form_post` to `127.0.0.1:7777` | Google Identity Services in-page |
+| Button credential exchange | n/a — a real browser tab | legacy popup (`use_fedcm_for_button: false`) |
 | State check | OAuth `state` + `nonce` | `nonce` only |
 | Deadline | 2 min | 3 min |
 | Can fail silently | no | no |
+| Escape when the embed obstructs | none needed | **Sign in in a new tab** |
 
-WebGL is the harder case because an itch.io web play embeds the build in a cross-origin iframe, and
-One Tap is precisely the GIS feature that assumes it can paint over the top-level page. So the bridge
-opts into FedCM, falls back to rendering Google's own button in a DOM overlay when One Tap declines,
-and reports a coded diagnostic (`cancelled` / `unavailable` / `failed` / `fallback`) with GIS's raw
-reason and the iframe's own origin. `GoogleTokenProvider` turns those into a `GoogleDeclineException`
-rather than a message string, because `AuthResult.FromException`'s generic path matches English
-substrings and Google's sentences contain the words "password" and "timeout".
-`GoogleDeclineMappingTests` pins that down, including the two collisions it exists to prevent.
+WebGL is the harder case because an itch.io web play embeds the build in a cross-origin iframe, and One
+Tap is precisely the GIS feature that assumes it can paint over the top-level page. So the bridge falls
+back to rendering Google's own button in a DOM overlay when One Tap declines, keeps that button on the
+legacy credential transport, offers a top-level tab when even that is refused, and reports a coded
+diagnostic (`cancelled` / `unavailable` / `failed` / `fallback`) with GIS's raw reason and the iframe's
+own origin. `GoogleTokenProvider` turns those into a `GoogleDeclineException` rather than a message
+string, because `AuthResult.FromException`'s generic path matches English substrings and Google's
+sentences contain the words "password" and "timeout". `GoogleDeclineMappingTests` pins that down,
+including the two collisions it exists to prevent.
 
-What to actually expect on itch.io, stated plainly so nobody re-derives it. There are two independent
-gates, and they fail differently:
+What to actually expect on itch.io, stated plainly so nobody re-derives it. There are three independent
+gates, they fail differently, and each one only becomes visible after the previous one is passed — which
+is why this took three rounds and why the log lines below are worth keeping.
 
 1. **The origin gate.** GIS checks the calling page's origin against the OAuth client's **Authorized
    JavaScript origins** before it will draw *anything*. If the itch.io CDN host is missing there, One Tap
    *and* the fallback button both die at the same moment, and the browser console says
    `[GSI_LOGGER]: The given origin is not allowed for the given client ID.` alongside a 403 on
    `accounts.google.com/gsi/status`. This is configuration, not code, and no amount of fallback logic
-   touches it. It is the failure that actually happened here, with the frame's origin confirmed as
-   `https://html-classic.itch.zone` from the rejected request's own headers. The bridge now detects it by
+   touches it. It is the first failure that actually happened here, with the frame's origin confirmed as
+   `https://html-classic.itch.zone` from the rejected request's own headers. The bridge detects it by
    waiting five seconds for `renderButton` to produce a DOM node and reporting `unavailable` when nothing
    appears, quoting GIS's own console line — that rejection is otherwise invisible to Unity's log, because
-   it is printed to the browser console and never handed to a callback.
-2. **The iframe gate.** Once the origin is allowed, One Tap *still* declines inside a cross-origin frame.
+   it is printed to the browser console and never handed to a callback. **Confirmed passed:** after the
+   origin was registered, the same build logged `fallback: One Tap not displayed: opt_out_or_no_session
+   [origin: html-classic.itch.zone]` and drew a real button.
+2. **The One Tap gate.** Once the origin is allowed, One Tap *still* declines inside a cross-origin frame.
    Observed directly: the rejected `/gsi/status` request carried `sec-fetch-storage-access: none`, so the
-   browser grants the frame no first-party cookie access, and FedCM needs exactly that to identify a
-   signed-in Google account. (It separately requires the embedder to delegate `publickey-credentials-get`
-   via the iframe's `allow` attribute, which itch.io does not do.) Either refusal alone is sufficient, so
-   this is structural rather than something more fallback logic can code around. The rendered Google
-   button is therefore the working path on itch.io, not a degraded fallback. FedCM is opted in regardless,
-   because the identical build played from a first-party tab gets the native picker with no overlay, and
-   without the flag GIS uses a transport Google is retiring.
+   browser grants the frame no first-party cookie access. The reason string that comes back is
+   `opt_out_or_no_session` — no session in that frame, not a player who opted out. This is structural
+   rather than something more fallback logic can code around, and the rendered Google button is the
+   answer: the player clicks it themselves, so it needs no permission to paint over the page.
+3. **The credential-exchange gate.** The button being *clicked* is not the end of it. With FedCM enabled
+   for the button, Google's chooser completes the exchange by calling `navigator.credentials.get()` from
+   GIS's iframe inside the game page, and in a third-party frame that call is refused unless the embedder
+   delegates `publickey-credentials-get` via the iframe's `allow` attribute — which itch.io does not. The
+   promise rejects, and the chooser dismisses itself **after authenticating the player and throwing the
+   result away**. The visible symptom is distinctive and easy to misread as a popup glitch: the window
+   opens, sits on *Processing your request*, and closes, with no error anywhere. So the bridge sets
+   `use_fedcm_for_button: false` and lets the legacy transport finish the exchange in its own top-level
+   popup, where none of the above applies. `use_fedcm_for_prompt` stays `true` — the opposite choice, on
+   purpose, because One Tap has no popup of its own and the flag is what makes the first-party case work.
+
+Google is retiring the button's FedCM opt-out. When that lands, gate 3 stops being codeable around on this
+host and the bridge's **Sign in in a new tab** escape hatch becomes the primary web path: a top-level tab
+is first-party, so all three gates are simply absent. It appears in the overlay only after GIS reports a
+failure, because offering a player a way out of the embed alongside a working button invites them to take
+it for no reason. `probeFedCM` logs `publickey-credentials-get=denied|granted|prompt` in the meantime, so
+a future build says which of those worlds it is in.
+
+Every gate above reports through GIS's `error_callback` or the prompt notification rather than guessing,
+and a recoverable error is deliberately **not** terminal: the overlay survives a failed attempt so the
+player can retry, since tearing down the card they are looking at turns a retry into a relaunch.
 
 If an embed denies popups as well, Google sign-in is simply unavailable on that host and the player uses
 username and password — which is why the `unavailable` message leads with that rather than promising a
@@ -169,6 +193,35 @@ and prints GIS's raw verdicts. Use it before theorising about any future iframe 
 *Sign Out (Keep PlayerPrefs)* drops just the session; *Show Account Info* reports the live state.
 Whatever is in Cloud Save belongs to the account and stays on the service, so a corrupt server-side
 profile needs the Unity Dashboard to clear.
+
+Coverage comes in three layers, because the auth flow spans three runtimes and no single one of them can
+see the others:
+
+- **EditMode, `Assets/Tests/Net` (26 tests).** `GoogleDeclineMappingTests` pins all four
+  `GoogleDecline` outcomes through `AuthResult.FromException`, including the two English substrings
+  ("password", "timeout") that the generic path would otherwise win with. `NonceVerificationTests` pins
+  the ID-token gate: a matching nonce passes at every payload length, an absent claim is distinguished
+  from a wrong value, a malformed token never matches, and the raw token never leaks into a player
+  message. `VerifyNonce` deliberately lives below the platform `#if`s so the check the WebGL path depends
+  on is one the editor can actually execute.
+- **`node Tools/WebGL/gsi-bridge-test.mjs` (76 assertions).** A `.jslib` belongs to no assembly, so
+  nothing in `Assets/Tests` can reference it and Unity's runner cannot see it at all. This harness stubs
+  `mergeInto`, `UTF8ToString`, `SendMessage`, the DOM, fake timers and `google.accounts.id`, and covers
+  what the bridge does with each GIS outcome: the One Tap → button handoff, the coded diagnostics, the
+  five-second render verification, the console tap's install and restore, the non-terminal `error_callback`,
+  the hidden-until-failed new-tab exit, the FedCM probe, and the two transport flags being opposite. Every
+  guard in it has been mutation-verified: deleting the guard must fail an assertion, not just reduce the
+  count.
+- **`Tools/WebGL/iframe-probe/serve.mjs`.** A real two-origin embed, in a browser, in thirty seconds,
+  printing GIS's raw verdicts instead of translating them into a player message. Use it before theorising
+  about any iframe regression; it is how gate 3 above was confirmed to be about `allow=` rather than the
+  origin list.
+
+Verified end to end in play mode: register → age → username#tag → MainMenu with the name showing;
+restart → cached session resumed and setup skipped; sign out → back to Auth; a protected scene opened
+directly while signed out → redirected to Auth; wrong password and under-13 and short-username → the
+matching player-facing error with no state change. The Google path itself can only be verified against a
+deployed WebGL build on its real origin, which is why every layer above exists.
 
 Verified end to end in play mode: register → age → username#tag → MainMenu with the name showing;
 restart → cached session resumed and setup skipped; sign out → back to Auth; a protected scene opened

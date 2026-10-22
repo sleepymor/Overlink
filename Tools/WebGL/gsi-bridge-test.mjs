@@ -34,10 +34,35 @@ global.mergeInto = (target, src) => Object.assign(target, src);
 global.UTF8ToString = (s) => s;
 global.SendMessage = (go, method, arg) => sent.push([go, method, arg]);
 
+// A DOMCSSStyleDeclaration stand-in. Assigning cssText really does populate the individual properties in
+// a browser, and the bridge hides the failure line and the new-tab exit that way, so the stub has to
+// parse rather than store the string opaquely - otherwise "hidden" is unobservable and a case that only
+// sets cssText looks like it left the element visible.
+function makeStyle() {
+  const style = {};
+  Object.defineProperty(style, "cssText", {
+    enumerable: false,
+    get() {
+      return Object.keys(style)
+        .map((name) => `${name}: ${style[name]};`)
+        .join(" ");
+    },
+    set(text) {
+      for (const decl of String(text).split(";")) {
+        const at = decl.indexOf(":");
+        if (at < 0) continue;
+        const name = decl.slice(0, at).trim();
+        if (name) style[name] = decl.slice(at + 1).trim();
+      }
+    },
+  });
+  return style;
+}
+
 function makeElement(tag) {
   return {
     tagName: tag,
-    style: { cssText: "" },
+    style: makeStyle(),
     children: [],
     parentNode: null,
     textContent: "",
@@ -64,7 +89,28 @@ global.document = {
   body: makeElement("body"),
   createElement: makeElement,
 };
-global.window = { location: { origin: "https://html5.itch.zone" } };
+
+// window.open is the escape hatch's whole surface, so it is recorded rather than merely tolerated: a
+// bridge that opens a tab nobody asked for, or forgets to finish the flow afterwards, is a bug here.
+global.window = {
+  location: { origin: "https://html5.itch.zone", href: "https://html5.itch.zone/7000/abc/index.html" },
+  open: (url, target) => {
+    opened.push({ url, target });
+    return { fake: "window" };
+  },
+};
+const opened = [];
+
+// navigator.permissions stays absent by default, because the bridge must cope with a browser that has
+// no opinion about publickey-credentials-get. Cases that care about the FedCM probe install it. Only
+// window.navigator is ever touched: Node's own global navigator is getter-only and ESM is strict.
+function installPermissions(state) {
+  window.navigator = {
+    permissions: {
+      query: () => Promise.resolve({ state }),
+    },
+  };
+}
 
 // Fake timers: the bridge polls for a rendered button and arms a console-tap deadline, both of which
 // must be driven deterministically rather than awaited.
@@ -159,10 +205,17 @@ const dismissed = (reason) => ({
 
 function reset() {
   sent.length = 0;
+  opened.length = 0;
+  gsiLog.length = 0;
   document.body.children.length = 0;
   document.head.children.length = 0;
   resetTimers();
-  gsiLog.length = 0;
+  // A case that installed a permissions stub or a blocking window.open must not leak it into the next.
+  window.navigator = undefined;
+  window.open = (url, target) => {
+    opened.push({ url, target });
+    return { fake: "window" };
+  };
   // A fresh console each case, so a bridge that fails to restore its tap shows up as a failure rather
   // than silently poisoning the next case. say() keeps a handle on the real stdout, because this stub
   // replaces the very console the report is printed through.
@@ -176,9 +229,17 @@ function reset() {
 const say = (...args) => realConsole.log(...args);
 const gsiLog = [];
 
+// Drains the microtask queue, so a bridge that reports from inside a promise callback (the FedCM probe)
+// can be asserted on synchronously. process.nextTick is a real API and deliberately not stubbed, unlike
+// setTimeout, which the fake-timer machinery owns.
+const flush = () => new Promise((resolve) => process.nextTick(resolve));
+
 // What GIS itself would have printed. The bridge's tap is expected to lift this into Unity's log.
 function gsiSays(text) {
   global.console.error(text);
+}
+function gsiSaysWarn(text) {
+  global.console.warn(text);
 }
 
 // Re-evaluated per case so each one starts from a fresh closure, exactly as a fresh page load would.
@@ -199,13 +260,39 @@ function invoke(fn) {
 
 // The bridge may report several times in one flow (a fallback notice, then the eventual failure), so
 // the assertion target is always the LAST diagnostic: that is the one C# hands to the player.
+const allDiags = () => sent.filter((s) => s[1] === "ReceiveDiagnostic");
 const diag = () => {
-  const all = sent.filter((s) => s[1] === "ReceiveDiagnostic");
+  const all = allDiags();
   return all.length ? all[all.length - 1] : undefined;
 };
 const token = () => sent.find((s) => s[1] === "ReceiveToken");
 const overlay = () => document.body.children[0];
 const card = () => overlay().children[0];
+
+// Located by id rather than by position, because the card's layout is presentation and the bridge is
+// free to reorder it; the ids are the contract this harness holds the bridge to.
+function byId(id, node) {
+  node = node || document.body;
+  for (const child of node.children || []) {
+    if (child.id === id) return child;
+    const found = byId(id, child);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Asserting on a control that a broken bridge never rendered must produce a readable failure, not a
+// TypeError that aborts the run before the remaining cases report. Same for pressing one.
+const styleProp = (id, prop) => {
+  const el = byId(id);
+  return el ? el.style[prop] : "<missing>";
+};
+const press = (id) => {
+  const el = byId(id);
+  if (!el || typeof el.onclick !== "function") return false;
+  el.onclick();
+  return true;
+};
 
 const results = [];
 function check(name, cond, detail) {
@@ -232,7 +319,7 @@ function check(name, cond, detail) {
     "origin missing: " + JSON.stringify(diag() && diag()[2]));
 
   // The player then dismisses the fallback.
-  card().children[2].onclick();
+  press("overlink-gsi-cancel");
   check("1 dismiss reports cancelled", diag() && diag()[2].startsWith("cancelled|"), JSON.stringify(diag()));
   check("1 dismiss sends an empty token", token() && token()[2] === "", JSON.stringify(token()));
   check("1 overlay is torn down", !overlay() || overlay().parentNode === null, "overlay left behind");
@@ -333,10 +420,13 @@ function check(name, cond, detail) {
   installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
   invoke(loadBridge());
   const ov = overlay();
-  ov.onclick({ target: card() });
-  check("10 card click ignored", !token(), "a card click cancelled the flow");
-  ov.onclick({ target: ov });
-  check("10 backdrop click cancels", token() && token()[2] === "", JSON.stringify(token()));
+  check("10 overlay attached", !!ov && ov.parentNode !== null, "nothing to click: no overlay in the document");
+  if (ov) {
+    ov.onclick({ target: card() });
+    check("10 card click ignored", !token(), "a card click cancelled the flow");
+    ov.onclick({ target: ov });
+    check("10 backdrop click cancels", token() && token()[2] === "", JSON.stringify(token()));
+  }
 }
 
 // Case 11: the real itch.io failure. The OAuth client rejects the origin, so renderButton neither
@@ -401,6 +491,185 @@ function check(name, cond, detail) {
   advance(4 * 60 * 1000);
   check("14 tap removed on deadline", global.console.error === before.error,
     "console hook outlived a flow that never finished");
+}
+
+// Case 15: the transport choice, which is the whole of "the popup closes on Processing your request".
+// FedCM for the button exchanges the credential via navigator.credentials.get() from GIS's iframe, and
+// a third-party frame is refused unless the embedder delegates publickey-credentials-get. The legacy
+// transport does the exchange in its own top-level popup. Both flags are asserted because they are
+// deliberately opposite, and a future edit that "tidies them up" into agreement reintroduces the bug.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("opt_out_or_no_session")) });
+  invoke(loadBridge());
+  check("15 button transport is not FedCM", gsi.initializedWith?.use_fedcm_for_button === false,
+    "use_fedcm_for_button not disabled: " + JSON.stringify(gsi.initializedWith?.use_fedcm_for_button));
+  check("15 One Tap still uses FedCM", gsi.initializedWith?.use_fedcm_for_prompt === true,
+    "use_fedcm_for_prompt not set");
+  check("15 subscribes to GIS errors", typeof gsi.initializedWith?.error_callback === "function",
+    "no error_callback: a chooser that dies silently would go unreported");
+}
+
+// Case 16: GIS reports an error mid-flow. This is a dead attempt, not a dead session: the button on
+// screen still works, so the card must survive and offer a way out. The first version of this bridge
+// treated every non-display as final, which is what made the itch.io failure unfixable from the log.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  gsi.initializedWith.error_callback?.({
+    type: "popup_closed",
+    details: { message: "User closed the popup window" },
+  });
+  check("16 soft error sends no token", !token(), "a recoverable error ended the flow");
+  check("16 card survives", !!overlay() && overlay().parentNode !== null, "overlay torn down on a retryable error");
+  check("16 names the error type", diag() && /popup_closed/.test(diag()[2]), JSON.stringify(diag() && diag()[2]));
+  check("16 carries GIS's own detail", diag() && /User closed the popup window/.test(diag()[2]),
+    "detail flattened away: " + JSON.stringify(diag() && diag()[2]));
+  check("16 failure line is shown", styleProp("overlink-gsi-failure", "display") === "block",
+    "player is left with no explanation: " + styleProp("overlink-gsi-failure", "display"));
+  check("16 new-tab exit is offered", styleProp("overlink-gsi-newtab", "display") === "inline-block",
+    "no escape from an iframe Google will not sign in inside: " + styleProp("overlink-gsi-newtab", "display"));
+
+  // The retry is what the surviving card was for.
+  gsi.initializedWith.callback({ credential: "jwt.after-retry" });
+  check("16 retry delivers the token", token() && token()[2] === "jwt.after-retry", JSON.stringify(token()));
+  check("16 overlay gone after success", !overlay() || overlay().parentNode === null, "overlay left behind");
+}
+
+// Case 17: the failure line and the escape hatch are invisible until there is a failure. A working
+// button must not advertise a way out of the iframe, and must not show a gap of reserved space.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  check("17 failure line hidden", styleProp("overlink-gsi-failure", "display") === "none",
+    styleProp("overlink-gsi-failure", "display"));
+  check("17 new-tab exit hidden", styleProp("overlink-gsi-newtab", "display") === "none",
+    styleProp("overlink-gsi-newtab", "display"));
+  check("17 cancel always available", styleProp("overlink-gsi-cancel", "display") !== "none",
+    "the only guaranteed exit was hidden: " + styleProp("overlink-gsi-cancel", "display"));
+}
+
+// Case 18: the escape hatch. Reloading the game top-level is the one route that works when the embed
+// itself is the obstruction, so it has to be reachable - and it has to end this flow, or the old tab
+// keeps holding AccountManager.IsBusy for three minutes while the player signs in next door.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  press("overlink-gsi-newtab");
+  check("18 opened exactly one tab", opened.length === 1, JSON.stringify(opened));
+  check("18 the tab is this game", opened[0] && /^https:\/\//.test(opened[0].url),
+    "opened a nonsense URL: " + JSON.stringify(opened[0]));
+  check("18 opened as a new browsing context", opened[0] && opened[0].target === "_blank",
+    JSON.stringify(opened[0] && opened[0].target));
+  check("18 flow is closed out", token() && token()[2] === "", JSON.stringify(token()));
+  check("18 overlay removed", !overlay() || overlay().parentNode === null, "overlay left behind");
+}
+
+// Case 19: the escape hatch blocked by a popup blocker. Named, not hung.
+{
+  reset();
+  window.open = () => null;
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  press("overlink-gsi-newtab");
+  check("19 no phantom tab", opened.length === 0, "a tab was recorded despite window.open returning null");
+  check("19 reports unavailable", diag() && diag()[2].startsWith("unavailable|"), JSON.stringify(diag()));
+  check("19 says what to do", diag() && /pop-?ups/i.test(diag()[2]),
+    "detail does not help: " + JSON.stringify(diag() && diag()[2]));
+}
+
+// Case 20: the FedCM probe. When the browser has an opinion about publickey-credentials-get, the state
+// is exactly the fact that explains a chooser closing on "Processing your request...", so it is logged.
+{
+  reset();
+  installPermissions("denied");
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  await flush();
+  check("20 logs the FedCM verdict", allDiags().some((d) => /publickey-credentials-get=denied/.test(d[2])),
+    "verdict never reported: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("20 verdict is not terminal", !token(), "an informational probe ended the flow");
+}
+
+// Case 21: a browser with no permissions API for that name (or no navigator at all) must say nothing
+// rather than throw. The probe is diagnostics, not a dependency.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  await flush();
+  check("21 silent without the permissions API",
+    !allDiags().some((d) => /publickey-credentials-get/.test(d[2])),
+    "reported a verdict it never got: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("21 still rendered the button", gsi.renderedInto !== null, "probe failure blocked the fallback");
+}
+
+// Case 22: a diagnostic that resolves after the flow is over must not overwrite the outcome C# already
+// delivered. This is the race the probe introduces: it is async, and the button is not.
+{
+  reset();
+  installPermissions("denied");
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  gsi.initializedWith.callback({ credential: "jwt.first" });
+  const before = allDiags().length;
+  await flush();
+  check("22 nothing reported after finish", allDiags().length === before,
+    `late report slipped through: ${before} -> ${allDiags().length}`);
+}
+
+// Case 23: error_callback payloads have shipped in several shapes. None of them may throw, and all of
+// them must still name the type.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  gsi.initializedWith.error_callback?.({ type: "idp_timeout" });
+  check("23 bare object names its type", diag() && /idp_timeout/.test(diag()[2]), JSON.stringify(diag()));
+  check("23 bare object admits no detail", diag() && /no detail/.test(diag()[2]),
+    "invented a detail: " + JSON.stringify(diag() && diag()[2]));
+  gsi.initializedWith.error_callback?.(null);
+  check("23 null payload survives", diag() && /unknown/.test(diag()[2]), JSON.stringify(diag()));
+  check("23 null payload still non-terminal", !token(), "a malformed error ended the flow");
+}
+
+// Case 24: the two GSI_LOGGER levels are not interchangeable, and this one is a trap the bridge sets for
+// itself. use_fedcm_for_button: false logs a deprecation notice on *every* flow, so a gsiComplaint() that
+// quoted whichever line arrived last would staple that warning onto an unrelated origin failure and send
+// whoever reads the log next after a red herring. The error must win even when it arrived first.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("invalid_origin")) });
+  invoke(loadBridge());
+  gsiSays("[GSI_LOGGER]: The given origin is not allowed for the given client ID.");
+  gsiSaysWarn("[GSI_LOGGER]: use_fedcm_for_button is deprecated and will stop working soon.");
+  advance(6000);
+  check("24 quotes the error, not the later warning",
+    diag() && /GIS said \(error\): [^\n]*given origin is not allowed/.test(diag()[2]),
+    "wrong line quoted: " + JSON.stringify(diag() && diag()[2]));
+  check("24 deprecation notice never masquerades as the cause", diag() && !/deprecated/.test(diag()[2]),
+    "the standing warning leaked into a failure it had nothing to do with: " + JSON.stringify(diag() && diag()[2]));
+}
+
+// Case 25: a warning on its own is still worth reporting, as long as it is labelled as one.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("invalid_origin")) });
+  invoke(loadBridge());
+  gsiSaysWarn("[GSI_LOGGER]: something GIS felt obliged to mention");
+  advance(6000);
+  check("25 lone warning is labelled",
+    diag() && /GIS said \(warning\): \[GSI_LOGGER\]: something GIS felt obliged to mention/.test(diag()[2]),
+    "warning lost or unlabelled: " + JSON.stringify(diag() && diag()[2]));
 }
 
 const failed = results.filter((r) => !r.pass);

@@ -109,17 +109,22 @@ string verbatim.
 
 ### Browsers that will resist anyway
 
-The same header dump was `Brave/155`, `Chrome/155`, `Android 16`, `Pixel 10`, `sec-gpc: 1`. Three things
+The same header dump was `Brave/155`, `Chrome/155`, `Android 16`, `Pixel 10`, `sec-gpc: 1`. Four things
 follow, and none of them is fixable from our side:
 
 - **One Tap cannot work in this embed, on any device.** `sec-fetch-storage-access: none` in that request is
   the browser refusing the frame access to first-party cookies, which is what FedCM needs to identify a
   signed-in Google account. The refusal is structural to a cross-origin iframe on itch.io rather than an
   artefact of the phone, so the rendered Google button is the only path that can work here — which is
-  exactly what the bridge now falls back to.
-- **Mobile adds a second risk on top.** That button opens the account chooser as a popup, and mobile and
+  what the bridge falls back to.
+- **The button's own credential exchange is a separate hazard**, and it is the one that bites in a frame:
+  with FedCM for the button, Google finishes the sign-in by calling `navigator.credentials.get()` from
+  inside the game's iframe, which the embedder has not delegated. See *the Google popup opens, sits on
+  Processing your request, and closes itself* below. The bridge opts out of that transport and offers a
+  new tab when even the opt-out is refused.
+- **Mobile adds a third risk on top.** The button opens the account chooser as a popup, and mobile and
   in-app browsers eat popups from inside small, gesture-starved frames far more readily than desktop does.
-  Expect the button path to be flakier on phones even once the origin is registered.
+  Expect the button path to be flakier on phones even with the origin registered and FedCM out of the way.
 - **Brave Shields can block Google Identity Services as a tracker**, independently of any OAuth
   configuration. It did *not* do so in the observed failure — the script loaded and made its own
   `/gsi/status` request, which is where the 403 came from — so treat this as a standing risk for other
@@ -222,12 +227,16 @@ For development/testing, keep it in Testing mode with test users added.
    - the browser's native account picker (FedCM), which is what the *same build* shows when played from a
      first-party tab or itch.io's *open in new window*.
 5. Sign in and authorize. The overlay disappears and the game continues signed in.
-6. If it fails, the console line `[Account] Google flow: <code>: <detail> [origin: ...]` names the reason
-   and the exact origin to register. Nothing in this flow fails without saying why any more.
-7. Username and password work regardless of all of the above, and are the fallback when an embed denies
+6. If the chooser opens and then closes itself on *Processing your request*, that is the credential
+   exchange being refused by the frame rather than the origin being rejected — see Common Issues below.
+   The overlay keeps the button on screen, explains itself in one line, and offers **Sign in in a new
+   tab**; take that, since a top-level tab has no embedder to negotiate with.
+7. If anything else fails, the console line `[Account] Google flow: <code>: <detail> [origin: ...]` names
+   the reason and the exact origin to register. Nothing in this flow fails without saying why any more.
+8. Username and password work regardless of all of the above, and are the fallback when an embed denies
    popups entirely.
 
-**Test on desktop Chrome first.** Steps 3 and 6 assume DevTools, and a phone in Brave adds its own
+**Test on desktop Chrome first.** The steps above assume DevTools, and a phone in Brave adds its own
 refusals on top of the structural ones above. Verifying on desktop establishes whether the *origin* is
 right before you start chasing a popup or a Shield that only exists on the device you happen to hold.
 
@@ -251,7 +260,7 @@ it: the origin the game is served from is missing from the OAuth client's **Auth
 origins**. GIS checks that before it will draw *anything*, so One Tap and the button both die at the same
 gate. Register the origin, exactly as the log reports it, and it works.
 
-The bridge now surfaces that rejection instead of hiding it. Look for
+The bridge surfaces those rejections instead of hiding them. Look for
 `[Account] Google flow: <code>: <detail> [origin: ...]`:
 
 - `unavailable: ... not in the OAuth client's Authorized JavaScript origins ... ; GIS said: [GSI_LOGGER]
@@ -261,13 +270,49 @@ The bridge now surfaces that rejection instead of hiding it. Look for
 - `unavailable: accounts.google.com/gsi/client failed to load` — the host page's Content-Security-Policy
   or COEP headers are blocking Google's script. No origin list will help; that is the embedder's policy,
   and the player needs username and password.
-- `failed: One Tap dismissed: <reason>` / `One Tap not displayed: <reason>` — One Tap cannot draw its
-  floating UI inside a third-party iframe, which is normal on itch.io and is exactly what the fallback
-  button exists for. It is only fatal if the fallback fails too.
-- `cancelled` — the player actually backed out. Nothing to fix.
+- `fallback: One Tap not displayed: opt_out_or_no_session` — normal on itch.io and *not* a failure. One Tap
+  cannot draw its floating UI inside a third-party frame, so the bridge renders the button instead. The
+  reason string means "no Google session in this frame", not "this player opted out".
+- `fallback: FedCM availability in this frame: publickey-credentials-get=denied` — also informational, and
+  the reason One Tap is structurally impossible here. `granted` means the embedder delegated it and the
+  native picker is available.
+- `failed: Google chooser error: <type> (<detail>)` — GIS's own `error_callback`, naming what the button
+  flow hit: `popup_closed`, `popup_blocked`, `idp_timeout`, `issued_failed`, `gep_error`. This is
+  deliberately **not** fatal: the card stays on screen with a one-line explanation and a **Sign in in a
+  new tab** button, because a failed attempt is not a failed session and the button still works.
+- `cancelled` — the player actually backed out, or took the new-tab exit. Nothing to fix.
 
-**Fix:** Register the iframe's origin. Then, if the embed still denies popups, treat web play as
-username/password-only and point players at the new-window button for Google.
+**Fix:** Register the iframe's origin. Then, if the embed still denies the credential exchange, the
+new-tab button is the path; if it denies popups entirely, treat web play as username/password-only.
+
+---
+
+### Error: the Google popup opens, sits on *Processing your request*, and closes itself
+
+Distinct from the origin problem, and it only becomes visible once the origin is already registered —
+which is why it looked like a popup glitch rather than an identity bug.
+
+**Cause:** FedCM is enabled for the Sign in with Google button. Google's chooser completes the exchange
+by calling `navigator.credentials.get()` from GIS's iframe *inside the game page*. In a third-party frame
+that call is refused unless the embedder delegates `publickey-credentials-get` via the iframe's `allow`
+attribute, and itch.io does not. The promise rejects, the chooser dismisses itself — having authenticated
+the player and thrown the result away — and no callback fires.
+
+**Fix:** none on the player's side, and it is already applied: the bridge sets
+`use_fedcm_for_button: false`, so the legacy transport finishes the exchange in its own top-level popup
+where none of that applies. `use_fedcm_for_prompt` stays `true` on purpose; the two flags are deliberately
+opposite, and a tidy-up that equalises them reintroduces this bug. `Tools/WebGL/gsi-bridge-test.mjs`
+asserts both.
+
+**When it comes back:** Google is retiring that opt-out. When it goes, this becomes unfixable from JS on
+itch.io and the **Sign in in a new tab** button in the overlay is the answer — a top-level tab is
+first-party, so there is no embedder to refuse anything. Until then, the `FedCM availability in this
+frame: publickey-credentials-get=…` line tells you which world a given build is running in.
+
+**To reproduce without a build:** `node Tools/WebGL/iframe-probe/serve.mjs`, open `http://localhost:8001`,
+and switch the embedder's `allow=` dropdown between *delegated FedCM* and *no allow=*. That is the same
+two-origin shape itch.io uses, and it shows the refusal directly instead of inferring it from a player
+report.
 
 **Diagnose without a build:** `node Tools/WebGL/iframe-probe/serve.mjs` then open
 `http://localhost:8001`. That serves a two-origin page — an embedder on `:8001` framing a GIS test page on
