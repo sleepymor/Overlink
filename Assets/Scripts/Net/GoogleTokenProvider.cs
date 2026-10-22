@@ -39,6 +39,9 @@ namespace Overlink.Net
         [DllImport("__Internal")]
         static extern void OverlinkGoogleSignIn(string clientId, string nonce, string receiverName, string callbackMethod);
 
+        [DllImport("__Internal")]
+        static extern void OverlinkGoogleSignInCancel();
+
         // The bridge is fire-and-forget, so nothing on this side can observe a GIS flow that never
         // answers: a popup the browser blocked, an overlay the player walked away from, a CDN that
         // served a CSP that killed the GIS script. Without a deadline the await below hangs forever,
@@ -61,8 +64,15 @@ namespace Overlink.Net
         {
             Task winner = await Task.WhenAny(tokenTask, Task.Delay(InteractionTimeout));
             if (winner != tokenTask)
+            {
+                // The bridge owns the DOM overlay, while this await owns the pending task. Abandon both
+                // sides together: otherwise the player can keep pressing a live-looking button after this
+                // method has stopped listening, and a late token is silently dropped.
+                receiver.Abandon();
+                OverlinkGoogleSignInCancel();
                 throw Declined(GoogleDecline.TimedOut,
                     $"the bridge sent nothing within {(int)InteractionTimeout.TotalSeconds} seconds");
+            }
             string token = await tokenTask;
             return VerifyNonce(token, nonce);
         }
@@ -324,6 +334,15 @@ namespace Overlink.Net
                 detail = separator < 0 ? "" : payload.Substring(separator + 1);
                 decline = DeclineFromCode(code);
                 Debug.Log($"[Account] Google flow: {code}: {detail}");
+            }
+
+            /// <summary>
+            /// Drops the source when the provider's own deadline wins. The bridge's cancellation callback
+            /// is empty, but clearing this first prevents it from faulting a task nobody is awaiting.
+            /// </summary>
+            public void Abandon()
+            {
+                pending = null;
             }
 
             public void ReceiveToken(string token)

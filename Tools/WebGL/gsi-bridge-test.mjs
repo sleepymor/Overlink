@@ -128,6 +128,14 @@ function installPermissions(state) {
   };
 }
 
+function installRejectedPermissions(message) {
+  window.navigator = {
+    permissions: {
+      query: () => Promise.reject(new Error(message)),
+    },
+  };
+}
+
 // Fake timers: the bridge polls for a rendered button and arms a console-tap deadline, both of which
 // must be driven deterministically rather than awaited.
 let timers = [];
@@ -272,6 +280,10 @@ function invoke(fn) {
   fn("client-id", "nonce-123", "OverlinkGoogleAuthReceiver", "ReceiveToken");
 }
 
+function cancelBridge() {
+  global.LibraryManager.library.OverlinkGoogleSignInCancel();
+}
+
 // The bridge may report several times in one flow (a fallback notice, then the eventual failure), so
 // the assertion target is always the LAST diagnostic: that is the one C# hands to the player.
 const allDiags = () => sent.filter((s) => s[1] === "ReceiveDiagnostic");
@@ -327,8 +339,8 @@ function check(name, cond, detail) {
     "use_fedcm_for_prompt not set");
   check("1 passes the nonce", gsi.initializedWith?.nonce === "nonce-123", "nonce missing");
   check("1 passes the client id", gsi.initializedWith?.client_id === "client-id", "client id missing");
-  check("1 logs GIS's reason", diag() && /iframe/.test(diag()[2]),
-    "reason not reported: " + JSON.stringify(diag() && diag()[2]));
+  check("1 logs GIS's reason", allDiags().some((d) => /iframe/.test(d[2])),
+    "reason not reported: " + JSON.stringify(allDiags().map((d) => d[2])));
   check("1 names its own origin", diag() && /\[origin: https:\/\/html5\.itch\.zone\]/.test(diag()[2]),
     "origin missing: " + JSON.stringify(diag() && diag()[2]));
 
@@ -614,16 +626,16 @@ function check(name, cond, detail) {
   check("20 verdict is not terminal", !token(), "an informational probe ended the flow");
 }
 
-// Case 21: a browser with no permissions API for that name (or no navigator at all) must say nothing
-// rather than throw. The probe is diagnostics, not a dependency.
+// Case 21: a browser with no permissions API for that name (or no navigator at all) must report that the
+// probe was not measurable rather than throw. The probe is diagnostics, not a dependency.
 {
   reset();
   installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
   invoke(loadBridge());
   await flush();
-  check("21 silent without the permissions API",
-    !allDiags().some((d) => /publickey-credentials-get/.test(d[2])),
-    "reported a verdict it never got: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("21 names an unmeasurable probe",
+    allDiags().some((d) => /FedCM availability in this frame: not measurable \(no permissions API\)/.test(d[2])),
+    "probe failure vanished: " + JSON.stringify(allDiags().map((d) => d[2])));
   check("21 still rendered the button", gsi.renderedInto !== null, "probe failure blocked the fallback");
 }
 
@@ -818,6 +830,92 @@ function check(name, cond, detail) {
     "the watcher treated a null window as a closed popup and invented a second failure: " +
       JSON.stringify(allDiags().map((d) => d[2])));
   check("30 a refused popup is not terminal", !token(), "a blocked popup ended the flow");
+}
+
+// Case 31: a silence that never draws error_callback must not strand the player. The strand warning reveals
+// the way out and a diagnostic, but remains non-terminal so a late credential still wins.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("opt_out_or_no_session")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  check("31 no warning at 89s", styleProp("overlink-gsi-failure", "display") === "none",
+    "warned too early");
+  advance(89000);
+  check("31 no warning at exactly 89s", styleProp("overlink-gsi-failure", "display") === "none",
+    styleProp("overlink-gsi-failure", "display"));
+  advance(2000);
+  check("31 warning revealed at 91s", styleProp("overlink-gsi-failure", "display") === "block",
+    styleProp("overlink-gsi-failure", "display"));
+  check("31 new-tab exit offered", styleProp("overlink-gsi-newtab", "display") === "inline-block",
+    styleProp("overlink-gsi-newtab", "display"));
+  check("31 diagnostic reports silence", allDiags().some((d) => /no credential/.test(d[2]) && d[2].includes("90")),
+    JSON.stringify(allDiags().map((d) => d[2])));
+  check("31 silence warning is fallback", allDiags().some((d) => d[2].startsWith("fallback|") && /no credential/.test(d[2])),
+    JSON.stringify(allDiags().map((d) => d[2])));
+  check("31 strand warning is non-terminal", !token(), "the strand warning ended the flow");
+  // A credential arriving late is still the one we want.
+  gsi.initializedWith.callback({ credential: "jwt.late" });
+  check("31 late credential still wins", token() && token()[2] === "jwt.late", JSON.stringify(token()));
+  check("31 overlay gone after late success", !overlay() || overlay().parentNode === null, "overlay left behind");
+}
+
+// Case 32: the strand warning is disarmed by a normal finish.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  gsi.initializedWith.callback({ credential: "jwt.early" });
+  advance(120000);
+  check("32 no strand warning after success", !allDiags().some((d) => /no credential/.test(d[2])),
+    JSON.stringify(allDiags().map((d) => d[2])));
+  check("32 single token", sent.filter((s) => s[1] === "ReceiveToken").length === 1,
+    "extra ReceiveToken fired");
+}
+
+// Case 33: C# cancel tears the card down silently and does not end listening twice.
+{
+  reset();
+  const beforeOpen = window.open;
+  const beforeCount = listeners.length;
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  const beforeTokens = sent.filter((s) => s[1] === "ReceiveToken").length;
+  const beforeDiags = allDiags().length;
+  cancelBridge();
+  check("33 cancel tears down the overlay", !overlay() || overlay().parentNode === null,
+    "overlay left behind after cancel");
+  check("33 cancel restores window.open", window.open === beforeOpen, "wrapper leaked after cancel");
+  check("33 cancel removes the message listener", listeners.length === beforeCount,
+    "message listener leaked after cancel");
+  check("33 cancel sends exactly one empty token",
+    sent.filter((s) => s[1] === "ReceiveToken").length === beforeTokens + 1,
+    JSON.stringify(sent));
+  check("33 cancel adds no diagnostic", allDiags().length === beforeDiags,
+    JSON.stringify(allDiags().slice(beforeDiags).map((d) => d[2])));
+  check("33 cancel is idempotent", (() => { const n = sent.length; cancelBridge(); return sent.length === n; })(),
+    "a second cancel added messages");
+}
+
+// Case 34: the FedCM probe is never silent; rejections are reported.
+{
+  reset();
+  installRejectedPermissions("TypeError: permission name not supported");
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  await flush();
+  check("34 probe rejection is reported", allDiags().some((d) => /FedCM availability in this frame: not measurable \(the query rejected/.test(d[2])),
+    JSON.stringify(allDiags().map((d) => d[2])));
+  check("34 probe rejection is non-terminal", !token(), "a probe rejection ended the flow");
+  check("34 button still renders", gsi.renderedInto !== null, "probe rejection blocked the fallback");
 }
 
 const failed = results.filter((r) => !r.pass);

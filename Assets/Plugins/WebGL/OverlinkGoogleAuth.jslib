@@ -28,6 +28,12 @@
 // Assets/Tests file that can reference it. Control flow is covered by Tools/WebGL/gsi-bridge-test.mjs
 // (`node Tools/WebGL/gsi-bridge-test.mjs`), which stubs the browser and GIS and runs in a second.
 // Keep that in step with any change below; the alternative is discovering a regression in a WebGL build.
+
+// The handle C# uses to call off a flow it has stopped waiting for. The bridge owns the overlay and C#
+// owns the deadline, so the two need exactly one shared point of contact, and it has to be reachable from
+// a second export - which puts it outside the sign-in function's closure. Null while no flow is running.
+var overlinkGoogleFlow = null;
+
 mergeInto(LibraryManager.library, {
   OverlinkGoogleSignIn: function (clientIdPtr, noncePtr, receiverPtr, callbackPtr) {
     var clientId = UTF8ToString(clientIdPtr);
@@ -39,6 +45,7 @@ mergeInto(LibraryManager.library, {
     var overlay = null;
     var failureLine = null;
     var newTabButton = null;
+    var strandTimer = null;
 
     // GIS reports the single most useful diagnostic in this whole flow, "The given origin is not
     // allowed for the given client ID", only to the browser console, which a shipped WebGL build has
@@ -232,6 +239,8 @@ mergeInto(LibraryManager.library, {
       removeOverlay();
       removeConsoleTap();
       removeSpies();
+      disarmStrandWarning();
+      overlinkGoogleFlow = null;
       SendMessage(receiver, callback, token || '');
     }
 
@@ -274,6 +283,32 @@ mergeInto(LibraryManager.library, {
       if (newTabButton) newTabButton.style.display = 'inline-block';
     }
 
+    // The player must never be stranded by a silence. Every other way this flow opens up is triggered by
+    // GIS saying something - error_callback, a dismissed prompt, a popup that closed - and the itch.io run
+    // of 2026-10-22 proved GIS can say nothing at all: Google's chooser opened, its postMessage handshake
+    // arrived, and no credential ever followed, so the card sat there looking healthy until C# burned its
+    // deadline three minutes later with no exit on screen. So the button arms this as well. Ninety seconds
+    // is long enough that a slow trip through the chooser never trips it, and short enough that the way out
+    // is visible before the deadline. Non-terminal on purpose: a credential that arrives late is still the
+    // one we want, so this only ever adds an option, never removes the attempt.
+    var STRAND_WARNING_MS = 90 * 1000;
+
+    function disarmStrandWarning() {
+      if (strandTimer) { clearTimeout(strandTimer); strandTimer = null; }
+    }
+
+    function armStrandWarning() {
+      disarmStrandWarning();
+      strandTimer = setTimeout(function () {
+        strandTimer = null;
+        if (done) return;
+        report('fallback', 'no credential ' + (STRAND_WARNING_MS / 1000) +
+          's after the button appeared; GIS has reported nothing');
+        revealFailure('Google has not answered yet. It may still come back - or continue in a new tab, ' +
+          'where this game is not embedded and Google sign-in works normally.');
+      }, STRAND_WARNING_MS);
+    }
+
     // A top-level tab is first-party: no embedder, no permissions-policy delegation, no third-party
     // storage partitioning, so One Tap, FedCM and the button all behave there. It is the one route that
     // still works when the iframe itself is the obstruction, which is a property of how itch.io embeds
@@ -303,22 +338,38 @@ mergeInto(LibraryManager.library, {
 
     // FedCM in a cross-origin frame is only available if the embedder delegates publickey-credentials-get
     // via allow=. itch.io's embed iframe does not, and when it is missing Google's chooser opens, shows
-    // "Processing your request...", and closes itself with no token - which looks like a mystery from
-    // the outside. Logging the state turns that into one line. Best-effort: the query itself rejects on
-    // browsers that do not implement the permission name.
+    // "Processing your request...", and closes itself with no token - which looks like a mystery from the
+    // outside. Logging the state turns that into one line.
+    //
+    // Every path speaks, including the ones that cannot measure anything. The first itch.io run of this
+    // probe printed nothing at all, because the permissions query rejects on a browser with no opinion
+    // about the permission name and the rejection was swallowed - and a diagnostic that can vanish in
+    // silence is worthless precisely in the round where it is the only evidence available.
     function probeFedCM() {
+      function unmeasurable(why) {
+        report('fallback', 'FedCM availability in this frame: not measurable (' + why +
+          '), so this build cannot say whether the embedder delegates it');
+      }
       try {
-        if (!window.navigator || !window.navigator.permissions || !window.navigator.permissions.query) return;
+        if (!window.navigator || !window.navigator.permissions || !window.navigator.permissions.query) {
+          unmeasurable('no permissions API');
+          return;
+        }
         var verdict = window.navigator.permissions.query({ name: 'publickey-credentials-get' });
-        if (!verdict || !verdict.then) return;
+        if (!verdict || !verdict.then) {
+          unmeasurable('the query returned no promise');
+          return;
+        }
         verdict.then(
           function (status) {
             report('fallback', 'FedCM availability in this frame: publickey-credentials-get=' +
               ((status && status.state) || 'unknown'));
           },
-          function () {}
+          function (e) { unmeasurable('the query rejected: ' + ((e && e.message) || String(e)).slice(0, 80)); }
         );
-      } catch (e) {}
+      } catch (e) {
+        unmeasurable(String((e && e.message) || e).slice(0, 80));
+      }
     }
 
     // The fallback. A button is the only GIS surface that reliably works when the page is an iframe,
@@ -383,6 +434,9 @@ mergeInto(LibraryManager.library, {
         if (event.target === overlay) finish('', 'cancelled', 'the player dismissed the Google prompt');
       };
       document.body.appendChild(overlay);
+      // Armed from the moment the card exists, not from the moment the button paints: a player looking at
+      // a Google heading with nothing under it is the same stranding, just earlier.
+      armStrandWarning();
 
       try {
         id.renderButton(host, {
@@ -498,6 +552,7 @@ mergeInto(LibraryManager.library, {
     installConsoleTap();
     installSpies();
     setTimeout(function () { removeConsoleTap(); removeSpies(); }, 4 * 60 * 1000);
+    overlinkGoogleFlow = { abort: function () { finish(''); } };
 
     if (gsi()) {
       start();
@@ -513,5 +568,12 @@ mergeInto(LibraryManager.library, {
       finish('', 'unavailable', 'accounts.google.com/gsi/client failed to load' + gsiComplaint());
     };
     document.head.appendChild(script);
+  },
+
+  // Called when GoogleTokenProvider's deadline wins. C# has already abandoned its pending task, so this
+  // is deliberately silent: it only tears down the browser-owned overlay and hooks. Sending the same
+  // empty callback as every other terminal path lets the bridge keep one cleanup route.
+  OverlinkGoogleSignInCancel: function () {
+    if (overlinkGoogleFlow) overlinkGoogleFlow.abort();
   }
 });
