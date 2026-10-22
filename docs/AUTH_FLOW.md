@@ -110,6 +110,58 @@ Google Cloud Console walkthrough. Two things are easy to miss:
 - the client ID lives in `Assets/Resources/GoogleAuthSettings.asset`. Client IDs are public config;
   client secrets must never ship in the player
 
+The two platforms reach that ID token by completely different routes, and only one of them runs inside
+somebody else's page:
+
+| | Windows | WebGL |
+| --- | --- | --- |
+| Transport | system browser + loopback `HttpListener` | `Assets/Plugins/WebGL/OverlinkGoogleAuth.jslib` |
+| Grant | `response_type=id_token`, `form_post` to `127.0.0.1:7777` | Google Identity Services in-page |
+| State check | OAuth `state` + `nonce` | `nonce` only |
+| Deadline | 2 min | 3 min |
+| Can fail silently | no | no |
+
+WebGL is the harder case because an itch.io web play embeds the build in a cross-origin iframe, and
+One Tap is precisely the GIS feature that assumes it can paint over the top-level page. So the bridge
+opts into FedCM, falls back to rendering Google's own button in a DOM overlay when One Tap declines,
+and reports a coded diagnostic (`cancelled` / `unavailable` / `failed` / `fallback`) with GIS's raw
+reason and the iframe's own origin. `GoogleTokenProvider` turns those into a `GoogleDeclineException`
+rather than a message string, because `AuthResult.FromException`'s generic path matches English
+substrings and Google's sentences contain the words "password" and "timeout".
+`GoogleDeclineMappingTests` pins that down, including the two collisions it exists to prevent.
+
+What to actually expect on itch.io, stated plainly so nobody re-derives it. There are two independent
+gates, and they fail differently:
+
+1. **The origin gate.** GIS checks the calling page's origin against the OAuth client's **Authorized
+   JavaScript origins** before it will draw *anything*. If the itch.io CDN host is missing there, One Tap
+   *and* the fallback button both die at the same moment, and the browser console says
+   `[GSI_LOGGER]: The given origin is not allowed for the given client ID.` alongside a 403 on
+   `accounts.google.com/gsi/status`. This is configuration, not code, and no amount of fallback logic
+   touches it. It is the failure that actually happened here, with the frame's origin confirmed as
+   `https://html-classic.itch.zone` from the rejected request's own headers. The bridge now detects it by
+   waiting five seconds for `renderButton` to produce a DOM node and reporting `unavailable` when nothing
+   appears, quoting GIS's own console line — that rejection is otherwise invisible to Unity's log, because
+   it is printed to the browser console and never handed to a callback.
+2. **The iframe gate.** Once the origin is allowed, One Tap *still* declines inside a cross-origin frame.
+   Observed directly: the rejected `/gsi/status` request carried `sec-fetch-storage-access: none`, so the
+   browser grants the frame no first-party cookie access, and FedCM needs exactly that to identify a
+   signed-in Google account. (It separately requires the embedder to delegate `publickey-credentials-get`
+   via the iframe's `allow` attribute, which itch.io does not do.) Either refusal alone is sufficient, so
+   this is structural rather than something more fallback logic can code around. The rendered Google
+   button is therefore the working path on itch.io, not a degraded fallback. FedCM is opted in regardless,
+   because the identical build played from a first-party tab gets the native picker with no overlay, and
+   without the flag GIS uses a transport Google is retiring.
+
+If an embed denies popups as well, Google sign-in is simply unavailable on that host and the player uses
+username and password — which is why the `unavailable` message leads with that rather than promising a
+retry. Note also that itch.io's CDN host is theirs to change: it already went from `hwcdn.net` to
+`itch.zone` once, so a Google sign-in regression with no change on our side is worth re-reading the
+origin before anything else.
+
+`Tools/WebGL/iframe-probe/serve.mjs` reproduces the two-origin setup in thirty seconds, without a build,
+and prints GIS's raw verdicts. Use it before theorising about any future iframe regression.
+
 ## Testing
 
 `AccountResetUtility`'s menu items (`Overlink ▸ Account`) reset local state only:

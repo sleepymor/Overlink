@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Overlink GIS probe - embedder</title>
+    <style>
+      body { font: 13px/1.6 ui-monospace, Consolas, monospace; background: #0e1013; color: #d6d9de; margin: 0; padding: 16px; }
+      h1 { font-size: 14px; margin: 0 0 6px; color: #8ab4f8; }
+      p { margin: 0 0 10px; color: #8b929c; max-width: 78ch; }
+      code { color: #f28b82; }
+      .row { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+      .col { flex: 1 1 420px; min-width: 380px; }
+      iframe { width: 100%; height: 460px; border: 1px solid #3c4048; border-radius: 8px; background: #14161a; }
+      label { display: block; margin-bottom: 8px; }
+      select, button { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid #3c4048; background: #21252b; color: #d6d9de; }
+      #relay { white-space: pre-wrap; word-break: break-word; margin: 0; padding: 10px; background: #14161a; border: 1px solid #262a30; border-radius: 6px; height: 460px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>embedder (parent origin) — stands in for itch.io</h1>
+    <p>
+      The frame below is the game, served from a <strong>different origin</strong>. That is the whole
+      point: on itch.io the player is on <code>yourname.itch.io</code> while the WebGL build is served
+      from an <code>itch.zone</code> host, so Google sees a third-party iframe. One Tap needs the
+      <code>publickey-credentials-get</code> permission, which a cross-origin frame does <em>not</em>
+      get unless the embedder delegates it with <code>allow=</code> — and itch.io is not going to
+      delegate anything on our behalf.
+    </p>
+    <p>
+      Use this to answer one question: <strong>does our fallback button still work when One Tap is
+      denied?</strong> If the frame shows a Google button and its popup opens, the fix is good. If it
+      does not, web play cannot do Google sign-in and the docs need to say so plainly.
+    </p>
+    <label>
+      Embedder configuration, then reload the frame:
+      <select id="mode">
+        <option value="plain">no allow= (what itch.io actually does)</option>
+        <option value="delegated">allow= publickey-credentials-get (embedder cooperates)</option>
+        <option value="nofedcm">no allow=, FedCM disabled</option>
+        <option value="top">not an iframe at all (first-party baseline)</option>
+      </select>
+    </label>
+    <button id="reload">Reload frame</button>
+
+    <div class="row" style="margin-top: 12px">
+      <div class="col">
+        <iframe id="frame" src="http://localhost:8000/game.html"></iframe>
+      </div>
+      <div class="col">
+        <pre id="relay">(the frame's log lines are mirrored here)</pre>
+      </div>
+    </div>
+
+    <script>
+      var frame = document.getElementById("frame");
+      var relay = document.getElementById("relay");
+      var modes = {
+        plain: { src: "http://localhost:8000/game.html", allow: null },
+        delegated: {
+          src: "http://localhost:8000/game.html",
+          allow: "publickey-credentials-get https://localhost:8000",
+        },
+        nofedcm: { src: "http://localhost:8000/game.html?nofedcm=1", allow: null },
+        top: { src: "http://localhost:8000/game.html", allow: null, top: true },
+      };
+
+      function apply() {
+        var mode = modes[document.getElementById("mode").value];
+        relay.textContent = "";
+        if (mode.top) {
+          // First-party baseline: navigating the whole page loses the relay, but it is the only way to
+          // see what GIS does when no iframe is involved at all.
+          location.href = mode.src;
+          return;
+        }
+        frame.setAttribute("src", mode.src);
+        if (mode.allow) frame.setAttribute("allow", mode.allow);
+        else frame.removeAttribute("allow");
+        relay.textContent = "mode: " + document.getElementById("mode").value + "\n";
+      }
+
+      document.getElementById("reload").addEventListener("click", apply);
+      window.addEventListener("message", function (event) {
+        if (event.origin !== "http://localhost:8000") return;
+        if (!event.data || event.data.type !== "probe") return;
+        relay.textContent += event.data.text + "\n";
+        relay.scrollTop = relay.scrollHeight;
+      });
+    </script>
+  </body>
+</html>

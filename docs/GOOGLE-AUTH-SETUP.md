@@ -54,10 +54,94 @@ http://localhost:7777
 http://localhost:7777/callback/
 ```
 
-**For WebGL builds hosted on itch.io, also add:**
+**For WebGL builds the redirect-URI list above is irrelevant.** Google Identity Services does not use
+the authorization-code flow at all — it hands the browser an ID token directly — so it never consults a
+redirect URI. What it does check is the **origin of the page it is running in**, and that is a separate
+field. Getting this wrong is the single most common reason WebGL Google sign-in fails, and it fails
+*silently*: GIS reports the rejection to a callback the game used to throw away.
+
+---
+
+### Configure Authorized JavaScript Origins (required for WebGL)
+
+In the same Web application client: **Credentials → your client → Authorized JavaScript origins → Add URI**.
+
+Rules that are easy to get wrong:
+
+- **Scheme + host only.** No path, no trailing slash, no query. `https://foo.itch.io/overlink` is not an
+  origin; `https://foo.itch.io` is.
+- Origin means *where the game's own page is served from*, which on itch.io is **not** the URL the player
+  visits. Players visit your itch.io page; the game runs inside an iframe whose document comes from a
+  different host. Register the iframe's host.
+- Everything is exact, including the port. `https://a.itch.zone` does not cover `https://b.itch.zone`.
+
+itch.io serves embedded HTML5 builds from its own CDN, **not** from the page the player is looking at.
+The current hosts are:
+
 ```
-https://yourusername.itch.io/overlink
+https://html-classic.itch.zone
+https://html.itch.zone
 ```
+
+`html.itch.zone` is the secondary CDN used only when *SharedArrayBuffer support* is enabled in the
+project's Embed options; `html-classic.itch.zone` is the default. The older
+`https://v6p9d9t4.ssl.hwcdn.net` has been **permanently retired** — do not bother registering it.
+
+Add the user's own page origin too, since a fullscreen "launch" embed and a directly-opened project page
+resolve there rather than on the CDN:
+
+```
+https://<your-username>.itch.io
+```
+
+For local WebGL testing add the exact origin you serve the build folder from, e.g.
+`http://localhost:8000`. A relative-path server and a `127.0.0.1` server are *different* origins.
+
+**Don't guess the origin — read it.** Every Google-flow diagnostic the WebGL bridge emits ends with
+`[origin: https://whatever]`, in the browser console and in Unity's log. Load the deployed build, open
+DevTools (F12) → Console, click **Continue with Google**, and whatever GIS complains about, that suffix is
+the exact string to paste into the origins list. If the game never logs anything, right-click the running
+game → *View Frame Source* and take the scheme+host of that URL.
+
+Confirmed from a live 403 on the deployed build, whose request headers carried
+`origin: https://html-classic.itch.zone` and `referer: https://html-classic.itch.zone/`. Register that
+string verbatim.
+
+### Browsers that will resist anyway
+
+The same header dump was `Brave/155`, `Chrome/155`, `Android 16`, `Pixel 10`, `sec-gpc: 1`. Three things
+follow, and none of them is fixable from our side:
+
+- **One Tap cannot work in this embed, on any device.** `sec-fetch-storage-access: none` in that request is
+  the browser refusing the frame access to first-party cookies, which is what FedCM needs to identify a
+  signed-in Google account. The refusal is structural to a cross-origin iframe on itch.io rather than an
+  artefact of the phone, so the rendered Google button is the only path that can work here — which is
+  exactly what the bridge now falls back to.
+- **Mobile adds a second risk on top.** That button opens the account chooser as a popup, and mobile and
+  in-app browsers eat popups from inside small, gesture-starved frames far more readily than desktop does.
+  Expect the button path to be flakier on phones even once the origin is registered.
+- **Brave Shields can block Google Identity Services as a tracker**, independently of any OAuth
+  configuration. It did *not* do so in the observed failure — the script loaded and made its own
+  `/gsi/status` request, which is where the 403 came from — so treat this as a standing risk for other
+  users rather than the cause here. If a Brave user reports Google sign-in doing nothing at all and no
+  `[Account] Google flow:` line, that is the likely explanation, and the answer is Shields-down for the
+  site or username and password.
+
+So the practical ranking for web play is: desktop Chrome/Edge/Firefox with the origin registered, then
+desktop Brave, then anything on a phone. Username and password is the only path immune to all of it — and
+on the WebGL Auth screen it is currently the *secondary* option, beneath a prominent
+**Continue with Google**. That ordering is right for Windows, where Google is reliable, and backwards for
+an itch.io embed, where Google is the fragile path. Worth revisiting if web play matters: either demote
+the button on WebGL builds, or leave it and expect support reports that begin "the Google button does
+nothing".
+
+Two caveats worth knowing before you rely on any of this:
+
+- itch.io's own docs advise **against** pointing players at the CDN URL directly, because their sitelock
+  can block it. Registering the CDN origin is what makes the *iframe* work; it is not an invitation to
+  host the game from there.
+- The CDN hostname is controlled by itch.io and has changed before (`hwcdn.net` → `itch.zone`). If Google
+  sign-in breaks with no change on our side, suspect a host rotation and re-read the origin from the log.
 
 7. Click **Create**
 8. Copy the **Client ID** (looks like `123456789-abc.apps.googleusercontent.com`)
@@ -126,12 +210,26 @@ For development/testing, keep it in Testing mode with test users added.
 
 ### For WebGL Builds
 
-1. Build for WebGL
-2. Upload to itch.io or test locally
-3. Click **LOG IN WITH GOOGLE**
-4. Google OAuth popup appears
-5. Sign in and authorize
-6. Popup closes, game continues signed in
+1. Build for WebGL and upload to itch.io (or serve the folder over HTTPS locally).
+2. Add the serving origin to **Authorized JavaScript origins** *before* testing — see the origins section
+   above. This is the step that decides whether the rest works.
+3. Open the deployed page with DevTools focused on the **game iframe**, then click
+   **CONTINUE WITH GOOGLE**.
+4. Expect one of:
+   - a white card over the game holding a real **Sign in with Google** button. This is the normal result
+     inside an itch.io embed, not a degraded one: One Tap needs the embedder to delegate
+     `publickey-credentials-get`, and itch.io does not. Click it and the account chooser opens as a popup.
+   - the browser's native account picker (FedCM), which is what the *same build* shows when played from a
+     first-party tab or itch.io's *open in new window*.
+5. Sign in and authorize. The overlay disappears and the game continues signed in.
+6. If it fails, the console line `[Account] Google flow: <code>: <detail> [origin: ...]` names the reason
+   and the exact origin to register. Nothing in this flow fails without saying why any more.
+7. Username and password work regardless of all of the above, and are the fallback when an embed denies
+   popups entirely.
+
+**Test on desktop Chrome first.** Steps 3 and 6 assume DevTools, and a phone in Brave adds its own
+refusals on top of the structural ones above. Verifying on desktop establishes whether the *origin* is
+right before you start chasing a popup or a Shield that only exists on the device you happen to hold.
 
 ---
 
@@ -142,6 +240,42 @@ For development/testing, keep it in Testing mode with test users added.
 **Cause:** Using a Desktop OAuth client instead of Web Application.
 
 **Fix:** Create a new OAuth client with type **Web application** and update the Client ID.
+
+---
+
+### Error: `Google sign-in was cancelled.` on itch.io / any embedded build
+
+If the browser console shows **`[GSI_LOGGER]: The given origin is not allowed for the given client ID.`**
+(with a 403 on `accounts.google.com/gsi/status` beside it), this is not a code bug and no fallback fixes
+it: the origin the game is served from is missing from the OAuth client's **Authorized JavaScript
+origins**. GIS checks that before it will draw *anything*, so One Tap and the button both die at the same
+gate. Register the origin, exactly as the log reports it, and it works.
+
+The bridge now surfaces that rejection instead of hiding it. Look for
+`[Account] Google flow: <code>: <detail> [origin: ...]`:
+
+- `unavailable: ... not in the OAuth client's Authorized JavaScript origins ... ; GIS said: [GSI_LOGGER]
+  ...` — the origin is wrong or absent. This fires only after the bridge waited five seconds and Google
+  drew nothing, so a slow-but-successful render is never mistaken for a rejection. Copy the `[origin: …]`
+  value into the Cloud Console.
+- `unavailable: accounts.google.com/gsi/client failed to load` — the host page's Content-Security-Policy
+  or COEP headers are blocking Google's script. No origin list will help; that is the embedder's policy,
+  and the player needs username and password.
+- `failed: One Tap dismissed: <reason>` / `One Tap not displayed: <reason>` — One Tap cannot draw its
+  floating UI inside a third-party iframe, which is normal on itch.io and is exactly what the fallback
+  button exists for. It is only fatal if the fallback fails too.
+- `cancelled` — the player actually backed out. Nothing to fix.
+
+**Fix:** Register the iframe's origin. Then, if the embed still denies popups, treat web play as
+username/password-only and point players at the new-window button for Google.
+
+**Diagnose without a build:** `node Tools/WebGL/iframe-probe/serve.mjs` then open
+`http://localhost:8001`. That serves a two-origin page — an embedder on `:8001` framing a GIS test page on
+`:8000` — which is the same shape as itch.io, and it prints GIS's raw verdicts (`isNotDisplayed`,
+`getNotDisplayedReason`, whether the fallback button actually materialised an iframe, whether `window.open`
+is permitted) instead of translating them into a player message. Switch the dropdown between *no allow=*,
+*delegated FedCM*, *FedCM disabled* and *not an iframe at all* to see which of those the host is responsible
+for. Thirty seconds against a browser, versus a CI cycle per guess.
 
 ---
 
@@ -194,12 +328,13 @@ AccountManager.SignInWithGoogleAsync()
     ↓
 GoogleTokenProvider.RequestIdTokenAsync(clientId)
     ↓
-Windows: Opens browser to Google OAuth (loopback http://127.0.0.1)
-WebGL: JavaScript bridge to Google OAuth popup
+Windows: browser → Google OAuth → form_post redirect to the loopback listener
+WebGL:     in-page Google Identity Services → FedCM One Tap, or a rendered Google button in a DOM
+           overlay when One Tap can't display (a third-party iframe cannot host One Tap's UI)
     ↓
-Google validates user, redirects with ID token
+Google produces an OpenID Connect ID token
     ↓
-Token validated (state + nonce check)
+Token validated (Windows: state + nonce · WebGL: nonce)
     ↓
 AuthenticationService.SignInWithGoogleAsync(idToken)
     ↓
@@ -239,12 +374,15 @@ For now, we're using the custom OAuth flow for better control and native integra
 
 - [ ] Google provider configured in Unity Dashboard
 - [ ] Web Application OAuth client created in Google Cloud Console
-- [ ] All redirect URIs added to OAuth client
-- [ ] OAuth consent screen configured with test users
+- [ ] Redirect URIs added for the Windows loopback flow (`http://127.0.0.1:7777/callback/`)
+- [ ] **Authorized JavaScript origins** added for every host the WebGL build can be served from
+- [ ] OAuth consent screen configured with test users (or the app published) — a consent screen stuck in
+      *Testing* refuses every Google account that isn't listed, whatever the origins say
 - [ ] Client ID added to `GoogleAuthSettings.asset`
 - [ ] Same Client ID entered in Unity Dashboard
 - [ ] Windows build test: Browser opens, sign-in works, game receives token
-- [ ] WebGL build test (if applicable): Popup works, token received
+- [ ] WebGL build test on the *deployed* page: One Tap or the fallback button appears, token received
+- [ ] WebGL failure is diagnosable: `[Account] Google flow:` names a reason and an origin
 - [ ] Google sign-in reaches MainMenu with the new profile's `Username#Tag`
 - [ ] Already-linked account rejects second link attempt
 - [ ] Sign out and sign back in works, and a restart skips login entirely

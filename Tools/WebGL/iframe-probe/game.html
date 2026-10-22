@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Overlink GIS probe - game frame</title>
+    <style>
+      body { font: 13px/1.6 ui-monospace, Consolas, monospace; background: #14161a; color: #d6d9de; margin: 0; padding: 14px; }
+      h1 { font-size: 13px; margin: 0 0 10px; color: #8ab4f8; font-weight: 600; }
+      button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid #3c4048; background: #21252b; color: #d6d9de; cursor: pointer; }
+      button:hover { background: #2a2f36; }
+      #log { white-space: pre-wrap; word-break: break-word; margin: 12px 0 0; padding: 10px; background: #0e1013; border: 1px solid #262a30; border-radius: 6px; min-height: 180px; }
+      .ok { color: #7fd28c; } .bad { color: #f28b82; } .dim { color: #8b929c; }
+      #gsi-host { margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>game frame (child origin)</h1>
+    <button id="go">Continue with Google</button>
+    <div id="gsi-host"></div>
+    <pre id="log"></pre>
+
+    <script>
+      // Mirrors Assets/Plugins/WebGL/OverlinkGoogleAuth.jslib, but prints GIS's raw verdicts instead of
+      // translating them into a player message. The verdicts are the point of this page.
+      var CLIENT_ID =
+        new URLSearchParams(location.search).get("client") ||
+        "368956467694-isuifa9vd7u9guimip7hr61uf5o83jdt.apps.googleusercontent.com";
+      var useFedCm = new URLSearchParams(location.search).get("nofedcm") !== "1";
+
+      var logEl = document.getElementById("log");
+      function line(text, cls) {
+        var span = document.createElement("span");
+        span.textContent = text + "\n";
+        if (cls) span.className = cls;
+        logEl.appendChild(span);
+        console.log("[probe:game] " + text);
+        try { window.parent.postMessage({ type: "probe", text: text }, "*"); } catch (e) {}
+      }
+      function fact(label, value) { line("  " + label + ": " + value, "dim"); }
+
+      document.getElementById("go").addEventListener("click", function () {
+        line("--- click handled (transient user activation starts here) ---", "ok");
+        fact("in an iframe", window.self !== window.top);
+        fact("this document's origin", location.origin);
+        try { fact("top-level origin", window.top.location.origin); }
+        catch (e) { fact("top-level origin", "unreadable (cross-origin, expected)"); }
+        fact("PublicKeyCredential available", "PublicKeyCredential" in window);
+        fact("FedCM for prompt", useFedCm);
+
+        var script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.onload = start;
+        script.onerror = function () { line("GIS script failed to load (CSP? offline?)", "bad"); };
+        document.head.appendChild(script);
+      });
+
+      function start() {
+        if (!window.google || !google.accounts || !google.accounts.id) {
+          line("google.accounts.id missing after load", "bad");
+          return;
+        }
+        line("GIS loaded", "ok");
+
+        google.accounts.id.initialize({
+          client_id: CLIENT_ID,
+          nonce: "probe-" + Math.random().toString(36).slice(2),
+          use_fedcm_for_prompt: useFedCm,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          callback: function (response) {
+            if (response && response.credential) {
+              line("CREDENTIAL RECEIVED (" + response.credential.length + " chars)", "ok");
+              try {
+                var claims = JSON.parse(atob(response.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+                fact("sub", claims.sub);
+                fact("email verified", claims.email_verified);
+                fact("aud", claims.aud);
+              } catch (e) { fact("claim decode", "failed: " + e.message); }
+            } else {
+              line("callback fired with no credential", "bad");
+            }
+          },
+        });
+
+        line("calling prompt() (One Tap)...");
+        google.accounts.id.prompt(describe);
+      }
+
+      function describe(notification) {
+        var notDisplayed = notification.isNotDisplayed();
+        var skipped = notification.isSkippedMoment();
+        var dismissed = notification.isDismissedMoment();
+        fact("isNotDisplayed", notDisplayed);
+        fact("isSkippedMoment", skipped);
+        fact("isDismissedMoment", dismissed);
+        try { if (notDisplayed) fact("notDisplayedReason", notification.getNotDisplayedReason()); } catch (e) {}
+        try { if (skipped) fact("skippedReason", notification.getSkippedReason()); } catch (e) {}
+        try { if (dismissed) fact("dismissedReason", notification.getDismissedReason()); } catch (e) {}
+
+        if (notDisplayed || (skipped && notification.getSkippedReason && notification.getSkippedReason() !== "user_cancel")) {
+          line("One Tap unavailable here -> falling back to renderButton()", "bad");
+          fallbackButton();
+        } else if (dismissed && notification.getDismissedReason && notification.getDismissedReason() !== "credential_returned") {
+          line("One Tap dismissed: " + notification.getDismissedReason(), "bad");
+        } else {
+          line("One Tap displayed normally", "ok");
+        }
+      }
+
+      function fallbackButton() {
+        try { google.accounts.id.cancel(); } catch (e) {}
+        var host = document.getElementById("gsi-host");
+        try {
+          google.accounts.id.renderButton(host, { theme: "outline", size: "large", text: "signin_with" });
+          line("renderButton() returned without throwing", "ok");
+        } catch (e) {
+          line("renderButton() threw: " + e.message, "bad");
+          return;
+        }
+        // Whether the button actually materialised is a separate question from whether the call returned.
+        setTimeout(function () {
+          var frames = host.querySelectorAll("iframe");
+          fact("iframes inside the button host", frames.length);
+          if (frames.length) {
+            line("BUTTON RENDERED - click it to test the popup path", "ok");
+            fact("button size", Math.round(frames[0].offsetWidth) + "x" + Math.round(frames[0].offsetHeight));
+          } else {
+            line("renderButton produced nothing; this embed cannot host GIS UI at all", "bad");
+          }
+          // Independent check on the popup path, which is what the button's click handler needs.
+          var probe = window.open("about:blank", "_blank");
+          fact("window.open allowed", !!probe && !probe.closed);
+          if (probe) probe.close();
+        }, 1500);
+      }
+    </script>
+  </body>
+</html>

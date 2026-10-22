@@ -35,14 +35,22 @@ translated to player-facing text by `AuthResult.FromException`.
 2. In Google Cloud Console, create an OAuth client ID and put the client ID (not a secret)
    in `Assets/Resources/GoogleAuthSettings.asset`.
 3. For WebGL, use a Web application client and add the deployed game's exact origin to the
-   authorized JavaScript origins. The WebGL bridge loads Google Identity Services from the
-   browser and receives its OpenID Connect ID token.
+   **authorized JavaScript origins** — scheme and host only, never a path. On itch.io that is the host the
+   game *iframe* is served from, not the page the player visits, and the bridge logs the real value as
+   `[origin: …]` on every failure. Redirect URIs do nothing for WebGL: Google Identity Services returns an
+   ID token to the page directly and never performs a redirect. The bridge tries One Tap first (with
+   FedCM), then falls back to rendering Google's own button in a DOM overlay when One Tap can't display —
+   and on itch.io it *can't*, because One Tap in a cross-origin iframe requires the embedder to delegate
+   `publickey-credentials-get` and itch.io delegates nothing. Expect the button to be the working path
+   there. Every outcome is reported as a coded diagnostic rather than a bare cancellation.
+   See `docs/GOOGLE-AUTH-SETUP.md`.
 4. For Windows, add the loopback redirect `http://127.0.0.1:7777/callback/` to the OAuth client's
    authorized redirect URIs. The game opens the system browser and listens on that **fixed** port
    using the OAuth `form_post` callback; a dynamic port guarantees `redirect_uri_mismatch`, which is
    why `GoogleTokenProvider` pins 7777 instead of probing for a free one.
 5. Test on the real deployed WebGL origin; `localhost` and production origins are separate
-   Google OAuth origins.
+   Google OAuth origins. An embed that denies popups cannot do Google sign-in at all — the player needs
+   the host's "open in new window" affordance, or the username and password provider.
 
 The Google client ID is committed in `Assets/Resources/GoogleAuthSettings.asset`. A client ID is
 public configuration — it travels inside the player either way — but a client secret must never be

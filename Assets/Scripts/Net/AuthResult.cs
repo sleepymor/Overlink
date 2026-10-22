@@ -76,6 +76,32 @@ namespace Overlink.Net
                 return Fail(AuthErrorCode.UserCancelled, "Sign-in was cancelled.", ex.Message);
             }
 
+            // Google's own outcomes, checked before the substring pass below on purpose: several of its
+            // sentences legitimately contain the words "password" or "timeout", and matching those
+            // against the message would tell the player they picked a weak password or lost connectivity.
+            if (ex is GoogleTokenProvider.GoogleDeclineException decline)
+            {
+                switch (decline.Decline)
+                {
+                    case GoogleTokenProvider.GoogleDecline.Unavailable:
+                        // Google refused this host outright, or its UI could not be drawn here. Neither
+                        // is something the player can fix, so lead with the path that definitely works.
+                        // The word "password" is deliberate and load-bearing: GoogleDeclineMappingTests
+                        // pins that the structured branch beats the substring pass below it.
+                        return Fail(AuthErrorCode.ConfigError,
+                            "Google sign-in isn't available on this host. Continue with a username and " +
+                            "password, or try Google again later from the game's own page.", ex.Message);
+                    case GoogleTokenProvider.GoogleDecline.Failed:
+                        return Fail(AuthErrorCode.InvalidCredentials,
+                            "Google sign-in didn't return a credential. Please try again.", ex.Message);
+                    case GoogleTokenProvider.GoogleDecline.TimedOut:
+                        return Fail(AuthErrorCode.UserCancelled,
+                            "Google sign-in didn't finish in time. Please try again.", ex.Message);
+                    default:
+                        return Fail(AuthErrorCode.UserCancelled, "Google sign-in was cancelled.", ex.Message);
+                }
+            }
+
             string message = (ex.Message ?? "").ToLowerInvariant();
 
             if (message.Contains("invalid credentials") || message.Contains("wrong password")
