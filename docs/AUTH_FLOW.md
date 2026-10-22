@@ -173,6 +173,34 @@ failure, because offering a player a way out of the embed alongside a working bu
 it for no reason. `probeFedCM` logs `publickey-credentials-get=denied|granted|prompt` in the meantime, so
 a future build says which of those worlds it is in.
 
+A fourth point is now watched, though it has never been *seen* failing: the **handback**, where Google's
+popup completes the authentication and has to return the ID token to the frame that opened it. Nothing on
+that path reaches `error_callback`, so it fails as silence and C# burns its deadline. The bridge therefore
+wraps `window.open` and taps `postMessage` for the flow's duration: a popup that closes without delivering
+a token is a named `failed` diagnostic carrying its URL (single-use secrets redacted, payload shape only —
+a bearer credential never enters a log line), and an event with the opaque `origin: null` that a sandboxed
+popup produces is visible at all. Both are non-terminal, and both are uninstalled when the flow ends,
+because a wrapped `window.open` left in a shipped page is worse than the diagnostic it buys.
+
+**Check which build a console belongs to before reading it.** A browser console belongs to whichever build
+the tab loaded, and a tab left open across a deploy keeps reporting the previous one. Every symptom in this
+section was observed on itch, so this is worth more than a footnote: one full round here was spent on a
+console showing only `fallback: One Tap not displayed`, which read as the FedCM opt-out having failed and
+was in fact the pre-opt-out build. The deployed bridge is a public static file, so the question "is my fix
+live?" never needs a playtest:
+
+```
+node Tools/WebGL/check-deployed-build.mjs "https://sleepymor.itch.io/<game>?secret=<unlisted-secret>"
+```
+
+It resolves the frame directory and `?v=` stamp the page points at, decodes `Build/Overlink.framework.js.br`,
+prints the live `use_fedcm_for_prompt` / `use_fedcm_for_button` values, and reports which round's markers the
+shipped bridge contains — exiting non-zero when the button still uses FedCM, or when neither flag is present
+and the deployment predates the fix outright. Pass a frame directory instead of a page URL to check a build
+you already identified. itch's CDN sends no `Permissions-Policy`, `X-Frame-Options` or COOP/COEP header on the
+game frame either, which is worth knowing: gate 3 depends entirely on the embedder's `allow` attribute and
+nothing else, so `probeFedCM`'s one line is the whole verdict.
+
 Every gate above reports through GIS's `error_callback` or the prompt notification rather than guessing,
 and a recoverable error is deliberately **not** terminal: the overlay survives a failed attempt so the
 player can retry, since tearing down the card they are looking at turns a retry into a relaunch.
@@ -204,14 +232,19 @@ see the others:
   from a wrong value, a malformed token never matches, and the raw token never leaks into a player
   message. `VerifyNonce` deliberately lives below the platform `#if`s so the check the WebGL path depends
   on is one the editor can actually execute.
-- **`node Tools/WebGL/gsi-bridge-test.mjs` (76 assertions).** A `.jslib` belongs to no assembly, so
+- **`node Tools/WebGL/gsi-bridge-test.mjs` (108 assertions).** A `.jslib` belongs to no assembly, so
   nothing in `Assets/Tests` can reference it and Unity's runner cannot see it at all. This harness stubs
   `mergeInto`, `UTF8ToString`, `SendMessage`, the DOM, fake timers and `google.accounts.id`, and covers
   what the bridge does with each GIS outcome: the One Tap → button handoff, the coded diagnostics, the
   five-second render verification, the console tap's install and restore, the non-terminal `error_callback`,
-  the hidden-until-failed new-tab exit, the FedCM probe, and the two transport flags being opposite. Every
-  guard in it has been mutation-verified: deleting the guard must fail an assertion, not just reduce the
-  count.
+  the hidden-until-failed new-tab exit, the FedCM probe, the two transport flags being opposite, and the
+  handback spies - a closed popup named once and non-terminally, secrets redacted from its URL, message
+  payloads reduced to their shape, host `postMessage` filtered out, and `window.open` plus the listener
+  given back when the flow ends. Every guard in it has been mutation-verified: deleting the guard must fail
+  an assertion, not just reduce the count.
+- **`node Tools/WebGL/check-deployed-build.mjs`.** Answers "is my fix actually live?" against the public
+  static files itch is serving, without a playtest, and exits non-zero when the deployed bridge still has
+  the button on FedCM. It is what identified the stale console above.
 - **`Tools/WebGL/iframe-probe/serve.mjs`.** A real two-origin embed, in a browser, in thirty seconds,
   printing GIS's raw verdicts instead of translating them into a player message. Use it before theorising
   about any iframe regression; it is how gate 3 above was confirmed to be about `allow=` rather than the
@@ -222,8 +255,3 @@ restart → cached session resumed and setup skipped; sign out → back to Auth;
 directly while signed out → redirected to Auth; wrong password and under-13 and short-username → the
 matching player-facing error with no state change. The Google path itself can only be verified against a
 deployed WebGL build on its real origin, which is why every layer above exists.
-
-Verified end to end in play mode: register → age → username#tag → MainMenu with the name showing;
-restart → cached session resumed and setup skipped; sign out → back to Auth; a protected scene opened
-directly while signed out → redirected to Auth; wrong password and under-13 and short-username → the
-matching player-facing error with no state change.

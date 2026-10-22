@@ -56,7 +56,10 @@ translated to player-facing text by `AuthResult.FromException`.
    using the OAuth `form_post` callback; a dynamic port guarantees `redirect_uri_mismatch`, which is
    why `GoogleTokenProvider` pins 7777 instead of probing for a free one.
 5. Test on the real deployed WebGL origin; `localhost` and production origins are separate
-   Google OAuth origins. An embed that denies popups cannot do Google sign-in at all — the player needs
+   Google OAuth origins. Before reading any console, confirm the tab loaded the build you think it did:
+   `node Tools/WebGL/check-deployed-build.mjs "<game page URL>"` prints the frame directory, the live
+   FedCM flags and the diagnostics the *shipped* bridge contains, without a playtest. An embed that
+   denies popups cannot do Google sign-in at all — the player needs
    the host's "open in new window" affordance, or the username and password provider.
 
 The Google client ID is committed in `Assets/Resources/GoogleAuthSettings.asset`. A client ID is

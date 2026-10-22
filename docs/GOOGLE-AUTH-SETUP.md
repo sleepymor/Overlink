@@ -309,18 +309,25 @@ itch.io and the **Sign in in a new tab** button in the overlay is the answer —
 first-party, so there is no embedder to refuse anything. Until then, the `FedCM availability in this
 frame: publickey-credentials-get=…` line tells you which world a given build is running in.
 
-**To reproduce without a build:** `node Tools/WebGL/iframe-probe/serve.mjs`, open `http://localhost:8001`,
-and switch the embedder's `allow=` dropdown between *delegated FedCM* and *no allow=*. That is the same
-two-origin shape itch.io uses, and it shows the refusal directly instead of inferring it from a player
-report.
+**First, confirm the build you are looking at has the fix.** A browser console belongs to whichever build
+the tab loaded, and a tab left open across a deploy keeps reporting the previous one — this exact symptom was
+diagnosed twice from one stale page before anyone noticed the frame directory had changed. Check the deployed
+bridge without playing the game:
 
-**Diagnose without a build:** `node Tools/WebGL/iframe-probe/serve.mjs` then open
-`http://localhost:8001`. That serves a two-origin page — an embedder on `:8001` framing a GIS test page on
-`:8000` — which is the same shape as itch.io, and it prints GIS's raw verdicts (`isNotDisplayed`,
-`getNotDisplayedReason`, whether the fallback button actually materialised an iframe, whether `window.open`
-is permitted) instead of translating them into a player message. Switch the dropdown between *no allow=*,
-*delegated FedCM*, *FedCM disabled* and *not an iframe at all* to see which of those the host is responsible
-for. Thirty seconds against a browser, versus a CI cycle per guess.
+```
+node Tools/WebGL/check-deployed-build.mjs "https://sleepymor.itch.io/<game>?secret=<unlisted-secret>"
+```
+
+It prints the frame directory and `?v=` stamp the page resolves to, the live `use_fedcm_for_prompt` /
+`use_fedcm_for_button` values, and which round's diagnostics the shipped bridge contains.
+
+**To reproduce without a build:** `node Tools/WebGL/iframe-probe/serve.mjs`, then open `http://localhost:8001`.
+That serves a two-origin page — an embedder on `:8001` framing a GIS test page on `:8000` — which is the same
+shape as itch.io, and it prints GIS's raw verdicts (`isNotDisplayed`, `getNotDisplayedReason`, whether the
+fallback button actually materialised an iframe, whether `window.open` is permitted) instead of translating
+them into a player message. Switch the dropdown between *no allow=*, *delegated FedCM*, *FedCM disabled* and
+*not an iframe at all* to see which of those the host is responsible for. Thirty seconds against a browser,
+versus a CI cycle per guess.
 
 ---
 
