@@ -90,16 +90,32 @@ global.document = {
   createElement: makeElement,
 };
 
-// window.open is the escape hatch's whole surface, so it is recorded rather than merely tolerated: a
-// bridge that opens a tab nobody asked for, or forgets to finish the flow afterwards, is a bug here.
+// window.open is the escape hatch's whole surface, and from case 26 onward it is also the handback the
+// bridge spies on, so the returned window is a live object a case can mark closed rather than a token.
+// Message listeners are tracked the same way: the bridge adds one, and leaving it behind is a leak.
+const opened = [];
+const listeners = [];
+
+function realWindowOpen(url, target) {
+  const win = { closed: false };
+  opened.push({ url, target, win });
+  return win;
+}
+
 global.window = {
   location: { origin: "https://html5.itch.zone", href: "https://html5.itch.zone/7000/abc/index.html" },
-  open: (url, target) => {
-    opened.push({ url, target });
-    return { fake: "window" };
+  addEventListener: (type, fn) => listeners.push({ type, fn }),
+  removeEventListener: (type, fn) => {
+    const at = listeners.findIndex((l) => l.type === type && l.fn === fn);
+    if (at >= 0) listeners.splice(at, 1);
   },
+  open: realWindowOpen,
 };
-const opened = [];
+
+// Delivers a postMessage to whatever the bridge has listening, the way GIS's popup would.
+function postMessage(origin, data) {
+  for (const l of listeners.filter((x) => x.type === "message")) l.fn({ origin, data });
+}
 
 // navigator.permissions stays absent by default, because the bridge must cope with a browser that has
 // no opinion about publickey-credentials-get. Cases that care about the FedCM probe install it. Only
@@ -207,15 +223,13 @@ function reset() {
   sent.length = 0;
   opened.length = 0;
   gsiLog.length = 0;
+  listeners.length = 0;
   document.body.children.length = 0;
   document.head.children.length = 0;
   resetTimers();
   // A case that installed a permissions stub or a blocking window.open must not leak it into the next.
   window.navigator = undefined;
-  window.open = (url, target) => {
-    opened.push({ url, target });
-    return { fake: "window" };
-  };
+  window.open = realWindowOpen;
   // A fresh console each case, so a bridge that fails to restore its tap shows up as a failure rather
   // than silently poisoning the next case. say() keeps a handle on the real stdout, because this stub
   // replaces the very console the report is printed through.
@@ -670,6 +684,140 @@ function check(name, cond, detail) {
   check("25 lone warning is labelled",
     diag() && /GIS said \(warning\): \[GSI_LOGGER\]: something GIS felt obliged to mention/.test(diag()[2]),
     "warning lost or unlabelled: " + JSON.stringify(diag() && diag()[2]));
+}
+
+// Case 26: the handback gate. GIS's popup authenticates the player and then closes without ever
+// delivering a token - the symptom that arrived as "it throws me on accounts.google.com/gsi/transform".
+// Nothing on that path reaches error_callback, so without the window.open spy the flow is silent and C#
+// burns its three-minute deadline. It must also stay non-terminal: the button on screen still works.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("opt_out_or_no_session")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+
+  // The bridge only sees the popup GIS itself opens, so simulate the click from GIS's side.
+  const popup = window.open(
+    "https://accounts.google.com/gsi/transform?client_id=cid&nonce=SECRETNONCE&state=STATEVALUE&uxmode=ruby",
+    "_blank", "width=500");
+  check("26 open is recorded", opened.length === 1, JSON.stringify(opened.map((o) => o.url)));
+  check("26 the handback endpoint is named", allDiags().some((d) => /gsi\/transform/.test(d[2])),
+    "never reported: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("26 single-use secrets are redacted", allDiags().some((d) => /nonce=<redacted>/.test(d[2]) && !/SECRETNONCE/.test(d[2])),
+    "a raw nonce reached the log: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("26 state is redacted too", allDiags().some((d) => !/STATEVALUE/.test(d[2])),
+    "raw state reached the log");
+  check("26 opening alone is not a failure", !allDiags().some((d) => d[2].startsWith("failed|")),
+    "reported a failure for a popup that is still open");
+
+  popup.closed = true;
+  advance(1500);
+  check("26 a closed popup is named", allDiags().some((d) => d[2].startsWith("failed|") && /closed without returning a token/.test(d[2])),
+    "silence: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("26 closed popup stays non-terminal", !token(), "a handback failure ended the flow");
+  check("26 the player is told", styleProp("overlink-gsi-failure", "display") === "block",
+    "no explanation on screen");
+  check("26 the new-tab exit is offered", styleProp("overlink-gsi-newtab", "display") === "inline-block",
+    "no way out of the iframe");
+  const before = allDiags().length;
+  advance(60000);
+  check("26 reported once", allDiags().length === before,
+    `the watcher keeps firing: ${before} -> ${allDiags().length}`);
+
+  // And the retry the surviving card exists for still works.
+  gsi.initializedWith.callback({ credential: "jwt.after-handback-failure" });
+  check("26 token after a handback failure lands", token() && token()[2] === "jwt.after-handback-failure",
+    JSON.stringify(token()));
+}
+
+// Case 27: the message tap. A sandboxed popup's postMessage arrives with an opaque ("null") origin,
+// which is the leading hypothesis for an authenticated-but-tokenless handback - so it has to be visible.
+{
+  reset();
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  postMessage("https://accounts.google.com", { credential: "a.b.c", exp: 1 });
+  check("27 google-origin message noticed", allDiags().some((d) => /postMessage from origin https:\/\/accounts\.google\.com/.test(d[2])),
+    JSON.stringify(allDiags().map((d) => d[2])));
+  check("27 only its shape is logged", allDiags().some((d) => /\{credential,exp\}/.test(d[2]) && !/a\.b\.c/.test(d[2])),
+    "the credential itself reached the log: " + JSON.stringify(allDiags().map((d) => d[2])));
+  postMessage("https://html-classic.itch.zone", { noise: true });
+  check("27 host chatter is ignored", !allDiags().some((d) => /itch\.zone.*noise/.test(d[2])),
+    "reported the embedder's own messaging");
+  postMessage("null", { credential: "x" });
+  check("27 opaque origin is reported", allDiags().some((d) => /postMessage from origin null/.test(d[2])),
+    "the sandboxed-popup case is invisible");
+  // A string payload is the shape that would leak a credential wholesale, so it gets the same treatment:
+  // its length is useful, its contents are not.
+  const raw = "id_token=eyJhbGciOiJSUzI1NiJ9.e30.secret&state=abc";
+  postMessage("https://accounts.google.com", raw);
+  check("27 a string payload is measured, not echoed",
+    allDiags().some((d) => d[2].includes("string(" + raw.length + ")")),
+    "no exact-length report: " + JSON.stringify(allDiags().map((d) => d[2])));
+  check("27 and never echoed", !allDiags().some((d) => /eyJhbGciOiJSUzI1NiJ9|id_token=/.test(d[2])),
+    "a raw bearer token reached the diagnostic log");
+  check("27 messages are non-terminal", !token(), "a postMessage ended the flow");
+}
+
+// Case 28: the spies are borrowed. A wrapped window.open or a lingering message listener outliving the
+// flow is a global hook in a shipped page, which is the same mistake the console tap was made not to be.
+{
+  reset();
+  const before = { open: window.open, count: listeners.length };
+  installGsi({ prompt: (cb) => cb(notDisplayed("iframe")) });
+  invoke(loadBridge());
+  check("28 window.open is wrapped", window.open !== before.open, "spies never touched window.open");
+  check("28 a listener is attached", listeners.length === before.count + 1,
+    `listeners: ${before.count} -> ${listeners.length}`);
+  gsi.initializedWith.callback({ credential: "jwt.x" });
+  check("28 window.open restored", window.open === before.open, "the wrapper leaked past the flow");
+  check("28 listener removed", listeners.length === before.count,
+    `a message listener outlived the flow: ${listeners.length}`);
+}
+
+// Case 29: the escape hatch opens a window on purpose. Reporting that as a GIS handback would be noise
+// dressed as a diagnosis, and the one line a reader needs would sit under it.
+{
+  reset();
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  press("overlink-gsi-newtab");
+  check("29 the tab really opened", opened.length === 1, JSON.stringify(opened));
+  check("29 our own navigation is not reported as GIS's",
+    !allDiags().some((d) => /sign-in window opened/.test(d[2])),
+    "the bridge reported its own window.open: " + JSON.stringify(allDiags().map((d) => d[2])));
+  advance(60000);
+  check("29 and not reported late either", !allDiags().some((d) => /closed without returning a token/.test(d[2])),
+    "the muted popup was still watched: " + JSON.stringify(allDiags().map((d) => d[2])));
+}
+
+// Case 30: a refused popup. It is named once, at the moment it is refused, and the watcher must not fire
+// again a second later for the same null window.
+{
+  reset();
+  window.open = () => null;
+  installGsi({
+    prompt: (cb) => cb(notDisplayed("iframe")),
+    render: (host) => host.appendChild(makeElement("iframe")),
+  });
+  invoke(loadBridge());
+  window.open("https://accounts.google.com/gsi/transform?x=1", "_blank");
+  const refusals = allDiags().filter((d) => /window\.open returned null/.test(d[2]));
+  check("30 refusal is named", refusals.length === 1,
+    `expected exactly one report, got ${refusals.length}: ${JSON.stringify(allDiags().map((d) => d[2]))}`);
+  advance(60000);
+  check("30 refusal is named once", allDiags().filter((d) => /window\.open returned null/.test(d[2])).length === 1,
+    "the watcher kept firing on a null window");
+  check("30 a refused popup is not also reported as a closed one",
+    !allDiags().some((d) => /closed without returning a token/.test(d[2])),
+    "the watcher treated a null window as a closed popup and invented a second failure: " +
+      JSON.stringify(allDiags().map((d) => d[2])));
+  check("30 a refused popup is not terminal", !token(), "a blocked popup ended the flow");
 }
 
 const failed = results.filter((r) => !r.pass);

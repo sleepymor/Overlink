@@ -76,6 +76,114 @@ mergeInto(LibraryManager.library, {
       consoleTap = null;
     }
 
+    // Two passive spies, installed for the flow's duration and removed by finish() exactly like the
+    // console tap. They exist because the failure has now moved past everything this bridge watches. The
+    // account chooser opens, authenticates the player, and the *handback* - GIS's popup navigating to
+    // accounts.google.com/gsi/transform and posting the ID token back to its opener - is where an
+    // embedded frame dies. Nothing on that path reaches error_callback, so without these the symptom is
+    // still "the window closed and no reason appeared".
+    //
+    //   - window.open is wrapped to record where GIS sent the player, single-use secrets redacted. If that
+    //     window closes and no token ever arrives, it is now a named failure instead of a silence.
+    //   - a message listener records the handback itself, including the case that matters most: an event
+    //     whose origin is "null", which is what a sandboxed popup's postMessage looks like from the
+    //     receiving side, and a plausible reason a fully authenticated sign-in still produces nothing.
+    //
+    // Both report as 'fallback' and never end the flow. A sandboxed popup is a hypothesis until the log
+    // says so, and the button on screen may still work on the next click.
+    var spies = null;
+
+    function sanitizeUrl(url) {
+      try {
+        return String(url).replace(
+          /([?&](?:nonce|state|hint|session_state|id_token|access_token|code|login_hint)=)[^&]*/gi,
+          '$1<redacted>');
+      } catch (e) { return '<unreadable url>'; }
+    }
+
+    // Shape only, never contents. GIS's handback payload can be large, and a bearer credential is not
+    // something to staple into a diagnostic line that ends up in a support screenshot.
+    function shapeOf(data) {
+      try {
+        if (typeof data === 'string') return 'string(' + data.length + ')';
+        if (data && typeof data === 'object') {
+          var keys = [];
+          for (var k in data) {
+            if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+            keys.push(k);
+            if (keys.length >= 8) break;
+          }
+          return '{' + keys.join(',') + '}';
+        }
+        return typeof data;
+      } catch (e) { return '<unshapeable>'; }
+    }
+
+    function installSpies() {
+      if (spies || typeof window === 'undefined') return;
+      var state = { open: window.open, messages: 0, popups: [], muted: false };
+      spies = state;
+
+      if (typeof state.open === 'function') {
+        var realOpen = state.open;
+        window.open = function () {
+          var win = null;
+          try { win = realOpen.apply(window, arguments); } catch (e) { win = null; }
+          var url = arguments.length > 0 && arguments[0] !== undefined ? String(arguments[0]) : '';
+          state.popups.push({ url: url, win: win });
+          // The escape hatch opens a window deliberately, and reporting our own navigation would be
+          // noise dressed as a diagnosis.
+          if (!state.muted) {
+            report('fallback', 'sign-in window opened to ' + sanitizeUrl(url).slice(0, 200) +
+              (win ? '' : '; the browser refused it (window.open returned null)'));
+          }
+          return win;
+        };
+      }
+
+      state.onMessage = function (event) {
+        if (state.messages >= 6) return;
+        var origin = event && event.origin;
+        var text = String(origin === null || origin === undefined ? '' : origin);
+        // Google's handback, or the opaque origin a sandboxed popup reports. Anything else - itch's host
+        // chatter, Unity's own messaging - would drown the one line this was installed for.
+        if (!(text === 'null' || text === '' || /(^|\.)google\.com$/i.test(text))) return;
+        state.messages++;
+        report('fallback', 'postMessage from origin ' + (text || '<none>') + ': ' + shapeOf(event && event.data));
+      };
+      try { window.addEventListener('message', state.onMessage, false); } catch (e) {}
+
+      state.watch = setInterval(function () {
+        if (done) { clearInterval(state.watch); return; }
+        for (var i = 0; i < state.popups.length; i++) {
+          var popup = state.popups[i];
+          // A null window was refused at open time and already reported there; watching it would fire
+          // immediately on every blocked-popup case and bury the real one.
+          if (!popup.win) continue;
+          var closed = true;
+          try { closed = !!popup.win.closed; } catch (e) { closed = true; }
+          if (!closed) continue;
+          // One named failure per flow: clearInterval below stops the watcher, so a second closed popup
+          // is not reported and the player's screen does not fill with repeats.
+          clearInterval(state.watch);
+          report('failed', "Google's sign-in window closed without returning a token; it had reached " +
+            sanitizeUrl(popup.url).slice(0, 160));
+          revealFailure('Google closed its sign-in window before handing the token back. Try again, ' +
+            'or continue in a new tab.');
+          return;
+        }
+      }, 1000);
+    }
+
+    function removeSpies() {
+      if (!spies) return;
+      var state = spies;
+      spies = null;
+      try { window.open = state.open; } catch (e) {}
+      try { window.removeEventListener('message', state.onMessage, false); } catch (e) {}
+      try { clearInterval(state.watch); } catch (e) {}
+    }
+
     // GIS's own words, when it had any, with the level named. Errors are preferred over warnings rather
     // than merely "most recent": the button transport opt-out logs a deprecation notice on every single
     // flow, so quoting whichever line arrived last would staple that warning onto an unrelated origin
@@ -123,6 +231,7 @@ mergeInto(LibraryManager.library, {
       done = true;
       removeOverlay();
       removeConsoleTap();
+      removeSpies();
       SendMessage(receiver, callback, token || '');
     }
 
@@ -173,11 +282,14 @@ mergeInto(LibraryManager.library, {
     function openInNewTab() {
       var url = (window.location && window.location.href) || '';
       var opened = null;
+      // The spies would otherwise report our own window.open as though GIS had opened a sign-in popup.
+      if (spies) spies.muted = true;
       try {
         opened = window.open(url, '_blank');
       } catch (e) {
         opened = null;
       }
+      if (spies) spies.muted = false;
       if (!opened) {
         finish('', 'unavailable',
           'the browser refused to open a new tab for this embedded frame; allow pop-ups for this page, ' +
@@ -384,7 +496,8 @@ mergeInto(LibraryManager.library, {
     // The timer bounds the hook's lifetime independently of the flow: if GIS never answers, the tap
     // still comes off the console rather than leaking for the page's life.
     installConsoleTap();
-    setTimeout(removeConsoleTap, 4 * 60 * 1000);
+    installSpies();
+    setTimeout(function () { removeConsoleTap(); removeSpies(); }, 4 * 60 * 1000);
 
     if (gsi()) {
       start();
