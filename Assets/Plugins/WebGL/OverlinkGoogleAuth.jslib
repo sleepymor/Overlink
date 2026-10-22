@@ -28,6 +28,13 @@
 // Assets/Tests file that can reference it. Control flow is covered by Tools/WebGL/gsi-bridge-test.mjs
 // (`node Tools/WebGL/gsi-bridge-test.mjs`), which stubs the browser and GIS and runs in a second.
 // Keep that in step with any change below; the alternative is discovering a regression in a WebGL build.
+//
+// STATUS: dormant. GoogleTokenProvider.Supported is false in a WebGL build, so OverlinkGoogleSignIn is
+// never called and this file compiles into a shipped page that does not use it. It is kept rather than
+// deleted because the three iframe gates it was written against (origin, One Tap, FedCM credential
+// exchange) are properties of itch.io and will still be there whenever Google sign-in is offered on web
+// again - see docs/AUTH_FLOW.md. Do not "tidy up" this bridge on the assumption it is dead code, and do
+// not extend it without re-reading that section.
 
 // The handle C# uses to call off a flow it has stopped waiting for. The bridge owns the overlay and C#
 // owns the deadline, so the two need exactly one shared point of contact, and it has to be reachable from

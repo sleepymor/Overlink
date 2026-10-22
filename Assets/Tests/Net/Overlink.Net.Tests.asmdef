@@ -3,6 +3,8 @@
   "rootNamespace": "Overlink.Net.Tests",
   "references": [
     "Overlink.Net",
+    "Unity.Services.Authentication",
+    "Unity.Services.Core",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

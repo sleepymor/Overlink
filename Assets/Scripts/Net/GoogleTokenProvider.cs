@@ -13,13 +13,49 @@ namespace Overlink.Net
 {
     /// <summary>
     /// Obtains a Google OpenID Connect ID token without placing a client secret in the game.
-    /// Windows uses a loopback browser callback; WebGL delegates to the browser through the
-    /// .jslib bridge in Plugins/WebGL.
+    /// Windows uses a loopback browser callback. WebGL is implemented — the .jslib bridge in
+    /// Plugins/WebGL is still built and still covered by its harness — but it is switched off by
+    /// <see cref="Supported"/>: see the note there for what the itch.io iframe does to it.
     /// </summary>
     public static class GoogleTokenProvider
     {
         const string ReceiverName = "OverlinkGoogleAuthReceiver";
         static GoogleTokenReceiver receiver;
+
+        /// <summary>
+        /// True when this build can actually complete a Google sign-in.
+        /// <para>
+        /// WebGL used to be listed here as a supported platform, and the code below still implements it:
+        /// the bridge in <c>Assets/Plugins/WebGL/OverlinkGoogleAuth.jslib</c> is built, tested by
+        /// <c>Tools/WebGL/gsi-bridge-test.mjs</c>, and left in place. It is simply no longer offered,
+        /// because inside itch.io's web-play iframe it cannot be made to work reliably — the embedder
+        /// delegates no credential permissions, and the surviving path (a popup handback) fails in
+        /// silence. See docs/AUTH_FLOW.md ▸ "Google sign-in". Offering a button that fails that way
+        /// costs more than the convenience it buys, so the web build signs in with username and
+        /// password only.
+        /// </para>
+        /// <para>
+        /// To revisit: change the <c>false</c> here to <c>true</c> for WebGL, hand
+        /// <see cref="RequestIdTokenAsync"/> back its <c>return RequestWebGlAsync(clientId);</c>, and
+        /// re-read the three gates in docs/AUTH_FLOW.md first — the bridge is not the part that was
+        /// broken, so a fourth round of bridge work is the wrong instinct.
+        /// </para>
+        /// </summary>
+        public static bool Supported
+        {
+            get
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                return false;
+#elif UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+                return true;
+#else
+                // No transport compiled in, so RequestIdTokenAsync would throw. Saying "supported" here
+                // and failing on the click is the exact shape of the bug this property exists to avoid.
+                return false;
+#endif
+            }
+        }
 
         public static Task<string> RequestIdTokenAsync(string clientId)
         {
@@ -27,11 +63,14 @@ namespace Overlink.Net
                 throw new InvalidOperationException("Google OAuth client ID is not configured.");
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-            return RequestWebGlAsync(clientId);
+            // Unreachable through AccountManager, which checks Supported first. It throws rather than
+            // returning a task that never completes, so a caller that skips that check fails loudly.
+            throw new PlatformNotSupportedException(
+                "Google sign-in is disabled in WebGL builds; use username and password.");
 #elif UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             return RequestWindowsAsync(clientId);
 #else
-            throw new PlatformNotSupportedException("Google sign-in is configured for Windows and WebGL only.");
+            throw new PlatformNotSupportedException("Google sign-in is configured for Windows only.");
 #endif
         }
 

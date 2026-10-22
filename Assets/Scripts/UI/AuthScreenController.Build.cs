@@ -1,3 +1,4 @@
+using Overlink.Net;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,7 +18,47 @@ namespace Overlink.UI
     public sealed partial class AuthScreenController
     {
         const float CardWidth = 480f;
+
+        // Measured in play mode rather than guessed. The stacks are centre-aligned and report their own
+        // padding, so the number that matters is each one's VerticalLayoutGroup preferredHeight, and the
+        // card must clear the taller of the two panels:
+        //   597px  sign-in panel, desktop register mode with an error showing — title, subtitle, Google
+        //          button, divider, three inputs, password hint, submit, mode toggle, error, status
+        //   578px  setup panel at the identity step with an error showing — title, body, preview,
+        //          username, tag row, email, purpose line, error, save, switch-account
+        // The browser build is never taller, because the note that replaces the Google button costs less
+        // than the button and divider it displaces. 660 leaves 63px. Re-measure both panels before adding
+        // a row — 660 was already tuned once, and the address field plus its purpose line are the newest
+        // additions to the setup panel.
         const float CardHeight = 660f;
+
+        /// <summary>
+        /// What the web build says where the Google button would be. Two jobs: name the missing option
+        /// before the player assumes it is broken, and send them at the download rather than at us.
+        /// Deliberately no URL — the itch.io page already has its own download button, and a link that
+        /// only works on one host does not belong in shipped copy. Deliberately "an Overlink account"
+        /// rather than "create an account" too: this line is equally read by players who already have
+        /// one and are looking for the sign-in they expect.
+        /// </summary>
+        const string GoogleUnavailableCopy =
+            "Google sign-in isn't part of the browser build. Play here with an Overlink account below, " +
+            "or download the desktop version to sign in with Google.";
+
+        /// <summary>
+        /// Why the setup step asks for an address, said before the player types one.
+        /// <para>
+        /// Collecting personal data without stating the purpose in the same screen is the part a player
+        /// reasonably objects to, and it is the part that is free to fix. It also has to draw a line
+        /// against the rest of the panel: username and tag are broadcast to other players, and an email
+        /// sitting two rows below them reads like part of the same public identity unless told otherwise.
+        /// </para>
+        /// <para>
+        /// No promise of a specific message. The project cannot send mail yet, so "we'll email you a
+        /// receipt" would be a debt this screen hands to a future build.
+        /// </para>
+        /// </summary>
+        const string EmailPurposeCopy =
+            "Used to contact you about your account and future purchases. Other players never see it.";
 
         /// <summary>True when a hand-wired screen is present and the builder should stay out of the way.</summary>
         bool IsWired()
@@ -69,7 +110,14 @@ namespace Overlink.UI
             googleButton = UiKit.Button("Google Button", root, "Continue with Google", UiKit.Style.Google)
                 .GetComponent<Button>();
 
-            UiKit.Text("Or", root, "—  or use your Overlink account  —", 12f, UiKit.TextDim,
+            // The web build's answer to "where is my Google button?", which is a support question the
+            // moment the button is merely absent. Same slot, opposite state — ApplyProviderAvailability
+            // keeps exactly one of these two on screen.
+            googleUnavailableNote = UiKit.Text("Google Unavailable Note", root, GoogleUnavailableCopy, 12f,
+                UiKit.TextDim, TextAlignmentOptions.Center, FontStyles.Normal, 48f);
+            googleUnavailableNote.gameObject.SetActive(false);
+
+            googleDivider = UiKit.Text("Or", root, "—  or use your Overlink account  —", 12f, UiKit.TextDim,
                 TextAlignmentOptions.Center);
 
             usernameInput = UiKit.InputField("Username Input", root, "Username", 20,
@@ -79,6 +127,12 @@ namespace Overlink.UI
             confirmPasswordInput = UiKit.InputField("Confirm Password Input", root, "Confirm password", 30,
                 TMP_InputField.ContentType.Password);
             confirmPasswordInput.gameObject.SetActive(false);
+
+            // Shown only while creating an account, and only long enough to choose a password: Unity's
+            // own rejection says nothing about which rule was missed, so the rules go on the form.
+            passwordHint = UiKit.Text("Password Hint", root, PasswordPolicy.Requirements, 11f, UiKit.TextDim,
+                TextAlignmentOptions.Center, FontStyles.Normal, 30f);
+            passwordHint.gameObject.SetActive(false);
 
             submitButton = UiKit.Button("Submit Button", root, "Sign In", UiKit.Style.Primary).GetComponent<Button>();
 
@@ -162,6 +216,22 @@ namespace Overlink.UI
             rerollElement.flexibleWidth = 0f;
             rerollElement.minWidth = rerollElement.preferredWidth = 86f;
             randomTagButton = reroll.GetComponent<Button>();
+
+            // ContentType.Standard, not EmailAddress: TMP's email content type swallows invalid
+            // characters as they are typed, which would leave EmailPolicy's errors unreachable and the
+            // player staring at a field that eats keystrokes without saying why. Better to accept the
+            // keystroke and name the problem.
+            identityEmailInput = UiKit.InputField("Email Input", root, "Email address",
+                EmailPolicy.MaxLength, TMP_InputField.ContentType.Standard);
+
+            // The one line that makes this field defensible. Everything above it on this panel is a
+            // public identity, so the address has to be told apart from that explicitly: it is the
+            // only thing here another player must never see. The wording promises contact about the
+            // account and about purchases — which is the reason for collecting it — and stops short of
+            // promising any particular message, because nothing in the project sends mail yet and a
+            // receipt the player never receives is worse than no promise at all.
+            UiKit.Text("Email Purpose", root, EmailPurposeCopy, 11f, UiKit.TextDim,
+                TextAlignmentOptions.Center, FontStyles.Normal, 34f);
 
             identityError = UiKit.Text("Error", root, "", 14f, UiKit.TextError, TextAlignmentOptions.Center);
             identityError.gameObject.SetActive(false);

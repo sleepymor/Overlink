@@ -124,8 +124,13 @@ namespace Overlink.Net
             }
             if (message.Contains("password"))
             {
+                // The service says only that the password is unacceptable, never which rule it broke, so
+                // the requirements are quoted back from PasswordPolicy. A player who is told "does not
+                // meet the requirements" has to guess; one who is told the four rules can fix it in a
+                // single attempt. Client-side validation in AccountManager catches nearly all of these
+                // before the request — this is the sentence for whatever that check does not cover.
                 return Fail(AuthErrorCode.WeakPassword,
-                    "That password does not meet the requirements.", ex.Message);
+                    "That password was rejected. It needs " + PasswordPolicy.Requirements, ex.Message);
             }
             if (ex is System.Net.Sockets.SocketException
                 || ex is System.Net.WebException
@@ -164,6 +169,19 @@ namespace Overlink.Net
             }
             if (code == AuthenticationErrorCodes.InvalidParameters)
             {
+                // 10002 is the service's answer for both halves of the credential pair, and its detail
+                // text is the only thing that says which. A password-format rejection met with "check
+                // your username and password" sends the player to retype both; naming the rules answers
+                // the question they were actually asked. The client-side PasswordPolicy check in
+                // AccountManager rejects almost all of these before the request — this is the case
+                // where the service disagreed with it, so the requirement list is quoted from the same
+                // policy rather than written afresh.
+                if (rawMessage != null &&
+                    rawMessage.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return Fail(AuthErrorCode.WeakPassword,
+                        "That password was rejected. It needs " + PasswordPolicy.Requirements, rawMessage);
+                }
                 return Fail(AuthErrorCode.InvalidInput,
                     "Check your username and password and try again.", rawMessage);
             }

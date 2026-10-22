@@ -30,6 +30,13 @@ translated to player-facing text by `AuthResult.FromException`.
 
 ## Google provider setup
 
+> **Status: desktop only.** WebGL builds do not offer Google sign-in — `GoogleTokenProvider.Supported`
+> returns false, so the Auth screen never draws the button and the itch.io build is username &amp;
+> password. The reason and the evidence are in [`docs/AUTH_FLOW.md`](../../../docs/AUTH_FLOW.md) ▸ *Google
+> sign-in*; the switch is one property. Everything below still describes the bridge, which remains built
+> and covered by its harness, because turning Google back on for web is a flip of that property and not
+> a rewrite.
+
 1. In the Unity Dashboard, enable Google as an external provider for the project's
    Authentication service.
 2. In Google Cloud Console, create an OAuth client ID and put the client ID (not a secret)

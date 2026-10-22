@@ -31,10 +31,12 @@ a transition happened. States are `Initializing → CheckingCachedSession → Si
 | --- | --- |
 | `Net/AccountManager.cs` | Owns the UGS session: sign-in, sign-up, sign-out, account classification |
 | `Net/AuthFlowController.cs` | State machine and the only source of auth scene transitions |
-| `Net/PlayerProfile.cs` | The profile record (username, tag, age flag, version) |
+| `Net/PlayerProfile.cs` | The profile record (username, tag, age flag, email, version) |
 | `Net/PlayerProfileService.cs` | Cloud Save read/write, draft-then-commit setup |
 | `Net/PlayerIdentity.cs` | `Username#Tag` value type and its validators |
 | `Net/AuthResult.cs` | Maps UGS error codes and payloads onto player-facing text |
+| `Net/PasswordPolicy.cs` | Unity's password rules, checked client-side and quoted to the player |
+| `Net/EmailPolicy.cs` | Address shape rules; the address itself is **unverified** — see below |
 | `UI/AuthScreenController.cs` (+ `.Build.cs`) | Sign-in and profile-setup screens |
 | `UI/UiKit.cs` | The UGUI/TMP primitives both self-building screens share |
 | `UI/ProtectedSceneGuard.cs` | Redirects a directly-opened protected scene back to Auth |
@@ -64,7 +66,7 @@ Step 4 is what catches the anonymous sessions the removed guest flow left on dev
 
 ## Profile setup
 
-First-time players answer two questions, in order, before reaching MainMenu.
+First-time players answer three questions, in order, before reaching MainMenu.
 
 **Age.** Minimum 13, editable on the `AuthScreenController` Inspector. Tied to the account, not the
 device, so it is asked once.
@@ -82,10 +84,81 @@ single source of truth; `AccountManager.PlayerName`/`PlayerTag` are a cache fed 
 Uniqueness is **not** enforced locally. Two players can pick the same `Username#Tag`; the collision is
 logged once by `WarnIfUniquenessUnchecked` and waits on a Cloud Code reservation endpoint.
 
+**Email.** Asked on the same step as the identity, not a fourth screen. It is stored in the profile
+because **Unity cannot hold it**: `SignUpWithUsernamePasswordAsync(username, password)` takes nothing
+else, and the package exposes no `UpdateEmailAsync`, no verification endpoint and no password-reset call
+— the only `email` fields in `com.unity.services.authentication` are claims inside a Unity-ID `IdToken`
+that this project does not use. See *Email is collected, not verified* below before treating the value as
+anything other than something the player typed.
+
+Shape is enforced by `Net/EmailPolicy.cs` (RFC 5321 length caps, RFC 5322 `atext` local part, a
+two-label domain). Internationalised addresses are refused outright rather than half-supported: an
+IDN domain needs Punycode, and handing raw UTF-8 to a mailer bounces it, which would leave a dead
+address on file. `"quoted"@local` is refused for the same reason — legal, and never issued by a
+consumer provider.
+
+Unlike `PasswordPolicy`, this one publishes no `Requirements` line. Password rules are not guessable;
+an address is. What the field does carry is a purpose sentence (`EmailPurposeCopy` in the builder),
+because collecting personal data next to a *public* `Username#Tag` without saying which is which is the
+part a player reasonably objects to.
+
 Setup writes Cloud Save in a single shot — `BeginSetup()` creates a draft in memory, `CommitSetupAsync()`
-writes every key at once — so a half-finished profile can never exist server-side. The keys are
-`profile_username`, `profile_tag`, `profile_age_confirmed`, `profile_completed`, `profile_version`,
-`profile_created_at`.
+writes every key at once — so a half-finished profile can never exist right. The keys are
+`profile_username`, `profile_tag`, `profile_age_confirmed`, `profile_email`, `profile_email_verified`,
+`profile_completed`, `profile_version`, `profile_created_at`.
+
+`profile_version` went to **2** when the email fields landed, and `IsComplete()` now requires a non-empty
+address. The consequence was taken knowingly rather than by accident: **every profile written by an
+older build reads as incomplete, so its owner is bounced back to the setup step once** on next launch.
+`EnterSetupFlow` prefills username, tag and email from the draft so the interruption is one field rather
+than a form, and so a returning player cannot mistake "confirm the name you have" for "pick a new one"
+and silently overwrite the identity their friends added them by. `PlayerProfileTests` pins that bounce as
+a decision, including the assertion that the age gate is not re-asked.
+
+## Email is collected, not verified
+
+`profile_email` is a string a player typed. Nothing has proved the mailbox exists and nothing has proved
+they own it. `profile_email_verified` exists solely so that a later proof has somewhere to land without
+another schema change, and this build leaves it `false` for every account.
+
+This is not an omission that a careless reading could blame on the SDK. Everything available was checked,
+and none of it sends a message to a player:
+
+- `IAuthenticationService` has **no** email member — no `UpdateEmailAsync`, no verification endpoint, no
+  password reset. `SignUpWithUsernamePasswordAsync(username, password)` is the whole credential surface,
+  which is why the address cannot ride along with the account it belongs to.
+- The only `email` fields in the package are `IdToken.Email` / `EmailVerified` claims under
+  *Player Accounts* — the Unity ID browser flow. Those are verified **by Unity**, and they are the
+  cheapest possible route to a real address. But `BrowserUtils.CreateBrowserUtils`
+  (`Player Accounts/Runtime/Utilities/Browser/BrowserUtils.cs:10`) compiles to `return null` on any
+  platform that is not Editor/Standalone/Android/iOS. **WebGL gets null**, and the standalone path needs
+  an `HttpListener` on `localhost` plus `Application.OpenURL` — the same two walls that ended Google on
+  itch.io. Unity ID therefore cannot be the *only* credential on the web build, for the identical reason.
+- `GenerateSignInCodeAsync` / `SignInWithCodeAsync` / `ConfirmCodeAsync` look tantalisingly like an OTP
+  API and are not one. Code-link pairs two **devices** (think "enter this code on the other screen"):
+  `GenerateSignInCodeAsync` demands the caller be signed out, `ConfirmCodeAsync` demands
+  `IsAuthorized` — an already-signed-in session confirms the code. It never touches an inbox, so it
+  cannot bootstrap an account from something posted by email.
+
+So a passwordless flow — address → code → address confirmed, no password — needs a sender we do not
+have. The realistic shape is a Cloud Code endpoint (package `com.unity.services.cloudcode@2.10.4` is
+installed but **entirely unused** in this project) calling an external mailer, with the OTP hashed
+server-side and a short expiry. Until that exists, an emailed code cannot be delivered, and the
+password stays the only credential that works.
+
+**What the address may and may not be used for meanwhile.** It is safe as a contact handle: support
+lookups, "we'll be in touch when purchases arrive", a human-readable record tied to a `playerId`. It is
+**not** safe as identity, as a recovery path, or as anything a purchase decision keys off, because the
+player controls the value and Cloud Save player data is client-writable. Two properties keep the
+collection defensible today, and both break silently if someone "improves" them: the profile is read only
+through `Data.Player.LoadAsync`, which is scoped to the owning `playerId`, so no other player can see
+it; and nothing logs the address — `EmailPolicy` errors name the *offending character*, never the whole
+value, which is why the messages are built from fragments rather than interpolating `email`.
+
+Adding an address to `IsComplete()` means the game now collects personal data from every player at
+scale. That was the point — microtransactions need a way to reach the buyer — but it is the reason the
+verification debt above is recorded here rather than in a ticket nobody will read before the payments
+work starts.
 
 ## Scene protection
 
@@ -99,6 +172,30 @@ In normal play the flow controller has already routed the player and the guard d
 it covers is opening a protected scene directly from the Editor. Its `requireLogin` toggle exempts a
 scene, which is useful while the net demo scenes are still being iterated on.
 
+## Password rules
+
+Unity's username/password provider owns the policy, and it does not explain itself: a rejected password
+comes back as a generic request failure with no rule attached. So the rules are written down once, in
+`Net/PasswordPolicy.cs`, and used in three places — the register form shows them, `AccountManager` checks
+them before sending, and `AuthResult` quotes them when the service disagrees with the local check.
+
+The policy as transcribed from the SDK's own documentation
+(`com.unity.services.authentication`, `SignUpWithUsernamePasswordAsync` remarks): **8–30 characters with at
+least one uppercase letter, one lowercase letter, one digit and one special character.** Spaces are
+rejected by name rather than being counted as a special character.
+
+Two deliberate choices:
+
+- **Every miss is reported at once.** A password short on length *and* symbols gets one sentence listing
+  both. Returning on the first miss turns one correction into four submissions.
+- **Only sign-up and password change validate.** Sign-in never re-checks: an account created before these
+  rules existed would otherwise become unusable, and the service is the authority on what its own
+  accounts hold.
+
+`PasswordPolicyTests` pins a case per clause, including both length boundaries. When Unity changes the
+policy text, `PasswordPolicy` is the only file to change with it — the server still refuses what it
+refuses, so a stale copy here produces a wrong explanation, not an insecure account.
+
 ## Google sign-in
 
 See `Net/GOOGLE_AUTH_SETUP.md` for provider configuration and `docs/GOOGLE-AUTH-SETUP.md` for the
@@ -110,10 +207,46 @@ Google Cloud Console walkthrough. Two things are easy to miss:
 - the client ID lives in `Assets/Resources/GoogleAuthSettings.asset`. Client IDs are public config;
   client secrets must never ship in the player
 
+**Google is desktop-only right now.** `GoogleTokenProvider.Supported` is false in a WebGL build, so the
+Auth screen never draws the button there and web play is username &amp; password. The reason is the rest
+of this section: three of the four gates below are properties of itch.io's iframe rather than of the
+code, Google is retiring the one opt-out that made the third survivable, and the failure mode is a
+popup that authenticates the player and hands nothing back. A button that does that is worse than no
+button. The bridge is **not** deleted — it still builds, its harness still runs, and the table below
+still describes it — it is simply not offered. Re-enable by flipping `Supported` back on for WebGL and
+re-reading every gate first.
+
+Removing the button silently would trade one bug for another, because "where did Google go?" is a
+support question with the same shape as "Google does nothing". So the button is *replaced*, not hidden:
+`AuthScreenController.ApplyProviderAvailability` keeps exactly one of the Google button (plus its
+"— or use your Overlink account —" divider) and a plain-language note on screen, and the note tells the
+player to create an account here or download the desktop version for Google. No link in that copy —
+itch.io's page has its own download control, and a URL that only means something on one host does not
+belong in shipped text. The sentence, so nobody rewords it from memory:
+
+> Google sign-in isn't part of the browser build. Play here with an Overlink account below, or download
+> the desktop version to sign in with Google.
+
+The wording is load-bearing in one place: "an Overlink account", not "create an account", because the
+line is read just as often by a player who already has one and is hunting for the sign-in they expect.
+
+Both states were verified in play mode against the runtime-built screen: desktop sign-in (button and
+divider, 561px of stack), browser sign-in (note in place of both, shorter), and desktop register with the
+password hint and an error line (597px, the tallest the screen can reach). `CardHeight` is 660 and the
+comment there carries those numbers.
+
+One consequence is worth naming because it is a support ticket waiting to happen: an account created by
+Google has no username and password, so a player who signs in with Google on desktop, then opens the web
+build and signs out, cannot get back into *that* account from the browser — their Google credential is
+unusable there and there is no password to type. This is not a bug in the resume path, which carries a
+cached session across fine and still reports `AccountKind.Google`; only a fresh sign-in is platform-bound.
+If web play ever needs a real answer it is `AddUsernamePasswordAsync`, attaching credentials to an
+existing Google account, not a revival of the bridge.
+
 The two platforms reach that ID token by completely different routes, and only one of them runs inside
 somebody else's page:
 
-| | Windows | WebGL |
+| | Windows (**shipped**) | WebGL (**built, not offered**) |
 | --- | --- | --- |
 | Transport | system browser + loopback `HttpListener` | `Assets/Plugins/WebGL/OverlinkGoogleAuth.jslib` |
 | Grant | `response_type=id_token`, `form_post` to `127.0.0.1:7777` | Google Identity Services in-page |
@@ -121,7 +254,8 @@ somebody else's page:
 | State check | OAuth `state` + `nonce` | `nonce` only |
 | Deadline | 2 min | 3 min |
 | Can fail silently | no | no |
-| Escape when the embed obstructs | none needed | **Sign in in a new tab** |
+| Escape when the embed obstructs | none needed | **Sign in in a new tab** — unreachable, the overlay never opens |
+| Offered to the player | yes | **no** — `Supported` is false |
 
 WebGL is the harder case because an itch.io web play embeds the build in a cross-origin iframe, and One
 Tap is precisely the GIS feature that assumes it can paint over the top-level page. So the bridge falls
@@ -211,6 +345,13 @@ retry. Note also that itch.io's CDN host is theirs to change: it already went fr
 `itch.zone` once, so a Google sign-in regression with no change on our side is worth re-reading the
 origin before anything else.
 
+That paragraph is the decision, in the end. Gates 1–3 are configuration and transport choices that were
+each fixed in turn, and gate 4 — the handback — has never once produced a diagnostic naming its own
+cause, because there is nothing on that path left for the bridge to hook. The web build therefore does
+not offer Google at all: what a player gets instead is the one path that clears every gate, which is the
+form already on the screen. Everything above is kept because it is the evidence for that call and the
+starting point for whoever revisits it; `GoogleTokenProvider.Supported` is the single switch.
+
 `Tools/WebGL/iframe-probe/serve.mjs` reproduces the two-origin setup in thirty seconds, without a build,
 and prints GIS's raw verdicts. Use it before theorising about any future iframe regression.
 
@@ -225,9 +366,12 @@ profile needs the Unity Dashboard to clear.
 Coverage comes in three layers, because the auth flow spans three runtimes and no single one of them can
 see the others:
 
-- **EditMode, `Assets/Tests/Net` (26 tests).** `GoogleDeclineMappingTests` pins all four
+- **EditMode, `Assets/Tests/Net` (43 tests).** `GoogleDeclineMappingTests` pins all four
   `GoogleDecline` outcomes through `AuthResult.FromException`, including the two English substrings
-  ("password", "timeout") that the generic path would otherwise win with. `NonceVerificationTests` pins
+  ("password", "timeout") that the generic path would otherwise win with. `PasswordPolicyTests` pins a
+  clause per password rule, both length boundaries, and the two halves of the service's shared
+  `InvalidParameters` code — a password rejection has to name the rules, a username rejection must not.
+  `NonceVerificationTests` pins
   the ID-token gate: a matching nonce passes at every payload length, an absent claim is distinguished
   from a wrong value, a malformed token never matches, and the raw token never leaks into a player
   message. `VerifyNonce` deliberately lives below the platform `#if`s so the check the WebGL path depends

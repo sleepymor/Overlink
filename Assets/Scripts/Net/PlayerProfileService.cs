@@ -29,13 +29,16 @@ namespace Overlink.Net
         public const string KeyUsername = "profile_username";
         public const string KeyTag = "profile_tag";
         public const string KeyAgeConfirmed = "profile_age_confirmed";
+        public const string KeyEmail = "profile_email";
+        public const string KeyEmailVerified = "profile_email_verified";
         public const string KeyCompleted = "profile_completed";
         public const string KeyVersion = "profile_version";
         public const string KeyCreatedAt = "profile_created_at";
 
         static readonly HashSet<string> AllKeys = new HashSet<string>
         {
-            KeyUsername, KeyTag, KeyAgeConfirmed, KeyCompleted, KeyVersion, KeyCreatedAt
+            KeyUsername, KeyTag, KeyAgeConfirmed, KeyEmail, KeyEmailVerified,
+            KeyCompleted, KeyVersion, KeyCreatedAt
         };
 
         /// <summary>The profile loaded from the cloud, or null when signed out / never set up.</summary>
@@ -136,6 +139,8 @@ namespace Overlink.Net
                     username = ReadString(data, KeyUsername),
                     tag = ReadString(data, KeyTag),
                     ageConfirmed = ReadBool(data, KeyAgeConfirmed),
+                    email = ReadString(data, KeyEmail),
+                    emailVerified = ReadBool(data, KeyEmailVerified),
                     profileCompleted = ReadBool(data, KeyCompleted),
                     profileVersion = ReadInt(data, KeyVersion, PlayerProfile.CurrentVersion),
                     createdAt = ReadLong(data, KeyCreatedAt, 0)
@@ -178,8 +183,10 @@ namespace Overlink.Net
         /// Writes the setup draft to Cloud Save and promotes it to the live profile.
         /// The caller is responsible for validating the identity first — see
         /// <see cref="PlayerIdentity.ValidateUsername"/> and <see cref="PlayerIdentity.ValidateTag"/>.
+        /// The address is validated here rather than by the caller because it is the one field with a
+        /// policy of its own and more than one screen may eventually submit it.
         /// </summary>
-        public async Task<AuthResult> CommitSetupAsync(string username, string tag)
+        public async Task<AuthResult> CommitSetupAsync(string username, string tag, string email)
         {
             if (AccountManager.Instance == null || !AccountManager.Instance.IsSignedIn)
                 return AuthResult.Fail(AuthErrorCode.InvalidState, "You are no longer signed in.");
@@ -191,12 +198,24 @@ namespace Overlink.Net
             if (!PlayerIdentity.ValidateTag(tag, out string tagError))
                 return AuthResult.InvalidInput(tagError);
 
+            if (!EmailPolicy.Validate(email, out string emailError))
+                return AuthResult.InvalidInput(emailError);
+
             PlayerProfile draft = DraftProfile ?? new PlayerProfile();
             draft.username = username;
             draft.tag = tag;
             draft.ageConfirmed = true;
             draft.profileCompleted = true;
             draft.profileVersion = PlayerProfile.CurrentVersion;
+
+            string normalized = EmailPolicy.Normalize(email);
+            // Verification belongs to the address, not to the player. Editing an address revokes the
+            // proof that came with the old one, which matters the moment anything sets this to true:
+            // without the reset, a verified-but-unused flag would survive a change of address and
+            // silently claim proof that was never given for the new one.
+            if (draft.email != normalized) draft.emailVerified = false;
+            draft.email = normalized;
+
             if (draft.createdAt == 0)
                 draft.createdAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -257,6 +276,8 @@ namespace Overlink.Net
             { KeyUsername, profile.username ?? "" },
             { KeyTag, profile.tag ?? "" },
             { KeyAgeConfirmed, profile.ageConfirmed },
+            { KeyEmail, profile.email ?? "" },
+            { KeyEmailVerified, profile.emailVerified },
             { KeyCompleted, profile.profileCompleted },
             { KeyVersion, profile.profileVersion },
             { KeyCreatedAt, profile.createdAt },

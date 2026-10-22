@@ -1,5 +1,11 @@
 # Google Authentication Setup Guide
 
+> **Status: desktop only.** As of the 2026-10-22 change, WebGL builds do not offer Google sign-in at all
+> (`GoogleTokenProvider.Supported` is false under `UNITY_WEBGL`), so the itch.io build shows only the
+> username &amp; password form. Everything in this guide about *Authorized JavaScript origins*, the FedCM
+> flags and the iframe gates is kept deliberately: it is the record of why that decision was made and the
+> checklist for undoing it. Read [`AUTH_FLOW.md`](AUTH_FLOW.md) ▸ *Google sign-in* first.
+
 This guide explains how to properly configure Google Sign-In for Overlink using Unity Gaming Services.
 It covers the Google Cloud Console side only. Sign-in is mandatory and there is no guest mode; the
 flow itself — states, cached-session resume, profile setup, scene protection — is in

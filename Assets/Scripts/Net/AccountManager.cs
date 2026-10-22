@@ -72,6 +72,13 @@ namespace Overlink.Net
         public string Status { get; private set; } = "Not signed in.";
         public string GoogleClientId => settings != null ? settings.clientId : "";
 
+        /// <summary>
+        /// Whether this build offers Google sign-in at all. The Auth screen hides its button on the
+        /// strength of this, so a platform where the provider cannot finish is never advertised to the
+        /// player — see <see cref="GoogleTokenProvider.Supported"/> for why WebGL is not one.
+        /// </summary>
+        public static bool SupportsGoogle => GoogleTokenProvider.Supported;
+
         public event Action<AccountKind> AccountChanged;
         public event Action<string> StatusChanged;
         public event Action<PlayerIdentity> PlayerIdentityChanged;
@@ -261,6 +268,11 @@ namespace Overlink.Net
         /// before failed with "already linked to Google": the link is permanent from Unity's side, so
         /// the only sane operation on the Auth screen is "replace the current session".
         /// </para>
+        /// <para>
+        /// Not available on every platform — see <see cref="SupportsGoogle"/>. On a build that does not
+        /// offer it this fails with the same <c>unavailable</c> decline the browser bridge reports, so
+        /// the player reads one sentence either way and the log says which.
+        /// </para>
         /// </summary>
         public Task<AuthResult> SignInWithGoogleAsync()
         {
@@ -268,6 +280,12 @@ namespace Overlink.Net
             {
                 await EnsureInitializedAsync();
                 GuardSessionChanges("changing accounts");
+                if (!SupportsGoogle)
+                    // The same structured outcome the bridge produces, so the player's sentence and the
+                    // log line come from the one place that already knows how to word them.
+                    throw new GoogleTokenProvider.GoogleDeclineException(
+                        GoogleTokenProvider.GoogleDecline.Unavailable,
+                        $"no Google transport is offered on {Application.platform}");
                 if (string.IsNullOrWhiteSpace(GoogleClientId))
                     throw new InvalidOperationException(
                         "Configure Resources/GoogleAuthSettings with a Google OAuth Web Client ID first.");
@@ -293,6 +311,12 @@ namespace Overlink.Net
         /// Creates a new Unity account with username &amp; password credentials.
         /// Unity's own credential rules apply on top of the UI's checks; violations come back
         /// translated through <see cref="AuthResult.FromException"/>.
+        /// <para>
+        /// The password is checked against <see cref="PasswordPolicy"/> before the request is sent, so
+        /// the player is told which rule they missed instead of getting the service's bare rejection.
+        /// Sign-in deliberately does not repeat that check: an account created before the policy
+        /// existed would otherwise become unusable.
+        /// </para>
         /// </summary>
         public Task<AuthResult> SignUpWithUsernamePasswordAsync(string username, string password)
         {
@@ -300,6 +324,12 @@ namespace Overlink.Net
             {
                 await EnsureInitializedAsync();
                 GuardSessionChanges("creating an account");
+
+                if (!PasswordPolicy.Validate(password, out string passwordError))
+                {
+                    SetStatus(passwordError);
+                    return AuthResult.InvalidInput(passwordError);
+                }
 
                 SetStatus("Creating account…");
                 var auth = AuthenticationService.Instance;
@@ -348,6 +378,11 @@ namespace Overlink.Net
                 await EnsureInitializedAsync();
                 if (!IsSignedIn)
                     throw new InvalidOperationException("You must be signed in to change your password.");
+                if (!PasswordPolicy.Validate(newPassword, out string passwordError))
+                {
+                    SetStatus(passwordError);
+                    return AuthResult.InvalidInput(passwordError);
+                }
 
                 SetStatus("Updating password…");
                 await AuthenticationService.Instance.UpdatePasswordAsync(currentPassword, newPassword);

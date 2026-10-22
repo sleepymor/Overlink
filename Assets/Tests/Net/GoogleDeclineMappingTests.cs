@@ -41,7 +41,7 @@ namespace Overlink.Net.Tests
         /// <summary>
         /// The itch.io case. The player is told to use a username and password, which contains the word
         /// "password"; without the structured branch the substring pass reads that as a password-strength
-        /// complaint and answers "That password does not meet the requirements."
+        /// complaint and answers with the requirement list from <see cref="PasswordPolicy"/>.
         /// </summary>
         [Test]
         public void Unavailable_SurvivesItsOwnReferenceToPasswords()
