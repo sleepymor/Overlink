@@ -701,12 +701,19 @@ namespace Overlink.Match
             return CombatLegality.CanAttack(matchState, PlayerIndex.Player, card);
         }
 
+        /// <summary>
+        /// See <see cref="CombatLegality.CanActivate"/>. The player's view of it.
+        /// <para>
+        /// This used to restate the rule inline, and the restatement was subtly wrong: it omitted the
+        /// Active-slot requirement the engine enforces by resolving the id through
+        /// <c>FindActiveCardInstance</c>, so a [Activate] unit sitting on the Bench lit up as activatable and
+        /// then failed with <c>UnitCannotAct</c>. Delegating is the fix, and the reason the arithmetic lives in
+        /// Core — a click layer that recomputes legality is a click layer that can disagree with the engine.
+        /// </para>
+        /// </summary>
         public bool CanPlayerActivateWith(CardInstance card)
         {
-            return matchState != null && matchState.ActivePlayer == PlayerIndex.Player
-                && matchState.CurrentPhase == TurnPhase.Combat && card != null
-                && card.Owner == PlayerIndex.Player && card.Definition.Type == CardType.Unit
-                && card.HasKeyword(Keyword.Activate) && card.CanAct();
+            return CombatLegality.CanActivate(matchState, PlayerIndex.Player, card);
         }
 
         public bool TryPlayerActivateWith(CardInstance card)
@@ -725,6 +732,56 @@ namespace Overlink.Match
             }
 
             Debug.Log($"[GameCoordinator] Player activated {card.Definition.Name}'s skill");
+            SyncHand();
+            return true;
+        }
+
+        /// <summary>See <see cref="CombatLegality.CanRetreat"/>. The player's view of it.</summary>
+        public bool CanPlayerRetreatWith(CardInstance active, CardInstance bench)
+        {
+            return CombatLegality.CanRetreat(matchState, PlayerIndex.Player, active, bench);
+        }
+
+        /// <summary>See <see cref="CombatLegality.RetreatChoices"/>. The player's view of it.</summary>
+        public List<CardInstance> RetreatChoicesForPlayer(CardInstance active)
+        {
+            return CombatLegality.RetreatChoices(matchState, PlayerIndex.Player, active);
+        }
+
+        /// <summary>
+        /// Trades an Active unit out for one of the player's Bench units, for
+        /// <see cref="MatchState.RetreatNP"/>, during Combat. This is the second of the two things an Active
+        /// unit may do on its controller's Combat step, which is why it is asked and answered exactly like an
+        /// attack: re-derive legality from the rules rather than trusting the mark the board is showing, hand
+        /// the engine both instance ids, and surface the rejection reason on failure.
+        /// </summary>
+        public bool TryPlayerRetreatWith(CardInstance active, CardInstance bench)
+        {
+            if (matchState == null || matchEngine == null)
+            {
+                return false;
+            }
+
+            if (active == null)
+            {
+                return Reject("there is no unit selected to retreat.");
+            }
+
+            if (!CanPlayerRetreatWith(active, bench))
+            {
+                return Reject(bench == null
+                    ? $"{active.Definition.Name} has nowhere to retreat to right now."
+                    : $"{active.Definition.Name} cannot retreat for {bench.Definition.Name} right now.");
+            }
+
+            CommandResult result = matchEngine.ExecuteCommand(
+                new RetreatCommand(PlayerIndex.Player, active.InstanceId, bench.InstanceId));
+            if (result != CommandResult.Success)
+            {
+                return Reject($"retreat was rejected by the engine ({result}).");
+            }
+
+            Debug.Log($"[GameCoordinator] {active.Definition.Name} retreats for {bench.Definition.Name}");
             SyncHand();
             return true;
         }

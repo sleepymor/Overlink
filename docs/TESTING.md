@@ -1,0 +1,81 @@
+# Testing
+
+Two ways to verify this project, and they answer different questions.
+
+- **Headless (EditMode NUnit)** — the rules: `Assets/Tests/Core`, `Assets/Tests/Match`, `Assets/Tests/Net`.
+  Fast, deterministic, no scene. This is where a rule change is proven.
+- **The live path** — presentation and feel. Load `Assets/Scenes/MainMenu.unity` non-additively, `editor_play`,
+  then invoke `Btn_Play`'s `onClick` (`UI Root/Canvas/ButtonPanel/Btn_Play`). Never load `Gameplay.unity`
+  directly: the coordinator is wired from the menu, and a directly-loaded Gameplay scene is a state the game
+  cannot reach.
+
+Bridge mechanics worth remembering:
+
+- `debug_get_errors` immediately *before* a run is the only reliable compile check. `console_get_logs` has
+  returned `[]` while a CS0103 was live, and a compile error freezes discovery, domain reload and play mode.
+- `test_get_result` takes `jobId` only. Fetching with a large `limit` has stalled the REST dispatcher.
+- Verify `totalTests` against the number of `[Test]` methods in the file, not just the verdict — a run that
+  matches nothing reports `total: 0`, and a stale list reports brand-new names as Passed.
+- Never run EditMode tests with `CardPresentationPreview` open. Its `MainCamera`-tagged preview camera hijacks
+  `Camera.main` inside the presenter and fakes `DropTargetTests` failures.
+
+## An EditMode test assembly has to be Editor-only
+
+This cost a session, so the mechanism is recorded here rather than in a comment.
+
+**Symptom.** A filtered run for one class never leaves `starting` and times out at 90 seconds. The full-suite
+run completes happily and its total is simply smaller than the number of tests in the tree. Nothing logs an
+error, and the assembly compiles fine.
+
+**Cause.** `EditorLoadedTestAssemblyProvider.GetAssembliesGroupedByTypeAsync` classifies each test assembly by
+`AssemblyFlags.EditorOnly` (`Library/PackageCache/com.unity.test-framework@1.1.33/UnityEditor.TestRunner/
+TestRunner/Utils/EditorLoadedTestAssemblyProvider.cs:60`). An asmdef with an empty `includePlatforms` is a
+**PlayMode** assembly, so every test inside it is silently absent from the EditMode tree. The runner is not
+broken and its cache is not stale: it is answering exactly the question that was asked of it.
+
+**Required shape** (`Overlink.Match.Tests` and `Overlink.Net.Tests` are the models):
+
+```json
+"includePlatforms": ["Editor"],
+"references": [... , "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+"overrideReferences": true,
+"precompiledReferences": ["nunit.framework.dll"],
+"defineConstraints": ["UNITY_INCLUDE_TESTS"]
+```
+
+**History.** `Overlink.Core.Tests` and `Overlink.Cards.Tests` carried the legacy
+`optionalUnityReferences: ["TestAssemblies"]` shape instead, so **199 Core tests and 22 Cards tests had never
+run** in either mode. Found on 2026-10-27 while landing Stage 2's opening-lineup tests: the new class compiled,
+was demonstrably loaded, and still could not be filtered on. `Core.Tests` is Editor-only now; `Cards.Tests`
+belongs to PlayMode for its own reasons, below.
+
+## Cards.Tests is a PlayMode assembly on purpose
+
+`CardHandTests` drives real presentation objects and calls `Object.DontDestroyOnLoad` and `Object.Destroy`,
+which throw in EditMode (`DontDestroyOnLoad ... cannot be part of an editor script`, `Destroy may not be
+called from edit mode! Use DestroyImmediate instead`). Forcing that assembly Editor-only produced 16 failures
+of exactly that shape and no others. Its 22 tests have never been executed by either mode and are unverified;
+they need a PlayMode run, not a reclassification.
+
+## When a run cannot see a class that certainly exists
+
+In this order, because each step is cheap and the last one is expensive:
+
+1. **Is the assembly Editor-only?** Read its asmdef before reading anything else.
+2. **Is the class in Unity's tree?** `TestRunnerApi.RetrieveTestList(TestMode.EditMode, ...)` from an Editor
+   menu item, walking `root.Children` for per-assembly leaf counts. This is the runner's own ground truth and
+   it bypasses the bridge entirely.
+3. **Is the type loaded?** Reflect over `AppDomain.CurrentDomain.GetAssemblies()` and count methods carrying
+   `NUnit.Framework.TestAttribute`.
+
+Two traps in step 3: `debug_get_assembly_info`'s `sourceFiles` is the **compilation pipeline's** view, not the
+loaded AppDomain's, so it reports a brand-new file as present regardless of what the runner can see; and a
+domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
+is how "the runner's cache must be stale" gets mistaken for a fact.
+
+## Known state at the close of Stage 2 (2026-10-27)
+
+EditMode: **1312 leaves, 1307 passed, 4 skipped, 1 failed.** The failure is
+`UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
+UnitySkills package that counts objects in whichever scene happens to be open. It was red before Stage 2, it
+is not ours, and it is the only expected red.

@@ -140,6 +140,51 @@ namespace Overlink.Match
         }
 
         /// <summary>
+        /// Fields this player's opening lineup and closes its setup: the strongest body stands in the Core
+        /// Active, the rest fill Node 1-4 in order, and nothing is rerolled.
+        /// <para>
+        /// Node order is not arbitrary. Node 1 and Node 2 grant Core multipliers (+1 ATK and +1 HP on the Core
+        /// Active), so the second- and third-best bodies are the ones making the best body hit harder — the
+        /// ranking pays for itself twice over at the top of the list.
+        /// </para>
+        /// <para>
+        /// The AI never buys a reroll, which is a decision rather than an omission: a reroll is priced in NP,
+        /// a currency the AI has no model for valuing against information it cannot weigh. It keeps the five
+        /// it was shown. <see cref="MatchEngine"/> still enforces the escalation, so a future opponent that
+        /// <em>can</em> price it has the rule waiting rather than needing one invented.
+        /// </para>
+        /// </summary>
+        /// <returns>How many units were fielded, which is fewer than five when the offer came up short.</returns>
+        public int ChooseLineup()
+        {
+            PlayerState mine = state.GetPlayer(player);
+            if (mine.LineupConfirmed || mine.LineupOffer.Count == 0)
+            {
+                return 0;
+            }
+
+            List<CardInstance> offer = mine.LineupOffer
+                .OrderByDescending(c => c.Definition.Hp + c.Definition.Atk)
+                .ThenByDescending(c => c.Definition.Cost)
+                .ToList();
+
+            int[] activeInstanceIds = new int[ConfirmLineupCommand.RequiredLength];
+            for (int i = 0; i < activeInstanceIds.Length && i < offer.Count; i++)
+            {
+                activeInstanceIds[i] = offer[i].InstanceId;
+            }
+
+            CommandResult result = engine.ExecuteCommand(new ConfirmLineupCommand(player, activeInstanceIds));
+            if (result != CommandResult.Success)
+            {
+                Debug.LogWarning($"[AI] Opening lineup was rejected ({result})");
+                return 0;
+            }
+
+            return System.Math.Min(offer.Count, activeInstanceIds.Length);
+        }
+
+        /// <summary>
         /// Defends against a combat the opponent is currently running. Called by the coordinator during the
         /// player's Combat phase; does nothing on our own turn or outside combat.
         /// </summary>
@@ -254,40 +299,114 @@ namespace Overlink.Match
         private void TryAttack(PlayerState playerState)
         {
             PlayerState opponent = state.GetOpponent(player);
-            List<CardInstance> myUnits = playerState.Board.GetActiveUnits(player);
 
-            foreach (CardInstance attacker in myUnits)
+            // Iterate by re-reading the board rather than walking a snapshot: an activation can destroy
+            // something, a trade can kill the actor, and the ready set is what has to stay truthful as we go.
+            while (true)
             {
-                if (attacker.Definition.Type != CardType.Unit || !attacker.CanAct())
+                CardInstance actor = playerState.Board.GetActiveUnits(player)
+                    .FirstOrDefault(u => u != null && u.IsAlive() && u.Definition.Type == CardType.Unit && u.CanAct());
+                if (actor == null)
                 {
+                    return;
+                }
+
+                List<CardInstance> enemyUnits = opponent.Board.GetActiveUnits(opponent.Index)
+                    .Where(u => u != null && u.IsAlive())
+                    .ToList();
+
+                // An open enemy Core outranks everything: it is the win condition, and no ability the AI
+                // could press instead of hitting it moves the match forward.
+                if (enemyUnits.Count == 0)
+                {
+                    if (engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId))
+                        != CommandResult.Success)
+                    {
+                        return;
+                    }
+
+                    Debug.Log($"[AI] {actor.Definition.Name} attacks opponent's Core");
                     continue;
                 }
 
-                // Re-read the enemy board each attack: an earlier trade in this same combat may have
-                // destroyed the unit we were about to target.
-                List<CardInstance> enemyUnits = opponent.Board.GetActiveUnits(opponent.Index)
-                    .Where(u => u.IsAlive())
-                    .ToList();
+                CardInstance favourable = enemyUnits.FirstOrDefault(t => WouldKillAndSurvive(actor, t));
+                if (favourable != null)
+                {
+                    engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId, favourable.InstanceId));
+                    Debug.Log($"[AI] {actor.Definition.Name} attacks {favourable.Definition.Name}");
+                    continue;
+                }
 
-                CommandResult result;
-                if (enemyUnits.Count > 0)
+                // No good trade on offer. A unit holding [Activate] spends its Combat step on the ability
+                // instead of swinging into a loss — that is what the keyword is for, and it is why an
+                // opponent that only ever attacks never appears to use the cards it drew.
+                if (CombatLegality.CanActivate(state, player, actor))
                 {
-                    CardInstance target = enemyUnits[random.Next(enemyUnits.Count)];
-                    result = engine.ExecuteCommand(new DeclareAttackCommand(player, attacker.InstanceId, target.InstanceId));
-                    if (result == CommandResult.Success)
+                    if (engine.ExecuteCommand(new ActivateAbilityCommand(player, actor.InstanceId))
+                        != CommandResult.Success)
                     {
-                        Debug.Log($"[AI] {attacker.Definition.Name} attacks {target.Definition.Name}");
+                        return;
                     }
+
+                    Debug.Log($"[AI] {actor.Definition.Name} activates its skill");
+                    continue;
                 }
-                else
+
+                CardInstance target = enemyUnits[random.Next(enemyUnits.Count)];
+                if (engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId, target.InstanceId))
+                    != CommandResult.Success)
                 {
-                    result = engine.ExecuteCommand(new DeclareAttackCommand(player, attacker.InstanceId));
-                    if (result == CommandResult.Success)
-                    {
-                        Debug.Log($"[AI] {attacker.Definition.Name} attacks opponent's Core");
-                    }
+                    return;
                 }
+
+                Debug.Log($"[AI] {actor.Definition.Name} attacks {target.Definition.Name}");
             }
+        }
+
+        /// <summary>
+        /// True when <paramref name="attacker"/> can take <paramref name="defender"/> out and still be standing
+        /// after the exchange.
+        /// <para>
+        /// It is an estimate of the <em>trade</em>, not a replay: it reads ATK/HP/Shield and the two keywords
+        /// that change them ([Piercing] bypasses Shield, first strike decides who answers at all), and it
+        /// ignores Lifesteal, shields granted mid-combat and every effect that is not a stat on the card. The
+        /// engine stays the authority on whether the attack is legal and on what actually happens; this only
+        /// decides which legal attack the AI prefers.
+        /// </para>
+        /// <para>
+        /// First strike comes from <see cref="MatchEngine.StrikesFirst"/> rather than from the keyword, because
+        /// Node 3 grants it to a Core Active as well and an estimate that read only the card face would call a
+        /// lethal exchange safe.
+        /// </para>
+        /// </summary>
+        private bool WouldKillAndSurvive(CardInstance attacker, CardInstance defender)
+        {
+            bool attackerStrikesFirst = engine.StrikesFirst(attacker) && !engine.StrikesFirst(defender);
+            bool defenderStrikesFirst = engine.StrikesFirst(defender) && !engine.StrikesFirst(attacker);
+
+            bool kills = attacker.CurrentAtk >= EffectiveHp(defender, attacker);
+            if (attackerStrikesFirst)
+            {
+                // The defender dies before it has an answer, so only the kill matters.
+                return kills;
+            }
+
+            bool survives = defender.CurrentAtk < EffectiveHp(attacker, defender);
+
+            // Either the defender strikes first and this is only worth taking if we outlive it, or the blows
+            // land together and both halves of the trade have to come out ahead.
+            return kills && survives;
+        }
+
+        /// <summary>
+        /// How much damage it takes to kill <paramref name="target"/> against <paramref name="source"/>, which
+        /// is what <see cref="CardInstance.TakeDamage"/> does with Shield — absorb first, overflow to HP —
+        /// except under [Piercing], where Shield is skipped entirely.
+        /// </summary>
+        static int EffectiveHp(CardInstance target, CardInstance source)
+        {
+            return target.CurrentHp
+                + (source.HasKeyword(Keyword.Piercing) ? 0 : target.CurrentShield);
         }
     }
 }

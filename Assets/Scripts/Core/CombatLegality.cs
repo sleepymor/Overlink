@@ -201,6 +201,167 @@ namespace Overlink.Core
         }
 
         /// <summary>
+        /// True when <paramref name="who"/> may fire <paramref name="card"/>'s [Activate] ability right now.
+        /// <para>
+        /// This is the engine's gate in <c>MatchEngine.ExecuteActivateAbility</c> restated, and the Active-slot
+        /// requirement is the reason it lives here rather than being improvised by the click layer: the engine
+        /// resolves the nominated id through <c>FindActiveCardInstance</c>, so a <em>benched</em> [Activate]
+        /// unit is not merely discouraged — the command comes back <c>UnitCannotAct</c>. A front end that only
+        /// asked "has [Activate] and is Ready" would light up a socket it could not honour, which is exactly
+        /// the bug this method exists to prevent.
+        /// </para>
+        /// <para>
+        /// The empty-effects check is the engine's <c>InvalidCommand</c> branch: [Activate] without an effect is
+        /// a keyword the validator already rejects (see <c>CardValidatorTests.Activate_RequiresEffect</c>), but
+        /// a hand-built definition can still carry it, and offering an ability that does nothing would be a
+        /// worse answer than refusing to offer it.
+        /// </para>
+        /// </summary>
+        public static bool CanActivate(MatchState state, PlayerIndex who, CardInstance card)
+        {
+            if (state == null || card == null || state.IsMatchOver())
+            {
+                return false;
+            }
+
+            if (state.ActivePlayer != who || state.CurrentPhase != TurnPhase.Combat)
+            {
+                return false;
+            }
+
+            if (card.Owner != who)
+            {
+                return false;
+            }
+
+            BoardSlot slot = state.GetPlayer(who).Board.FindSlot(card);
+            if (slot == null || !slot.IsActive())
+            {
+                return false;
+            }
+
+            if (!card.CanAct())
+            {
+                return false;
+            }
+
+            return card.Definition.Type == CardType.Unit && card.HasKeyword(Keyword.Activate)
+                && card.Definition.Effects != null && card.Definition.Effects.Count > 0;
+        }
+
+        /// <summary>
+        /// Every unit of <paramref name="who"/> that can fire its [Activate] ability this Combat step, in
+        /// battlefield order. What a " abilities" button enumerates, and the answer to the question
+        /// <see cref="CanActivate"/> is asked most often by answering in bulk.
+        /// </summary>
+        public static List<CardInstance> ActivatableUnits(MatchState state, PlayerIndex who)
+        {
+            var list = new List<CardInstance>();
+            if (state == null || state.IsMatchOver() || state.ActivePlayer != who
+                || state.CurrentPhase != TurnPhase.Combat)
+            {
+                return list;
+            }
+
+            PlayerState mine = state.GetPlayer(who);
+            foreach (CardInstance candidate in mine.Board.GetActiveUnits(who))
+            {
+                if (CanActivate(state, who, candidate))
+                {
+                    list.Add(candidate);
+                }
+            }
+
+            return list;
+        }
+
+        /// <summary>
+        /// True when the Active unit <paramref name="active"/> may trade places with the Bench unit
+        /// <paramref name="bench"/> right now: our Combat phase, the outgoing unit still able to act, nothing
+        /// under Summoning Delay on either side, the incoming card genuinely benched, and 1 NP in the pool.
+        /// <para>
+        /// The NP check is included rather than left to the caller's judgement, because the honest answer to
+        /// "can I retreat" is no when the player cannot pay — and a rail that lights a retreat button which
+        /// then fails with <c>InsufficientNP</c> teaches the player to distrust every light.
+        /// </para>
+        /// </summary>
+        public static bool CanRetreat(MatchState state, PlayerIndex who, CardInstance active, CardInstance bench)
+        {
+            if (state == null || active == null || bench == null || active == bench || state.IsMatchOver())
+            {
+                return false;
+            }
+
+            if (state.ActivePlayer != who || state.CurrentPhase != TurnPhase.Combat)
+            {
+                return false;
+            }
+
+            PlayerState mine = state.GetPlayer(who);
+            if (active.Owner != who || bench.Owner != who)
+            {
+                return false;
+            }
+
+            BoardSlot outSlot = mine.Board.FindSlot(active);
+            BoardSlot inSlot = mine.Board.FindSlot(bench);
+            if (outSlot == null || inSlot == null || !outSlot.IsActive() || !inSlot.IsBench())
+            {
+                return false;
+            }
+
+            // GDD 2.1.5: Summoning Delay bars a fresh deployment from attacking or switching, and a retreat
+            // switches. The outgoing unit's CanAct covers both its state and its delay flag; the incoming one
+            // only needs the flag, since a resting unit being Exhausted is not a reason to refuse to bring it
+            // in — it arrives Exhausted under the retreat rule either way.
+            if (!active.CanAct() || bench.HasSummoningDelay)
+            {
+                return false;
+            }
+
+            return mine.CanAfford(MatchState.RetreatNP);
+        }
+
+        /// <summary>
+        /// The Bench units <paramref name="active"/> could be traded for, across the whole side rather than
+        /// one battlefield: retreating a Node's Active into the Core Bench is legal and surrenders that Node,
+        /// which is a real strategic cost the player is allowed to pay knowingly.
+        /// </summary>
+        public static List<CardInstance> RetreatChoices(MatchState state, PlayerIndex who, CardInstance active)
+        {
+            var list = new List<CardInstance>();
+            if (state == null || active == null)
+            {
+                return list;
+            }
+
+            PlayerState mine = state.GetPlayer(who);
+            foreach (BoardSlot slot in mine.Board.CoreBench)
+            {
+                AddIfRetreatable(slot);
+            }
+
+            for (int node = 0; node < mine.Board.NodeBench.Length; node++)
+            {
+                foreach (BoardSlot slot in mine.Board.NodeBench[node])
+                {
+                    AddIfRetreatable(slot);
+                }
+            }
+
+            return list;
+
+            void AddIfRetreatable(BoardSlot slot)
+            {
+                CardInstance candidate = slot.Card;
+                if (candidate != null && candidate.IsAlive() && CanRetreat(state, who, active, candidate))
+                {
+                    list.Add(candidate);
+                }
+            }
+        }
+
+        /// <summary>
         /// True when two slots are the same battlefield: both Core Actives, or Actives of the same Node.
         /// Bench slots never qualify, because a benched card is not in a battlefield at all.
         /// </summary>
@@ -221,7 +382,7 @@ namespace Overlink.Core
 
         static bool IsActiveSlot(BoardSlot slot)
         {
-            return slot.Type == SlotType.CoreActive || slot.Type == SlotType.NodeActive;
+            return slot.IsActive();
         }
     }
 }

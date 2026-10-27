@@ -11,12 +11,73 @@ namespace Overlink.Core
     {
         public const int StartingHandSize = 5;
 
+        /// <summary>
+        /// The opening lineup offer is exactly this many cards, which is also the number of Active sockets on
+        /// a board (the Core Active plus one per Node). Fielding all five is therefore the whole offer, and
+        /// the reason a match that opens through setup never has an empty Active to begin with.
+        /// </summary>
+        public const int LineupOfferSize = 5;
+
+        /// <summary>
+        /// The most expensive Unit the opening offer may contain. A ceiling rather than a filter: it keeps a
+        /// player's first turn from being decided by whether they happened to draw the four-cost bodies, and
+        /// it is why the offer is searched for rather than merely taken off the top of the deck.
+        /// </summary>
+        public const int LineupMaxCost = 3;
+
+        /// <summary>NP price of the first lineup reroll; each one already taken adds to the next.</summary>
+        public const int LineupRerollBaseCost = 2;
+
+        /// <summary>NP price of a Combat-phase retreat, paid by the unit's controller.</summary>
+        public const int RetreatNP = 1;
+
+        /// <summary>
+        /// Extra NP for the player who loses the coin flip. The compensation for going second in a game where
+        /// the first player sets the tempo, and the reason the flip is worth automating rather than ignoring.
+        /// </summary>
+        public const int SecondPlayerNPBonus = 1;
+
         public PlayerState[] Players { get; }
         public PlayerIndex ActivePlayer { get; private set; }
 
         public TurnPhase CurrentPhase { get; set; }
         public int TurnNumber { get; private set; }
         public MatchResult Result { get; private set; }
+
+        /// <summary>
+        /// True between <see cref="InitializeSetup"/> and <see cref="CompleteSetup"/>. While it holds, the
+        /// only commands the engine honours are the two setup commands and a concession: no card may be
+        /// played, no phase passed and no turn ended, because the board the rules would be applied to does
+        /// not exist yet. A match started through <see cref="InitializeMatch"/> never enters it.
+        /// </summary>
+        public bool SetupInProgress { get; private set; }
+
+        /// <summary>
+        /// True once the coin has been tossed during setup. Flipping twice would not be a formality — it
+        /// would silently re-decide who moves first after one player has already fielded a lineup.
+        /// </summary>
+        public bool CoinFlipped { get; private set; }
+
+        /// <summary>
+        /// The coin winner, i.e. the player whose Upkeep opens the match. Holds
+        /// <see cref="PlayerIndex.Player"/> until a flip happens, which is also what a match started through
+        /// <see cref="InitializeMatch"/> uses, so the legacy path is unchanged.
+        /// </summary>
+        public PlayerIndex FirstPlayer { get; private set; }
+
+        /// <summary>
+        /// The seed behind every shuffle and the coin flip, or null when the match draws its randomness from
+        /// the environment. Surfaced so a console log can reproduce a match exactly; nothing in the rules
+        /// reads it.
+        /// </summary>
+        public int? Seed { get; }
+
+        /// <summary>
+        /// The single random stream both players' shuffles and the coin flip draw from. One stream rather
+        /// than one per player so that a replay depends only on the seed and the order operations happened
+        /// in, not on which player object asked first.
+        /// </summary>
+        internal Random Rng { get; }
 
         /// <summary>
         /// Human-readable cause behind <see cref="Result"/> ("CORE DESTRUCTION", "DECK-OUT",
@@ -26,12 +87,15 @@ namespace Overlink.Core
         public string ResultReason { get; private set; }
         public List<string> EventLog { get; }
 
-        public MatchState()
+        public MatchState(int? seed = null)
         {
+            Seed = seed;
+            Rng = seed.HasValue ? new Random(seed.Value) : new Random();
             Players = new PlayerState[2];
-            Players[0] = new PlayerState(PlayerIndex.Player);
-            Players[1] = new PlayerState(PlayerIndex.Opponent);
+            Players[0] = new PlayerState(PlayerIndex.Player, Rng);
+            Players[1] = new PlayerState(PlayerIndex.Opponent, Rng);
             ActivePlayer = PlayerIndex.Player;
+            FirstPlayer = PlayerIndex.Player;
             CurrentPhase = TurnPhase.Upkeep;
             TurnNumber = 1;
             Result = MatchResult.None;
@@ -109,10 +173,34 @@ namespace Overlink.Core
         /// <summary>
         /// GDD 2.1.8 Node Domination: controlling 3 of the 4 Nodes at the start of your Upkeep wins the
         /// game immediately.
+        /// <para>
+        /// Except on the opening turn, and the reason is the opening lineup. A match that opens through setup
+        /// fields all five Active sockets, which is <em>four Nodes held by both players</em> before a single
+        /// card has been played. The condition as literally worded would therefore end the match at its first
+        /// Upkeep and award it to whoever won a coin flip, which is not a victory condition, it is a coin flip
+        /// with extra steps. Domination is a race about <em>keeping</em> Nodes after the opponent has been made
+        /// to lose them; at 4-4 with nothing contested it has not started, so turn 1 is exempt - exactly as turn
+        /// 1 already exempts itself from Draw, on the same logic that the opening is not a normal turn.
+        /// </para>
+        /// <para>
+        /// Both players' opening Upkeeps are TurnNumber 1, because the counter advances only when control comes
+        /// back to the first player, so this one guard covers the second player's opening as well. The first
+        /// check that can fire is the first player's second Upkeep, by which point both have had one turn.
+        /// </para>
+        /// <para>
+        /// The guard is total rather than scoped to setup-opened matches, because a match opened by
+        /// <see cref="InitializeMatch"/> fields nothing at all and so could never dominate on turn 1 anyway -
+        /// a rule with two shapes is one more way for the two paths to drift apart.
+        /// </para>
         /// </summary>
         private void CheckNodeDomination()
         {
             if (IsMatchOver())
+            {
+                return;
+            }
+
+            if (TurnNumber <= 1)
             {
                 return;
             }
@@ -488,15 +576,7 @@ namespace Overlink.Core
 
         public void InitializeMatch(List<CardDefinition> playerDeck, List<CardDefinition> opponentDeck)
         {
-            if (playerDeck == null || playerDeck.Count == 0)
-            {
-                throw new ArgumentException("Player deck cannot be null or empty", nameof(playerDeck));
-            }
-
-            if (opponentDeck == null || opponentDeck.Count == 0)
-            {
-                throw new ArgumentException("Opponent deck cannot be null or empty", nameof(opponentDeck));
-            }
+            ValidateDecks(playerDeck, opponentDeck);
 
             LoadDeck(Players[0], playerDeck);
             LoadDeck(Players[1], opponentDeck);
@@ -517,6 +597,217 @@ namespace Overlink.Core
             CurrentPhase = TurnPhase.Upkeep;
             LogEvent($"Turn {TurnNumber} - {ActivePlayer} Upkeep Phase");
             OnUpkeepPhase();
+        }
+
+        /// <summary>
+        /// Opens a match through the lineup setup instead of dealing straight into a hand: both decks are
+        /// loaded and shuffled, and each player is then offered <see cref="LineupOfferSize"/> Units costing
+        /// at most <see cref="LineupMaxCost"/> to field directly into their Active sockets.
+        /// <para>
+        /// The offer is <em>searched</em> for, not taken off the top: a ceiling on cost only means something
+        /// if the deck is rummaged through to find cards under it. Everything the search skips stays in the
+        /// deck in its original order, so the opening hand drawn at <see cref="CompleteSetup"/> is the true
+        /// top of a deck that has been disturbed as little as possible.
+        /// </para>
+        /// <para>
+        /// Nothing runs the first Upkeep here, and no card is playable yet: setup has to close first, which
+        /// it does when both players have confirmed a lineup. The caller's job between this and then is one
+        /// <see cref="FlipCoin"/> and two <c>ConfirmLineupCommand</c>s.
+        /// </para>
+        /// </summary>
+        public void InitializeSetup(List<CardDefinition> playerDeck, List<CardDefinition> opponentDeck)
+        {
+            ValidateDecks(playerDeck, opponentDeck);
+
+            LoadDeck(Players[0], playerDeck);
+            LoadDeck(Players[1], opponentDeck);
+
+            Players[0].ShuffleDeck();
+            Players[1].ShuffleDeck();
+
+            DealLineupOffer(Players[0]);
+            DealLineupOffer(Players[1]);
+
+            SetupInProgress = true;
+            TurnNumber = 1;
+            CurrentPhase = TurnPhase.Upkeep;
+
+            LogEvent($"Setup - {Players[0].Index} offered {Players[0].LineupOffer.Count} card(s), " +
+                     $"{Players[1].Index} offered {Players[1].LineupOffer.Count} card(s)");
+        }
+
+        /// <summary>
+        /// Decides who takes the first turn. Idempotent: a second call returns the same answer instead of
+        /// tossing again, because by then a player may already have fielded a lineup against the result.
+        /// <para>
+        /// Only meaningful during setup. Outside it there is no first turn left to decide, and returning
+        /// <see cref="PlayerIndex.Player"/> silently in that case would be a lie the banner would repeat to
+        /// the player, so the call is refused with an exception instead.
+        /// </para>
+        /// </summary>
+        public PlayerIndex FlipCoin()
+        {
+            if (!SetupInProgress)
+            {
+                throw new InvalidOperationException(
+                    "The coin is only flipped while the opening lineup setup is in progress.");
+            }
+
+            if (CoinFlipped)
+            {
+                return FirstPlayer;
+            }
+
+            bool heads = Rng.Next(2) == 0;
+            FirstPlayer = heads ? PlayerIndex.Player : PlayerIndex.Opponent;
+            ActivePlayer = FirstPlayer;
+            CoinFlipped = true;
+
+            LogEvent($"Coin flip: {(heads ? "heads" : "tails")} - {FirstPlayer} goes first, " +
+                     $"{GetOpponent(FirstPlayer).Index} starts with +{SecondPlayerNPBonus} NP");
+
+            return FirstPlayer;
+        }
+
+        /// <summary>
+        /// What the next lineup reroll costs this player: the base price plus one for every reroll already
+        /// taken. A player opens setup on <see cref="PlayerState.StartingNP"/> NP, so the escalation prices
+        /// a second reroll at exactly the NP they start with and a third beyond it — the cap on rerolls is
+        /// the economy, not a counter.
+        /// </summary>
+        public int LineupRerollCost(PlayerIndex who)
+        {
+            return LineupRerollBaseCost + GetPlayer(who).LineupRerolls;
+        }
+
+        /// <summary>
+        /// Closes setup and starts the match: the cards nobody fielded go back into their decks, both players
+        /// draw their opening hands, the coin loser is credited the going-second NP, and the coin winner's
+        /// first Upkeep runs.
+        /// <para>
+        /// Internal on purpose. It is the one transition that makes a half-taken lineup impossible to undo,
+        /// and the only caller is the engine's confirm-lineup path — so a front end cannot bypass a
+        /// confirmation and open the match on an empty board. A test that wants setup closed drives the
+        /// command, which is the path the game actually takes.
+        /// </para>
+        /// </summary>
+        internal void CompleteSetup()
+        {
+            if (!SetupInProgress)
+            {
+                return;
+            }
+
+            for (int i = 0; i < Players.Length; i++)
+            {
+                PlayerState player = Players[i];
+
+                // What was offered and not fielded is a deck card again. The shuffle that follows is what
+                // makes a reroll or a refused offer unrecoverable-by-counting: the opponent cannot remember
+                // which five you were shown and infer the rest of your deck from it.
+                if (player.LineupOffer.Count > 0)
+                {
+                    player.Deck.AddRange(player.LineupOffer);
+                    player.LineupOffer.Clear();
+                    player.ShuffleDeck();
+                }
+
+                player.LineupConfirmed = true;
+            }
+
+            for (int i = 0; i < StartingHandSize; i++)
+            {
+                Players[0].DrawCard();
+                Players[1].DrawCard();
+            }
+
+            // A match cannot start without a first player, so a caller that never asked for the toss gets it
+            // here rather than silently defaulting to Player and paying the going-second NP to whoever
+            // happens not to be. FlipCoin is idempotent, so the normal path — the flip happened during setup
+            // — is untouched by this line.
+            if (!CoinFlipped)
+            {
+                FlipCoin();
+            }
+
+            GetOpponent(FirstPlayer).CurrentNP += SecondPlayerNPBonus;
+
+            SetupInProgress = false;
+            ActivePlayer = FirstPlayer;
+            TurnNumber = 1;
+            CurrentPhase = TurnPhase.Upkeep;
+
+            int fielded = Players[0].Board.GetAllUnits(PlayerIndex.Player).Count
+                + Players[1].Board.GetAllUnits(PlayerIndex.Opponent).Count;
+            LogEvent($"Lineups set - {fielded} unit(s) fielded, both players draw {StartingHandSize}");
+
+            // Every opening unit is readied here, for <em>both</em> seats - not only the first player's, which is
+            // what the Upkeep below would have done on its own. Two reasons, and the second is the important one.
+            // The first is the rule: the lineup is not a deployment, so [Summoning Delay] has nothing to delay.
+            // The second is that a unit which is not Ready cannot block, so if the second seat's lineup had waited
+            // for its own first Upkeep, the first player would have swung five Ready bodies at a 3-durability Core
+            // with nothing able to intercept - an unavoidable loss dressed up as a tempo disadvantage.
+            for (int i = 0; i < Players.Length; i++)
+            {
+                foreach (CardInstance unit in Players[i].Board.GetAllUnits((PlayerIndex)i))
+                {
+                    unit.SetReady();
+                }
+            }
+
+            // The lineup is the first thing that has ever put Node Actives on the board before a turn began, so
+            // the Node 1/2 Core multipliers have to be computed here. Without this the Core Active sits one ATK
+            // and one HP light until something dies or switches, which are the only two places the refresh used
+            // to run, and a player who reads their own card face would see numbers that do not match.
+            RefreshNodeMultipliers();
+
+            LogEvent($"Turn {TurnNumber} - {ActivePlayer} Upkeep Phase");
+
+            OnUpkeepPhase();
+        }
+
+        /// <summary>
+        /// Moves the first <see cref="LineupOfferSize"/> Units at or under <see cref="LineupMaxCost"/> from
+        /// the front of <paramref name="player"/>'s deck into their offer, leaving every skipped card in the
+        /// deck in its original relative order.
+        /// <para>
+        /// Internal because the engine calls it on a reroll: the offer is dealt by the same search whether it
+        /// is the first one or the fourth, so the two paths cannot drift apart.
+        /// </para>
+        /// </summary>
+        internal static void DealLineupOffer(PlayerState player)
+        {
+            player.LineupOffer.Clear();
+
+            for (int i = 0; i < player.Deck.Count && player.LineupOffer.Count < LineupOfferSize; i++)
+            {
+                CardInstance candidate = player.Deck[i];
+                if (candidate.Definition.Type == CardType.Unit
+                    && candidate.Definition.Cost <= LineupMaxCost)
+                {
+                    player.LineupOffer.Add(candidate);
+                }
+            }
+
+            // Removed by reference after the scan rather than by splicing inside it: taking a card out mid
+            // walk shifts every index behind it, which would silently skip the card after each hit.
+            foreach (CardInstance candidate in player.LineupOffer)
+            {
+                player.Deck.Remove(candidate);
+            }
+        }
+
+        static void ValidateDecks(List<CardDefinition> playerDeck, List<CardDefinition> opponentDeck)
+        {
+            if (playerDeck == null || playerDeck.Count == 0)
+            {
+                throw new ArgumentException("Player deck cannot be null or empty", nameof(playerDeck));
+            }
+
+            if (opponentDeck == null || opponentDeck.Count == 0)
+            {
+                throw new ArgumentException("Opponent deck cannot be null or empty", nameof(opponentDeck));
+            }
         }
 
         private void LoadDeck(PlayerState player, List<CardDefinition> definitions)

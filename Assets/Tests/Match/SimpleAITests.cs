@@ -257,7 +257,23 @@ namespace Overlink.Match.Tests
                     $"Round {turn}: the AI turn must finish and return control.");
             }
 
-            Assert.IsFalse(state.IsMatchOver(), "Match ended too early");
+            // The premise of the assertion below was only half right when it was written. A Core at 30 does
+            // survive three rounds of 2-damage swings, but this test's deck is all 1-cost 2/2 Units, so the AI
+            // fields five of them in its first Main phase - and that is four Nodes held, which satisfies GDD
+            // 2.1.8 Node Domination at its next Upkeep. The match ending there is a legitimate win, not an
+            // illegal move, and this test is about moves.
+            //
+            // So what has to hold is stated positively instead: control came back every round (asserted in the
+            // loop above, and the failure that matters for legality), and if the match did end it ends for a
+            // named victory condition rather than by a sweep nobody can explain. Stage 2 exempted turn 1 from
+            // the domination check, which does not help this test - the AI's second Upkeep is turn 2 or 3 and
+            // it still holds whatever Nodes survived.
+            if (state.IsMatchOver())
+            {
+                Assert.IsNotEmpty(state.ResultReason,
+                    $"A match that ends mid-test must end for a stated victory condition, not an unexplained " +
+                    $"one (result {state.Result}, turn {state.TurnNumber}).");
+            }
         }
 
         [Test]
@@ -328,6 +344,227 @@ namespace Overlink.Match.Tests
             Assert.IsTrue(relayOnNode, "The Relay should have been deployed to a Node slot.");
             Assert.AreEqual(1, board.CountControlledNodes(PlayerIndex.Opponent),
                 "A Relay in a Node Active slot must control that Node.");
+        }
+
+        [Test]
+        public void SimpleAI_ChooseLineup_FillsAllFiveActivesAndBuysNoReroll()
+        {
+            var state = new MatchState(5);
+            var engine = new MatchEngine(state);
+            state.InitializeSetup(CreateTestDeck(30), CreateTestDeck(30));
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+
+            Assert.AreEqual(MatchState.LineupOfferSize, ai.ChooseLineup());
+
+            Board board = state.Players[1].Board;
+            Assert.IsNotNull(board.CoreActive[0].Card, "the Core is fielded");
+            for (int node = 0; node < Board.NodeCount; node++)
+            {
+                Assert.IsNotNull(board.NodeActive[node][0].Card, $"Node {node + 1} is fielded");
+            }
+
+            Assert.IsTrue(state.Players[1].LineupConfirmed);
+            Assert.AreEqual(0, state.Players[1].LineupRerolls,
+                "the AI does not pay for information it has no way to price");
+            Assert.AreEqual(0, state.Players[1].LineupOffer.Count, "and nothing was left unfielded in the offer");
+        }
+
+        [Test]
+        public void SimpleAI_PutsTheBestBodyInTheCoreAndTheNextTwoOnTheMultiplierNodes()
+        {
+            // Node 1 and Node 2 grant the Core Active +1 ATK and +1 HP, so the second- and third-best bodies
+            // are the ones making the best body stronger. A lineup that filled the Nodes in deck order would
+            // leave that value on the table, and this is the only test that can see it happen.
+            var deck = new List<CardDefinition>
+            {
+                Body("weak", 1, 0),
+                Body("light", 1, 1),
+                Body("medium", 2, 1),
+                Body("heavy", 2, 2),
+                Body("biggest", 3, 2)
+            };
+
+            var state = new MatchState(7);
+            var engine = new MatchEngine(state);
+            state.InitializeSetup(deck, new List<CardDefinition>(deck));
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 11);
+            ai.ChooseLineup();
+
+            Board board = state.Players[1].Board;
+            Assert.AreEqual("biggest", board.CoreActive[0].Card.Definition.Name, "strongest body holds the Core");
+            Assert.AreEqual("heavy", board.NodeActive[0][0].Card.Definition.Name, "Node 1 feeds it ATK");
+            Assert.AreEqual("medium", board.NodeActive[1][0].Card.Definition.Name, "Node 2 feeds it HP");
+            Assert.AreEqual("light", board.NodeActive[2][0].Card.Definition.Name);
+            Assert.AreEqual("weak", board.NodeActive[3][0].Card.Definition.Name);
+        }
+
+        [Test]
+        public void SimpleAI_ThroughTheSetupPath_OpensALiveMatchAndMakesLegalMoves()
+        {
+            // The whole opening, end to end: setup, two lineups, the coin, and a full AI turn on top of a board
+            // that already holds five units per side. This is the path the shipped game is about to start using,
+            // and before Stage 2's turn-1 domination exemption it would have ended at the first Upkeep.
+            var state = new MatchState(9);
+            var engine = new MatchEngine(state);
+            state.InitializeSetup(CreateTestDeck(30), CreateTestDeck(30));
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            ai.ChooseLineup();
+
+            // The human seat confirms through the same command the UI will use.
+            List<CardInstance> offer = state.Players[0].LineupOffer;
+            var ids = new int[ConfirmLineupCommand.RequiredLength];
+            for (int i = 0; i < ids.Length && i < offer.Count; i++)
+            {
+                ids[i] = offer[i].InstanceId;
+            }
+
+            Assert.AreEqual(CommandResult.Success,
+                engine.ExecuteCommand(new ConfirmLineupCommand(PlayerIndex.Player, ids)));
+
+            Assert.IsFalse(state.SetupInProgress, "both lineups in, the match is live");
+            Assert.AreEqual(MatchResult.None, state.Result, "and the opening did not award it to the coin winner");
+            Assert.AreEqual(5, state.Players[0].Hand.Count);
+            Assert.AreEqual(5, state.Players[1].Hand.Count);
+
+            // Whichever seat the coin put first, the AI has to actually be the one up before TakeTurn can be
+            // judged: it short-circuits off-turn by design, and a test that assumed an order would pass by
+            // watching it do nothing.
+            if (state.FirstPlayer == PlayerIndex.Player)
+            {
+                Assert.AreEqual(CommandResult.Success,
+                    engine.ExecuteCommand(new EndTurnCommand(PlayerIndex.Player)));
+            }
+
+            Assert.AreEqual(PlayerIndex.Opponent, state.ActivePlayer, "the AI is up to take a turn");
+
+            // What the AI's turn has to do is move the position. It is not asserted that control comes back,
+            // because a full opening lineup makes that false for a legitimate reason: five Ready bodies swing
+            // on turn 1, an unblocked hit through a Core Active transfers to the Core, and a Core holds 3
+            // durability - so a seat that develops nothing simply dies. Demanding the hand-back would have
+            // tested the opponent's weakness rather than the setup path, so the end-of-turn shape is stated as
+            // "something happened, or the match ended for a named condition".
+            int aiHandBefore = state.Players[1].Hand.Count;
+            int myUnitsBefore = state.Players[0].Board.GetAllUnits(PlayerIndex.Player).Count;
+            int myCoreBefore = state.Players[0].CoreDurability;
+
+            ai.TakeTurn();
+
+            Assert.IsTrue(
+                state.Players[1].Hand.Count < aiHandBefore
+                    || state.Players[0].CoreDurability < myCoreBefore
+                    || state.Players[0].Board.GetAllUnits(PlayerIndex.Player).Count < myUnitsBefore,
+                "the AI deployed, damaged the Core, or killed a body - its turn was not a no-op");
+            Assert.IsTrue(state.ActivePlayer == PlayerIndex.Player || state.IsMatchOver(),
+                "and either control came back to the human seat or the AI's turn ended the match outright");
+            Assert.IsTrue(!state.IsMatchOver() || !string.IsNullOrEmpty(state.ResultReason),
+                "and an ended match names the condition that ended it, not an unexplained sweep " +
+                $"(result {state.Result}, turn {state.TurnNumber})");
+        }
+
+        [Test]
+        public void SimpleAI_PressesAnAbilityInsteadOfTakingATradeItLoses()
+        {
+            var state = new MatchState(13);
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+            HandOverToOpponent(state, engine, TurnPhase.Combat);
+
+            // A 1/1 with [Activate] facing a 5/5: attacking is suicide for nothing, so the Combat step is spent
+            // on the ability. NP is zeroed so the GainNP effect is the only thing that can move it, and the AI
+            // holds exactly one body - a second Ready Active would take its own swing at the 5/5 and the test
+            // would be measuring a trade rather than the decision not to.
+            CardDefinition able = CreateTestCardDefinition("test_ability", "Breaker");
+            able.Keywords = new[] { Keyword.Activate };
+            able.Effects = new[] { new EffectDescriptor(EffectType.GainNP, TargetKind.Self, 3) };
+            CardInstance mine = Place(state, PlayerIndex.Opponent, able, SlotType.CoreActive, 1, 1);
+
+            CardInstance enemy = Place(state, PlayerIndex.Player, CreateTestCardDefinition("test_wall", "Wall"),
+                SlotType.CoreActive, 5, 5);
+
+            state.Players[1].CurrentNP = 0;
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            ai.FinishTurn();
+
+            Assert.AreEqual(3, state.Players[1].CurrentNP, "the ability fired and its effect resolved");
+            Assert.AreEqual(UnitState.Exhausted, mine.State, "and it cost the unit its Combat step");
+            Assert.AreEqual(5, enemy.CurrentHp, "the 1/1 never swung into the 5/5");
+        }
+
+        [Test]
+        public void SimpleAI_StrikesAnOpenCoreRatherThanPressingAnAbility()
+        {
+            var state = new MatchState(17);
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+            HandOverToOpponent(state, engine, TurnPhase.Combat);
+
+            CardDefinition able = CreateTestCardDefinition("test_ability", "Breaker");
+            able.Keywords = new[] { Keyword.Activate };
+            able.Effects = new[] { new EffectDescriptor(EffectType.GainNP, TargetKind.Self, 3) };
+            Place(state, PlayerIndex.Opponent, able, SlotType.CoreActive, 1, 1);
+
+            state.Players[1].CurrentNP = 0;
+            int durabilityBefore = state.Players[0].CoreDurability;
+
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            ai.FinishTurn();
+
+            Assert.Less(state.Players[0].CoreDurability, durabilityBefore,
+                "an undefended Core is the win condition, and no ability outranks it");
+            Assert.AreEqual(0, state.Players[1].CurrentNP, "so the ability stayed unpressed");
+        }
+
+        [Test]
+        public void SimpleAI_TakesATradeItWinsRatherThanPressingAnAbility()
+        {
+            var state = new MatchState(19);
+            var engine = new MatchEngine(state);
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+            HandOverToOpponent(state, engine, TurnPhase.Combat);
+
+            CardDefinition able = CreateTestCardDefinition("test_ability", "Breaker");
+            able.Keywords = new[] { Keyword.Activate };
+            able.Effects = new[] { new EffectDescriptor(EffectType.GainNP, TargetKind.Self, 3) };
+            Place(state, PlayerIndex.Opponent, able, SlotType.CoreActive, 3, 3);
+            Place(state, PlayerIndex.Player, CreateTestCardDefinition("test_soft", "Soft"),
+                SlotType.CoreActive, 1, 1);
+
+            state.Players[1].CurrentNP = 0;
+            var ai = new SimpleAI(engine, state, PlayerIndex.Opponent, 42);
+            ai.FinishTurn();
+
+            Assert.AreEqual(0, state.Players[0].Board.GetAllUnits(PlayerIndex.Player).Count,
+                "the favourable trade was taken");
+            Assert.AreEqual(0, state.Players[1].CurrentNP, "and the ability lost to a kill it survives");
+        }
+
+        /// <summary>A body with a distinct stat total, so a ranking assertion has something to rank.</summary>
+        private CardDefinition Body(string name, int atk, int hp)
+        {
+            CardDefinition definition = CreateTestCardDefinition($"test_{name}", name);
+            definition.Atk = atk;
+            definition.Hp = hp;
+            definition.Cost = 1;
+            return definition;
+        }
+
+        /// <summary>
+        /// Puts a live Ready unit in a socket. The AI tests need boards shaped exactly one way, and playing a
+        /// card into position would drag NP, the phase ladder and the summoning rule into each of them.
+        /// </summary>
+        private CardInstance Place(MatchState state, PlayerIndex who, CardDefinition definition,
+            SlotType slotType, int atk, int hp, int index = 0, int node = -1)
+        {
+            definition.Atk = atk;
+            definition.Hp = hp;
+            var card = new CardInstance(definition, who);
+            card.State = UnitState.Ready;
+            card.HasSummoningDelay = false;
+            state.GetPlayer(who).Board.GetSlot(slotType, index, node).Card = card;
+            return card;
         }
 
         /// <summary>

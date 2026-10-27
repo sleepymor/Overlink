@@ -127,4 +127,53 @@ namespace Overlink.Core
             CardInstanceIds = cardInstanceIds ?? Array.Empty<int>();
         }
     }
+
+    /// <summary>
+    /// Throws the whole opening offer back and takes a fresh one. There is nothing to nominate: a reroll
+    /// replaces all five cards or nothing, which is what makes its price escalate — a player who could keep
+    /// one card from a good offer would pay for the reroll twice over in the long run.
+    /// </summary>
+    public sealed class RerollLineupCommand : GameCommand
+    {
+        public RerollLineupCommand(PlayerIndex player) : base(player, CommandType.RerollLineup)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Fields the opening lineup. <see cref="ActiveInstanceIds"/> is in battlefield order — Core Active
+    /// first, then Node 1-4 Actives — and an entry of 0 leaves that socket empty, so a player whose offer
+    /// came up short can still close setup rather than deadlock it.
+    /// </summary>
+    public sealed class ConfirmLineupCommand : GameCommand
+    {
+        /// <summary>Socket count the array has to name: the Core Active plus one Active per Node.</summary>
+        public static int RequiredLength => Board.CoreActiveSlots + Board.NodeCount * Board.NodeActiveSlots;
+
+        public int[] ActiveInstanceIds { get; }
+
+        public ConfirmLineupCommand(PlayerIndex player, int[] activeInstanceIds)
+            : base(player, CommandType.ConfirmLineup)
+        {
+            ActiveInstanceIds = activeInstanceIds ?? Array.Empty<int>();
+        }
+    }
+
+    /// <summary>
+    /// Trades an Active unit out to a Bench socket and brings one Bench unit in for it. Both instance ids
+    /// are named rather than the destination slot, because in a retreat the destination is whichever socket
+    /// the incoming unit already holds — there is no choice to make beyond which unit comes in.
+    /// </summary>
+    public sealed class RetreatCommand : GameCommand
+    {
+        public int ActiveInstanceId { get; }
+        public int BenchInstanceId { get; }
+
+        public RetreatCommand(PlayerIndex player, int activeInstanceId, int benchInstanceId)
+            : base(player, CommandType.Retreat)
+        {
+            ActiveInstanceId = activeInstanceId;
+            BenchInstanceId = benchInstanceId;
+        }
+    }
 }

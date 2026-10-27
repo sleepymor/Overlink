@@ -21,7 +21,25 @@ namespace Overlink.Core
         public List<CardInstance> Deck { get; }
         public List<CardInstance> Discard { get; }
 
-        public PlayerState(PlayerIndex index)
+        /// <summary>
+        /// The opening lineup this player has been offered and may still field, reroll or abandon. Held apart
+        /// from the hand on purpose: an offer card is not in play, is not a <see cref="Hand"/> card the
+        /// opponent can see or affect, and going back to the deck is the default outcome for every card the
+        /// player does not field. Empty once setup is closed.
+        /// </summary>
+        public List<CardInstance> LineupOffer { get; }
+
+        /// <summary>
+        /// How many rerolls this player has already bought during setup. The price of the next one is
+        /// <see cref="MatchState.LineupRerollBaseCost"/> plus this many, so the escalation is per player and
+        /// resets with the match rather than being a global counter.
+        /// </summary>
+        public int LineupRerolls { get; set; }
+
+        /// <summary>True once this player has fielded a lineup and cannot reroll any more.</summary>
+        public bool LineupConfirmed { get; set; }
+
+        public PlayerState(PlayerIndex index, Random rng = null)
         {
             Index = index;
             CurrentNP = StartingNP;
@@ -30,7 +48,11 @@ namespace Overlink.Core
             Hand = new List<CardInstance>();
             Deck = new List<CardInstance>();
             Discard = new List<CardInstance>();
+            LineupOffer = new List<CardInstance>();
+            shuffleRng = rng ?? new Random();
         }
+
+        private readonly Random shuffleRng;
 
         /// <summary>GDD 2.1.1: NP can never exceed 10 + the number of Nodes you control.</summary>
         public static int NpCap(int controlledNodes)
@@ -128,9 +150,22 @@ namespace Overlink.Core
             ShuffleDeck();
         }
 
+        /// <summary>
+        /// Fisher-Yates over the deck, driven by the <see cref="Random"/> the owning
+        /// <see cref="MatchState"/> handed to this player.
+        /// <para>
+        /// This used to construct its own unseeded <c>Random</c>, which made every shuffle — and therefore
+        /// every opening hand, every Deck-Out race and the coin flip that shares the same stream —
+        /// irreproducible. <see cref="MatchEngineTests"/> had to delete a correct assertion because of it:
+        /// "the mulliganed card is not back in the hand" was a roughly one-in-twenty-six coin flip against
+        /// the real shuffler rather than a wrong test. A seeded match replays identically, which is what
+        /// lets that assertion come back and what netplay will need before two peers can disagree about a
+        /// deck.
+        /// </para>
+        /// </summary>
         public void ShuffleDeck()
         {
-            Random rng = new Random();
+            Random rng = shuffleRng;
             int n = Deck.Count;
             while (n > 1)
             {

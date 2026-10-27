@@ -57,6 +57,31 @@ namespace Overlink.Core
                 return CommandResult.InvalidPhase;
             }
 
+            // While the opening lineup is being set there is no board for the rest of the rules to apply to:
+            // nothing is fielded, no hand exists, and the first Upkeep has not run. Only the two setup
+            // actions and a concession are honoured, and each player acts on their own offer regardless of
+            // whose turn the coin decided it would be — which is why this block returns before the
+            // active-player rule below rather than being exempted inside it.
+            if (State.SetupInProgress)
+            {
+                if (command is RerollLineupCommand reroll)
+                {
+                    return ExecuteRerollLineup(reroll);
+                }
+
+                if (command is ConfirmLineupCommand confirm)
+                {
+                    return ExecuteConfirmLineup(confirm);
+                }
+
+                if (command is ConcedeCommand earlyConcede)
+                {
+                    return ExecuteConcede(earlyConcede);
+                }
+
+                return CommandResult.InvalidPhase;
+            }
+
             // Blocking and conceding are the exceptions to the active-player rule: a block is declared by
             // the defender while the opponent holds initiative, and a concession may be taken on either
             // player's turn because it is a private decision rather than a piece of table action.
@@ -80,6 +105,8 @@ namespace Overlink.Core
                     return ExecuteConcede(concede);
                 case SwitchPositionCommand switchPos:
                     return ExecuteSwitchPosition(switchPos);
+                case RetreatCommand retreat:
+                    return ExecuteRetreat(retreat);
                 case PassPhaseCommand _:
                     return ExecutePassPhase();
                 case EndTurnCommand _:
@@ -470,6 +497,80 @@ namespace Overlink.Core
             return CommandResult.Success;
         }
 
+        /// <summary>
+        /// Combat-phase retreat: an Active unit and one of its owner's Bench units trade places, for
+        /// <see cref="MatchState.RetreatNP"/>, and <em>both</em> end the exchange Exhausted.
+        /// <para>
+        /// That last part is the whole rule. A retreat that left the incoming unit Ready would buy the
+        /// controller a fresh attacker on top of the escape, so Combat would offer a free extra action to
+        /// anyone holding 1 NP; and a retreat that left the outgoing unit Ready would let it swing from the
+        /// Bench it was just parked on. Exhausting both makes retreat the cost it has to be — you give up
+        /// this Combat step's action in that battlefield to save the body — and it is self-limiting, since a
+        /// unit that has retreated cannot retreat again until Upkeep readies it.
+        /// </para>
+        /// <para>
+        /// Deliberately not the same command as <see cref="ExecuteSwitchPosition"/>, which stays the
+        /// Main-phase move into an <em>empty</em> socket. The two differ in phase, in price, in what they do
+        /// to the units involved and in whether anything is displaced, and folding them into one method with
+        /// a phase-dependent meaning would make every rule change to either one invisible.
+        /// </para>
+        /// </summary>
+        private CommandResult ExecuteRetreat(RetreatCommand command)
+        {
+            if (State.CurrentPhase != TurnPhase.Combat)
+            {
+                return CommandResult.InvalidPhase;
+            }
+
+            PlayerState player = State.GetPlayer(command.Player);
+            CardInstance outgoing = FindActiveCardInstance(player.Board, command.ActiveInstanceId);
+            CardInstance incoming = FindCardInstance(player.Board, command.BenchInstanceId);
+
+            if (outgoing == null || incoming == null || outgoing == incoming)
+            {
+                return CommandResult.InvalidTarget;
+            }
+
+            // The incoming card must actually be benched: FindCardInstance resolves Active slots too, and a
+            // "retreat" between two Actives would move a unit across the board while pretending to rest it.
+            BoardSlot incomingSlot = player.Board.FindSlot(incoming);
+            BoardSlot outgoingSlot = player.Board.FindSlot(outgoing);
+            if (incomingSlot == null || outgoingSlot == null || !incomingSlot.IsBench())
+            {
+                return CommandResult.InvalidTarget;
+            }
+
+            // GDD 2.1.5: Summoning Delay bars a fresh deployment from attacking <em>or switching</em>, and a
+            // retreat is a switch. The outgoing unit additionally has to be able to act at all, which is
+            // what stops a unit that already swung this Combat step from also escaping.
+            if (!outgoing.CanAct() || incoming.HasSummoningDelay)
+            {
+                return CommandResult.UnitCannotAct;
+            }
+
+            if (!player.CanAfford(MatchState.RetreatNP))
+            {
+                return CommandResult.InsufficientNP;
+            }
+
+            player.SpendNP(MatchState.RetreatNP);
+
+            outgoingSlot.Card = incoming;
+            incomingSlot.Card = outgoing;
+            outgoing.Exhaust();
+            incoming.Exhaust();
+
+            State.LogEvent($"{command.Player} retreats {outgoing.Definition.Name} for " +
+                           $"{incoming.Definition.Name} ({MatchState.RetreatNP} NP)");
+
+            // A Node's Active slot just changed hands or emptied, and the Core multipliers key off Node
+            // control, so they are recomputed — without the destruction/promotion sweep, which has nothing
+            // to do here because the exchange kills nothing.
+            State.RefreshNodeMultipliers();
+
+            return CommandResult.Success;
+        }
+
         private CommandResult ExecutePassPhase()
         {
             State.AdvancePhase();
@@ -534,10 +635,151 @@ namespace Overlink.Core
             return CommandResult.Success;
         }
 
+        /// <summary>
+        /// Buys a fresh opening offer: the whole five goes back into the deck, the deck is shuffled, and a new
+        /// offer is searched for. The price is <see cref="MatchState.LineupRerollCost"/> — 2 NP plus one for
+        /// every reroll already taken.
+        /// <para>
+        /// All-or-nothing on purpose. A partial reroll would let a player keep the one body they liked and
+        /// reroll the other four at a flat price indefinitely, turning a gamble into a search loop. The
+        /// escalation is what makes that unprofitable, and it can only do so if the cards a player would
+        /// rather keep also go back in.
+        /// </para>
+        /// </summary>
+        private CommandResult ExecuteRerollLineup(RerollLineupCommand command)
+        {
+            PlayerState player = State.GetPlayer(command.Player);
+            if (player.LineupConfirmed)
+            {
+                return CommandResult.InvalidCommand;
+            }
+
+            int cost = State.LineupRerollCost(command.Player);
+            if (!player.CanAfford(cost))
+            {
+                return CommandResult.InsufficientNP;
+            }
+
+            player.SpendNP(cost);
+            player.LineupRerolls++;
+
+            player.Deck.AddRange(player.LineupOffer);
+            player.LineupOffer.Clear();
+            player.ShuffleDeck();
+            MatchState.DealLineupOffer(player);
+
+            State.LogEvent($"{command.Player} rerolls the opening lineup for {cost} NP - " +
+                           $"{player.LineupOffer.Count} card(s) offered, next one costs " +
+                           $"{State.LineupRerollCost(command.Player)} NP");
+
+            return CommandResult.Success;
+        }
+
+        /// <summary>
+        /// Fields the nominated offer cards into their Active sockets and closes this player's setup. Once the
+        /// last player confirms, setup completes in the same command, so there is no window in which a lineup
+        /// is half-taken and the match is not running.
+        /// <para>
+        /// Nominations are validated in full before anything is placed. A lineup that half-landed would leave
+        /// cards on a board whose owner can no longer reroll them away, and the rejection would arrive after
+        /// the player had already committed — so the whole array is checked first and the placement pass can
+        /// then only succeed.
+        /// </para>
+        /// <para>
+        /// A socket may be left empty, by nomination or because the offer came up short. Requiring all five
+        /// would deadlock a match whose deck holds fewer than five Units under the cost ceiling, and the
+        /// penalty for an empty Active is already the rules' own — nothing defends that battlefield.
+        /// </para>
+        /// </summary>
+        private CommandResult ExecuteConfirmLineup(ConfirmLineupCommand command)
+        {
+            PlayerState player = State.GetPlayer(command.Player);
+            if (player.LineupConfirmed)
+            {
+                return CommandResult.InvalidCommand;
+            }
+
+            if (command.ActiveInstanceIds.Length != ConfirmLineupCommand.RequiredLength)
+            {
+                return CommandResult.InvalidCommand;
+            }
+
+            List<BoardSlot> activeSlots = ActiveSlotsInBattlefieldOrder(player.Board);
+            var targetSlots = new List<BoardSlot>();
+            var fieldedCards = new List<CardInstance>();
+            var nominated = new HashSet<int>();
+
+            for (int i = 0; i < command.ActiveInstanceIds.Length; i++)
+            {
+                int instanceId = command.ActiveInstanceIds[i];
+
+                // 0 is the caller's way of saying "leave this battlefield open", not a card lookup.
+                if (instanceId == 0)
+                {
+                    continue;
+                }
+
+                if (!nominated.Add(instanceId))
+                {
+                    return CommandResult.InvalidCommand;
+                }
+
+                CardInstance card = player.LineupOffer.Find(c => c.InstanceId == instanceId);
+                if (card == null)
+                {
+                    return CommandResult.InvalidTarget;
+                }
+
+                BoardSlot slot = activeSlots[i];
+                if (!slot.IsFree() || !slot.CanHost(card.Definition.Type))
+                {
+                    return CommandResult.InvalidTarget;
+                }
+
+                targetSlots.Add(slot);
+                fieldedCards.Add(card);
+            }
+
+            for (int i = 0; i < targetSlots.Count; i++)
+            {
+                targetSlots[i].Card = fieldedCards[i];
+                player.LineupOffer.Remove(fieldedCards[i]);
+            }
+
+            player.LineupConfirmed = true;
+
+            State.LogEvent($"{command.Player} fields {fieldedCards.Count} unit(s) " +
+                           $"({player.LineupOffer.Count} offered card(s) returned to deck)");
+
+            if (State.Players[0].LineupConfirmed && State.Players[1].LineupConfirmed)
+            {
+                State.CompleteSetup();
+            }
+
+            return CommandResult.Success;
+        }
+
+        /// <summary>
+        /// The Active sockets in the order a <see cref="ConfirmLineupCommand"/> nominates them: the Core
+        /// Active first, then each Node's Active in Node order. Derived from the board rather than indexed by
+        /// hand, so it stays correct if the per-Node slot counts ever change.
+        /// </summary>
+        static List<BoardSlot> ActiveSlotsInBattlefieldOrder(Board board)
+        {
+            var slots = new List<BoardSlot>(Board.CoreActiveSlots + Board.NodeCount * Board.NodeActiveSlots);
+            slots.AddRange(board.CoreActive);
+            for (int node = 0; node < board.NodeActive.Length; node++)
+            {
+                slots.AddRange(board.NodeActive[node]);
+            }
+
+            return slots;
+        }
+
         private void ResolveCombat(CardInstance attacker, CardInstance defender)
         {
-            bool attackerHasFirstStrike = HasFirstStrike(attacker);
-            bool defenderHasFirstStrike = HasFirstStrike(defender);
+            bool attackerHasFirstStrike = StrikesFirst(attacker);
+            bool defenderHasFirstStrike = StrikesFirst(defender);
 
             State.LogEvent($"{attacker.Definition.Name} attacks {defender.Definition.Name}");
 
@@ -625,8 +867,14 @@ namespace Overlink.Core
         /// <summary>
         /// [First Strike] from the unit's own keywords, plus the Node 3 Core multiplier that grants it to
         /// Core Active Units while Node 3 is controlled (GDD 2.1.7).
+        /// <para>
+        /// Public because anything that has to predict an exchange — the AI weighing whether a trade is
+        /// favourable, a front end drawing a damage preview — needs the same answer the resolver applies. The
+        /// keyword half of this rule is obvious from the card face and the Node 3 half is not, so a private
+        /// helper plus a restated copy elsewhere is exactly how a "safe" attack turns out to be lethal.
+        /// </para>
         /// </summary>
-        private bool HasFirstStrike(CardInstance unit)
+        public bool StrikesFirst(CardInstance unit)
         {
             if (HasKeyword(unit, Keyword.FirstStrike))
             {

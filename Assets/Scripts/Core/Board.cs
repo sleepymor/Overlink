@@ -29,6 +29,26 @@ namespace Overlink.Core
             return Card == null || !Card.IsAlive();
         }
 
+        /// <summary>
+        /// True for a front-line socket: the Core Active or one of the four Node Actives. What stands in an
+        /// Active socket is what the battlefields are fought with — it attacks, it is attacked, it holds a
+        /// Node, and it is the only place a [Activate] ability can be fired from.
+        /// </summary>
+        public bool IsActive()
+        {
+            return Type == SlotType.CoreActive || Type == SlotType.NodeActive;
+        }
+
+        /// <summary>
+        /// True for a reserve socket: the four Core Bench slots or one of the two Bench slots under a Node.
+        /// A benched card is alive and can be brought in, but it is not in any battlefield, which is why
+        /// blocking and targeting both exclude it.
+        /// </summary>
+        public bool IsBench()
+        {
+            return Type == SlotType.CoreBench || Type == SlotType.NodeBench;
+        }
+
         public bool CanHost(CardType cardType)
         {
             switch (Type)
