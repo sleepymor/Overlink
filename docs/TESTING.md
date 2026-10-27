@@ -73,9 +73,12 @@ loaded AppDomain's, so it reports a brand-new file as present regardless of what
 domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
 is how "the runner's cache must be stale" gets mistaken for a fact.
 
-## Known state at the close of Stage 2 (2026-10-27)
+## Known state after the Node contest rule (2026-10-28)
 
-EditMode: **1312 leaves, 1307 passed, 4 skipped, 1 failed.** The failure is
+EditMode: **1317 leaves, 1312 passed, 4 skipped, 1 failed.** The failure is
 `UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
-UnitySkills package that counts objects in whichever scene happens to be open. It was red before Stage 2, it
-is not ours, and it is the only expected red.
+UnitySkills package that counts objects in whichever scene happens to be open. It was red before the Node
+rule landed, it is not ours, and it is the only expected red.
+
+The 22 tests in `Overlink.Cards.Tests` are not in that count. They belong to PlayMode and no run of either
+mode has ever executed them.

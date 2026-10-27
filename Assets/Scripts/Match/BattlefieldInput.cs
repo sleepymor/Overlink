@@ -501,18 +501,19 @@ namespace Overlink.Match
         void ShowNode(int nodeIndex)
         {
             MatchState state = coordinator.GetMatchState();
-            bool mine = state.Players[0].Board.IsNodeControlled(nodeIndex, PlayerIndex.Player);
-            bool theirs = state.Players[1].Board.IsNodeControlled(nodeIndex, PlayerIndex.Opponent);
+            bool mine = state.Players[0].Board.HoldsNode(nodeIndex, PlayerIndex.Player);
+            bool theirs = state.Players[1].Board.HoldsNode(nodeIndex, PlayerIndex.Opponent);
 
-            // A Node is controlled by whoever holds its Active socket, and both players have one per Node, so
+            // A Node is held by whoever has a unit in its Active socket, and both players have one per Node, so
             // "contested" is a real state rather than a contradiction.
             string owner = mine && theirs ? "contested" : mine ? "yours" : theirs ? "theirs" : "unheld";
             string label = $"NODE {nodeIndex + 1}";
 
             presenter.ShowInfo(label,
                 $"{NodeBonus(nodeIndex)}\n\nHeld by: {owner}\n" +
-                "A Node is held by a unit in its Active socket. Holding three of the four wins outright " +
-                "(GDD 2.1.8 Node Domination).",
+                "A Node is held by a unit in its Active socket. Its bonus - and its count toward the three of " +
+                "four that wins outright (GDD 2.1.8 Node Domination) - belongs only to the player who holds it " +
+                "while the opponent does not, so a Node both sides hold pays neither.",
                 label);
             ClearBrowse();
         }
@@ -537,12 +538,13 @@ namespace Overlink.Match
 
         void ShowCore(PlayerIndex who)
         {
-            PlayerState p = coordinator.GetMatchState().GetPlayer(who);
+            MatchState state = coordinator.GetMatchState();
+            PlayerState p = state.GetPlayer(who);
             string label = who == PlayerIndex.Player ? "YOUR CORE" : "OPPONENT CORE";
 
             presenter.ShowInfo(label,
                 $"Durability {p.CoreDurability} / {PlayerState.StartingCoreDurability}\n" +
-                $"NP {p.CurrentNP} / {PlayerState.NpCap(p.Board.CountControlledNodes(who))}\n" +
+                $"NP {p.CurrentNP} / {PlayerState.NpCap(state.CountControlledNodes(who))}\n" +
                 $"Hand {p.Hand.Count}   Deck {p.Deck.Count}   Discard {p.Discard.Count}\n\n" +
                 "An attack that reaches this Core unblocked costs exactly one durability, whatever the " +
                 "attacker's ATK (GDD 2.1.6 Step 4). At zero, its owner loses.",

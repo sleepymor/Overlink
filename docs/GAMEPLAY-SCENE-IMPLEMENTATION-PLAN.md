@@ -293,6 +293,30 @@ The current code has Node-control counting, NP gain, Core defeat, and deck opera
 four Nodes with the four multipliers (Node 1 +1 ATK, Node 2 +1 HP, Node 3 First Strike, Node 4
 draw-on-kill) and `NodesForDomination = 3`. Simultaneous both-Cores-down resolves to the active player.
 
+Those three states are load-bearing, and only became so when the opening lineup landed. A Node pays its NP,
+its Core multiplier and its count toward domination to the player who **holds it while the opponent does
+not**: `Board.HoldsNode` answers occupation on one board (each side owns its own Node sockets, so a Board can
+only ever see half of a Node) and `MatchState.ControlsNode` reduces that against the other board. Before the
+split, occupation *was* control, which the opening lineup made untenable - it fields all four Node Actives
+for both seats, so both players sat at 4 of 4 controlled Nodes the moment setup closed and §2.1.8 awarded
+the match to whoever won the coin. The tabletop never had that problem:
+`BattlefieldPresenter.PaintNodes` has always coloured a both-held Node as free and labelled it CONTESTED, so
+the view was speaking the contest rule for its whole life while the engine granted the bonus.
+
+Four consequences follow, and each is pinned by a test rather than by this paragraph:
+
+- A full opening lineup is 4-4 and pays **nothing to either side**. The first Upkeep gains the 3 base NP
+  alone, the cap stays at the base 10, and the Core Active reads its printed stats. Income arrives by
+  clearing the opponent's holder, which is what makes a Node worth fighting over instead of free.
+- Killing an opponent's Node holder does **not** take the Node while their Bench for that Node still holds
+  a body, because `ResolveDestructionAndPromotion` promotes into the emptied socket. A Node changes hands
+  only when the socket ends the batch unoccupied, so Active and Bench are an ordering question.
+- Retreat is a swap, so stepping a Node holder away refills the socket with the incoming body and the
+  payment does not stop. A one-way retreat would have handed the opponent a Node for 1 NP.
+- Turn 1 stays exempt from the domination check, for one narrow case now: confirming a **partial** lineup is
+  legal, so a seat that fields one body leaves three Nodes uncontested, and the exemption keeps a misclick in
+  the confirm UI from ending the match before anything has been played.
+
 All four GDD §2.1.8 conditions are now implemented, and each victory records a human-readable
 `MatchState.ResultReason` (`BOTH CORES DESTROYED`, `CORE DESTRUCTION`, `NODE DOMINATION`, `DECK-OUT`,
 `YOU CONCEDED` / `OPPONENT CONCEDED`) which the victory banner prints under the result word:

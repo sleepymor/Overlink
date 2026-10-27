@@ -189,42 +189,158 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
-        public void Board_IsNodeControlled_ReturnsTrueWhenActiveSlotOccupied()
+        public void Board_HoldsNode_ReturnsTrueWhenActiveSlotOccupied()
         {
             var board = new Board();
             var definition = CreateTestCardDefinition("test_001", "Test Unit", CardType.Unit);
             var card = new CardInstance(definition, PlayerIndex.Player);
             board.NodeActive[0][0].Card = card;
 
-            bool controlled = board.IsNodeControlled(0, PlayerIndex.Player);
+            bool held = board.HoldsNode(0, PlayerIndex.Player);
 
-            Assert.IsTrue(controlled);
+            Assert.IsTrue(held);
         }
 
         [Test]
-        public void Board_IsNodeControlled_ReturnsFalseWhenEmpty()
+        public void Board_HoldsNode_ReturnsFalseWhenEmpty()
         {
             var board = new Board();
 
-            bool controlled = board.IsNodeControlled(0, PlayerIndex.Player);
+            bool held = board.HoldsNode(0, PlayerIndex.Player);
 
-            Assert.IsFalse(controlled);
+            Assert.IsFalse(held);
         }
 
         [Test]
-        public void Board_CountControlledNodes_ReturnsCorrectCount()
+        public void ControlsNode_BothSidesHoldIt_NeitherSideControlsIt()
         {
-            var board = new Board();
-            var definition = CreateTestCardDefinition("test_001", "Test Unit", CardType.Unit);
-            var card1 = new CardInstance(definition, PlayerIndex.Player);
-            var card2 = new CardInstance(definition, PlayerIndex.Player);
+            // GDD 2.1.7 read as uncontested control, and the case the opening lineup creates by construction:
+            // both sides field a Node Active for all four Nodes, so at 4-4 the Nodes pay nothing to anybody.
+            // Under the looser reading every Node counted for both players, which put three of four within reach
+            // the instant setup closed.
+            var state = new MatchState();
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
 
-            board.NodeActive[0][0].Card = card1;
-            board.NodeActive[2][0].Card = card2;
+            FieldNode(state, PlayerIndex.Player, 0);
+            FieldNode(state, PlayerIndex.Opponent, 0);
 
-            int count = board.CountControlledNodes(PlayerIndex.Player);
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Player, 0),
+                "holding a Node the opponent also holds is not controlling it");
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Opponent, 0),
+                "and it is not controlling it for them either");
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Player));
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Opponent));
+        }
 
-            Assert.AreEqual(2, count);
+        [Test]
+        public void ControlsNode_EmptySocketIsHeldByNobody()
+        {
+            var state = new MatchState();
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Player, 2));
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Opponent, 2));
+        }
+
+        [Test]
+        public void ControlsNode_TheSurvivorOfATradeTakesTheNode()
+        {
+            // The whole economy of a Node, in one test: fielding a body is the prerequisite, and the bonus arrives
+            // when the opponent's body stops existing. If this read the other way the opening lineup would have
+            // made every Node free for whoever happened to fill it first.
+            var state = new MatchState();
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            FieldNode(state, PlayerIndex.Player, 1);
+            FieldNode(state, PlayerIndex.Opponent, 1);
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Player, 1), "contested while both hold it");
+
+            state.GetPlayer(PlayerIndex.Opponent).Board.NodeActive[1][0].Card = null;
+
+            Assert.IsTrue(state.ControlsNode(PlayerIndex.Player, 1),
+                "and the side that kept its body on the Node holds it once the other does not");
+            Assert.AreEqual(1, state.CountControlledNodes(PlayerIndex.Player));
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Opponent));
+        }
+
+        [Test]
+        public void ControlsNode_OneKillDoesNotOpenANodeTheBenchCanStillPromoteInto()
+        {
+            // The consequence of the contest rule meeting the promotion rule, and the one a player is most likely
+            // to guess wrong: a destroyed Active is refilled from that same Node's Bench inside
+            // ResolveDestructionAndPromotion, so by the time anyone asks who controls it, the socket is occupied
+            // again. Clearing an opponent's Node therefore means emptying their Bench for that Node as well -
+            // which makes the two sockets an ordering question rather than interchangeable targets.
+            var state = new MatchState();
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            FieldNode(state, PlayerIndex.Player, 0);
+            CardInstance theirs = FieldNode(state, PlayerIndex.Opponent, 0);
+            var reserve = new CardInstance(CreateTestCardDefinition("reserve", "Node Reserve", CardType.Unit),
+                PlayerIndex.Opponent) { State = UnitState.Ready };
+            state.GetPlayer(PlayerIndex.Opponent).Board.NodeBench[0][0].Card = reserve;
+
+            var attacker = new CardInstance(CreateTestCardDefinition("attacker", "Attacker", CardType.Unit),
+                PlayerIndex.Player) { State = UnitState.Ready };
+            state.GetPlayer(PlayerIndex.Player).Board.CoreActive[0].Card = attacker;
+
+            state.CurrentPhase = TurnPhase.Combat;
+            var engine = new MatchEngine(state);
+            Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
+                new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId, theirs.InstanceId)));
+
+            Assert.IsFalse(theirs.IsAlive(), "the holder is dead");
+            Assert.AreSame(reserve, state.GetPlayer(PlayerIndex.Opponent).Board.NodeActive[0][0].Card,
+                "and its Bench replacement is standing on the Node");
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Player, 0),
+                "so the Node is still contested and the kill bought nothing");
+            Assert.IsFalse(state.ControlsNode(PlayerIndex.Opponent, 0), "for either of us");
+        }
+
+        [Test]
+        public void CoreMultipliers_DoNotResolveWhileTheNodeIsContested()
+        {
+            // Node 1 grants +1 ATK and Node 2 grants +1 HP to the Core Active, and both are folded into the
+            // stats the player reads on the card face - so a contested Node has to leave those numbers alone, and
+            // clearing the opponent's holder has to move them. This is the bookkeeping RefreshNodeMultipliers
+            // exists for, tested from both ends of the trade rather than only the buffed one.
+            var state = new MatchState();
+            state.InitializeMatch(CreateTestDeck(30), CreateTestDeck(30));
+
+            var definition = CreateTestCardDefinition("core_probe", "Core Body", CardType.Unit);
+            definition.Atk = 2;
+            definition.Hp = 2;
+            var core = new CardInstance(definition, PlayerIndex.Player);
+            state.GetPlayer(PlayerIndex.Player).Board.CoreActive[0].Card = core;
+
+            for (int node = 0; node < 2; node++)
+            {
+                FieldNode(state, PlayerIndex.Player, node);
+                FieldNode(state, PlayerIndex.Opponent, node);
+            }
+
+            state.RefreshNodeMultipliers();
+            Assert.AreEqual(2, core.CurrentAtk, "a contested Node 1 grants no ATK");
+            Assert.AreEqual(2, core.CurrentHp, "and a contested Node 2 grants no HP");
+
+            // The opponent's holders are cleared one Node at a time, so the two bonuses are shown to be
+            // independent rather than a single "any Node" flag.
+            state.GetPlayer(PlayerIndex.Opponent).Board.NodeActive[0][0].Card = null;
+            state.RefreshNodeMultipliers();
+            Assert.AreEqual(3, core.CurrentAtk, "Node 1 opens and the Core gains its ATK");
+            Assert.AreEqual(2, core.CurrentHp, "while Node 2 is still contested and grants nothing");
+
+            state.GetPlayer(PlayerIndex.Opponent).Board.NodeActive[1][0].Card = null;
+            state.RefreshNodeMultipliers();
+            Assert.AreEqual(3, core.CurrentHp, "then the same for its HP");
+            Assert.AreEqual(1, core.NodeAtkBonus);
+            Assert.AreEqual(1, core.NodeHpBonus);
+
+            // Losing a Node you were cashing has to take the bonus straight back off the card.
+            state.GetPlayer(PlayerIndex.Player).Board.NodeActive[0][0].Card = null;
+            state.RefreshNodeMultipliers();
+            Assert.AreEqual(2, core.CurrentAtk, "vacating Node 1 gives the ATK back");
+            Assert.AreEqual(0, core.NodeAtkBonus, "and leaves no phantom bonus behind");
         }
 
         [Test]
@@ -330,6 +446,19 @@ namespace Overlink.Core.Tests
                 deck.Add(CreateTestCardDefinition($"test_{i:000}", $"Card {i}"));
             }
             return deck;
+        }
+
+        /// <summary>
+        /// Puts a live body in one side's Active socket for <paramref name="nodeIndex"/> and returns it. Written
+        /// by hand rather than played through: these tests are about which side a Node pays, and dragging NP costs
+        /// and the summoning rules into them would obscure exactly that.
+        /// </summary>
+        private CardInstance FieldNode(MatchState state, PlayerIndex who, int nodeIndex)
+        {
+            var definition = CreateTestCardDefinition($"node_{who}_{nodeIndex}", $"Node {nodeIndex + 1} body", CardType.Unit);
+            var card = new CardInstance(definition, who);
+            state.GetPlayer(who).Board.NodeActive[nodeIndex][0].Card = card;
+            return card;
         }
     }
 }

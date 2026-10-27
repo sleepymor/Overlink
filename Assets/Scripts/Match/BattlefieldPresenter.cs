@@ -1971,7 +1971,7 @@ namespace Overlink.Match
 
             // The readout moved off the table onto this side's chip. Formatting stays here because the HUD is
             // a view of strings, not of match state.
-            int nodes = p.Board.CountControlledNodes(who);
+            int nodes = state.CountControlledNodes(who);
             if (hud != null)
             {
                 hud.SetStatus(who,
@@ -1989,8 +1989,15 @@ namespace Overlink.Match
 
             for (int n = 0; n < Board.NodeCount; n++)
             {
-                bool pControls = player.Board.IsNodeControlled(n, PlayerIndex.Player);
-                bool oControls = opp.Board.IsNodeControlled(n, PlayerIndex.Opponent);
+                // Occupation on each board, not MatchState.ControlsNode: this has to draw all four states
+                // (both hold, one holds, neither), and the pair of holds is the primitive the four states are
+                // defined from. ControlsNode is the same expression reduced to the one half that pays:
+                // pHolds && !oHolds. A Node both sides hold is contested and pays neither side, which is why
+                // it is coloured NodeFree rather than split down the middle - the colour says "nobody's".
+                bool pHolds = player.Board.HoldsNode(n, PlayerIndex.Player);
+                bool oHolds = opp.Board.HoldsNode(n, PlayerIndex.Opponent);
+                bool pControls = pHolds && !oHolds;
+                bool oControls = oHolds && !pHolds;
 
                 SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForMark(nodePlate[n],
                     pControls && oControls ? NodeFree

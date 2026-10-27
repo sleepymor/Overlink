@@ -75,7 +75,11 @@ namespace Overlink.Core
         /// <summary>GDD 2.1.7: the battlefield has four contested Nodes (Node 1-4).</summary>
         public const int NodeCount = 4;
 
-        /// <summary>GDD 2.1.8 Node Domination: controlling this many Nodes (3 of 4) at Upkeep wins.</summary>
+        /// <summary>
+        /// GDD 2.1.8 Node Domination: controlling this many Nodes (3 of 4) at Upkeep wins. "Controlling" is
+        /// uncontested occupation, so the three must be Nodes the opponent has no body on - see
+        /// <see cref="MatchState.ControlsNode"/>.
+        /// </summary>
         public const int NodesForDomination = 3;
 
         public const int NodeActiveSlots = 1;
@@ -121,7 +125,17 @@ namespace Overlink.Core
             }
         }
 
-        public bool IsNodeControlled(int nodeIndex, PlayerIndex player)
+        /// <summary>
+        /// Occupation, not control: does <paramref name="player"/> have one of its own units in this board's
+        /// Active socket for <paramref name="nodeIndex"/>. Each side owns its own Node sockets, so a Board can
+        /// only ever see one half of a Node, and the word "controlled" would promise an answer it cannot give.
+        /// <para>
+        /// GDD 2.1.7's bonuses and 2.1.8's domination both belong to the player who holds a Node that the
+        /// opponent does <em>not</em> also hold, which is a question about two boards. Ask
+        /// <see cref="MatchState.ControlsNode"/> and <see cref="MatchState.CountControlledNodes"/> for that.
+        /// </para>
+        /// </summary>
+        public bool HoldsNode(int nodeIndex, PlayerIndex player)
         {
             if (nodeIndex < 0 || nodeIndex >= NodeCount)
             {
@@ -137,19 +151,6 @@ namespace Overlink.Core
             }
 
             return false;
-        }
-
-        public int CountControlledNodes(PlayerIndex player)
-        {
-            int count = 0;
-            for (int i = 0; i < NodeCount; i++)
-            {
-                if (IsNodeControlled(i, player))
-                {
-                    count++;
-                }
-            }
-            return count;
         }
 
         public BoardSlot FindSlot(CardInstance card)

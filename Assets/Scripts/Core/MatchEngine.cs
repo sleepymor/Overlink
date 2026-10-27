@@ -823,7 +823,7 @@ namespace Overlink.Core
             }
 
             Board board = State.GetPlayer(killer.Owner).Board;
-            if (!IsCoreActive(board, killer) || !board.IsNodeControlled(3, killer.Owner))
+            if (!IsCoreActive(board, killer) || !State.ControlsNode(killer.Owner, 3))
             {
                 return;
             }
@@ -866,7 +866,7 @@ namespace Overlink.Core
 
         /// <summary>
         /// [First Strike] from the unit's own keywords, plus the Node 3 Core multiplier that grants it to
-        /// Core Active Units while Node 3 is controlled (GDD 2.1.7).
+        /// Core Active Units while their owner holds Node 3 uncontested (GDD 2.1.7, <see cref="MatchState.ControlsNode"/>).
         /// <para>
         /// Public because anything that has to predict an exchange — the AI weighing whether a trade is
         /// favourable, a front end drawing a damage preview — needs the same answer the resolver applies. The
@@ -882,7 +882,7 @@ namespace Overlink.Core
             }
 
             Board board = State.GetPlayer(unit.Owner).Board;
-            return IsCoreActive(board, unit) && board.IsNodeControlled(2, unit.Owner);
+            return IsCoreActive(board, unit) && State.ControlsNode(unit.Owner, 2);
         }
 
         /// <summary>True when the unit currently occupies one of its owner's Core Active slots.</summary>

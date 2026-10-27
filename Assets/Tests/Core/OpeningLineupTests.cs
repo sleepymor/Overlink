@@ -476,13 +476,13 @@ namespace Overlink.Core.Tests
             Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
                 new ConfirmLineupCommand(PlayerIndex.Opponent, Ids(state.GetPlayer(PlayerIndex.Opponent).LineupOffer.ToList()))));
 
-            // Winner: 3 starting NP, then an Upkeep that gains 3 base + 4 Nodes held, because a full lineup
-            // fields every Node Active and Node control is derived from occupying one. Loser: 3 + the going-
-            // second bonus, and no Upkeep yet, because it is not their turn. The inflation is a consequence of
-            // the lineup mechanic rather than a rule of its own - see
-            // OpeningLineup_FieldsEveryNodeSoTheFirstTurnIsRichAndNotARace.
-            Assert.AreEqual(PlayerState.StartingNP + 3 + Board.NodeCount, state.GetPlayer(first).CurrentNP,
-                $"{first} opened first");
+            // Winner: 3 starting NP, then an Upkeep that gains the 3 base and NOTHING for the Nodes, because a full
+            // lineup fields every Node Active for both seats and a contested Node pays neither. Loser: 3 + the
+            // going-second bonus, and no Upkeep yet, because it is not their turn. So the opening is as poor in NP
+            // as a match that began with an empty board, which is the intended shape - see
+            // OpeningLineup_FieldsEveryNodeSoNeitherSideControlsAnyOfThem.
+            Assert.AreEqual(PlayerState.StartingNP + 3, state.GetPlayer(first).CurrentNP,
+                $"{first} opened first, on the base income alone");
             Assert.AreEqual(PlayerState.StartingNP + MatchState.SecondPlayerNPBonus,
                 state.GetOpponent(first).CurrentNP, $"{state.GetOpponent(first)} opened second");
         }
@@ -553,28 +553,32 @@ namespace Overlink.Core.Tests
         }
 
         // ------------------------------------------------------------------
-        //  What a full lineup collides with: Node Domination and the multipliers
+        //  What a full lineup does to the Nodes: it contests all four of them
         // ------------------------------------------------------------------
 
         [Test]
-        public void OpeningLineup_FieldsEveryNodeSoTheFirstTurnIsRichAndNotARace()
+        public void OpeningLineup_FieldsEveryNodeSoNeitherSideControlsAnyOfThem()
         {
-            // The two consequences of "all five Active sockets are filled at the start", pinned together because
-            // they are the same fact seen twice. Node control is derived from occupying a Node Active, so a
-            // lineup is 4 Nodes held by *both* players before anyone has played a card. That inflates the
-            // opening Upkeep to 3 base + 4 Nodes, and it would also satisfy GDD 2.1.8 Node Domination - which
-            // is why the check is exempt on turn 1, or the match is awarded by a coin flip.
+            // The consequence that decides the opening. Node control is uncontested occupation, so a lineup that
+            // fields all four Node Actives for BOTH seats leaves every Node contested: no NP income above the base
+            // 3, no Core multipliers, and no 3-of-4 tally anywhere on the board. Under the looser reading this is
+            // the moment the match was over - both sides sat at 4 of 4 controlled Nodes and GDD 2.1.8 awarded it to
+            // whoever won the coin. Holding a Node is now the prerequisite for being paid, not the payment.
             var state = new MatchState(191);
             state.InitializeSetup(DeckOf(cheapUnits(12)), DeckOf(cheapUnits(12)));
             CompleteLineups(state);
 
-            Assert.AreEqual(Board.NodeCount,
-                state.GetPlayer(PlayerIndex.Player).Board.CountControlledNodes(PlayerIndex.Player),
-                "a full lineup holds all four Nodes");
-            Assert.AreEqual(Board.NodeCount,
-                state.GetPlayer(PlayerIndex.Opponent).Board.CountControlledNodes(PlayerIndex.Opponent),
-                "and so does the opponent, which is the whole problem");
-            Assert.AreEqual(MatchResult.None, state.Result, "and nobody has won yet");
+            for (int node = 0; node < Board.NodeCount; node++)
+            {
+                Assert.IsTrue(state.GetPlayer(PlayerIndex.Player).Board.HoldsNode(node, PlayerIndex.Player),
+                    $"both seats fielded Node {node + 1}");
+                Assert.IsTrue(state.GetPlayer(PlayerIndex.Opponent).Board.HoldsNode(node, PlayerIndex.Opponent));
+            }
+
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Player),
+                "and holding a Node the opponent also holds pays nothing");
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Opponent));
+            Assert.AreEqual(MatchResult.None, state.Result, "and nobody has won");
             Assert.IsNull(state.ResultReason);
         }
 
@@ -604,21 +608,60 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
-        public void OpeningLineup_NodeMultipliersAreLiveFromTheFirstTurn()
+        public void OpeningLineup_NodeMultipliersStayUnresolvedWhileBothSidesHoldTheNodes()
         {
-            // Node 1 grants +1 ATK and Node 2 +1 HP to a Core Active (GDD 2.1.7). The lineup puts both on the
-            // board before any turn has begun, so the refresh has to run when setup closes: otherwise the Core
-            // Active's printed numbers and its real numbers disagree for a whole turn, and the only two things
-            // that ever recomputed them are a unit dying and a position switch.
+            // Node 1 grants +1 ATK and Node 2 +1 HP to a Core Active (GDD 2.1.7), and a full lineup fields both of
+            // those Nodes against the opponent's, so at the open the Core reads exactly its printed numbers. The
+            // buff is the reward for a trade that cleared the other seat's holder, which is what makes the two
+            // Nodes worth fighting over instead of worth filling.
             var state = new MatchState(197);
             state.InitializeSetup(DeckOf(cheapUnits(12)), DeckOf(cheapUnits(12)));
             CompleteLineups(state);
 
-            CardInstance core = state.GetPlayer(PlayerIndex.Player).Board.CoreActive[0].Card;
-            Assert.AreEqual(1, core.NodeAtkBonus, "Node 1's ATK bonus is folded in");
-            Assert.AreEqual(1, core.NodeHpBonus, "and Node 2's HP bonus");
+            for (int i = 0; i < 2; i++)
+            {
+                PlayerIndex who = i == 0 ? PlayerIndex.Player : PlayerIndex.Opponent;
+                CardInstance core = state.GetPlayer(who).Board.CoreActive[0].Card;
+                Assert.AreEqual(0, core.NodeAtkBonus, $"{who}'s Core takes no Node 1 bonus while Node 1 is contested");
+                Assert.AreEqual(0, core.NodeHpBonus, $"{who}'s Core takes no Node 2 bonus while Node 2 is contested");
+                Assert.AreEqual(2, core.CurrentAtk, $"{who}'s Core Active reads its printed 2 ATK");
+                Assert.AreEqual(2, core.CurrentHp);
+            }
+        }
+
+        [Test]
+        public void CompleteSetup_ResolvesTheNodesAPartialLineupLeftUncontested()
+        {
+            // The refresh inside CompleteSetup, justified under the contest rule. Declining a socket is legal, so a
+            // seat can field one body and leave three Nodes open - uncontested, therefore immediately the opponent's,
+            // and their Core Active has to be buffed before turn 1 rather than after the first death. Without the
+            // refresh the card face and the number the resolver uses disagree across the whole opening turn, and the
+            // only two things that ever recomputed them were a unit dying and a position switch.
+            var state = new MatchState(199);
+            var engine = new MatchEngine(state);
+            state.InitializeSetup(DeckOf(cheapUnits(12)), DeckOf(cheapUnits(12)));
+
+            PlayerState shy = state.GetPlayer(PlayerIndex.Player);
+            PlayerState full = state.GetPlayer(PlayerIndex.Opponent);
+            int[] onlyCore = new int[ConfirmLineupCommand.RequiredLength];
+            onlyCore[0] = shy.LineupOffer[0].InstanceId;
+
+            Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
+                new ConfirmLineupCommand(PlayerIndex.Player, onlyCore)));
+            Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
+                new ConfirmLineupCommand(PlayerIndex.Opponent, Ids(full.LineupOffer.ToList()))));
+
+            CardInstance core = full.Board.CoreActive[0].Card;
+            Assert.IsNotNull(full.Board.NodeActive[0][0].Card, "the full seat fielded Node 1");
+            Assert.IsNull(shy.Board.NodeActive[0][0].Card, "and the partial seat left it open");
+            Assert.AreEqual(1, core.NodeAtkBonus, "so Node 1 is uncontested and its ATK bonus is live at the open");
+            Assert.AreEqual(1, core.NodeHpBonus, "and so is Node 2's HP bonus");
             Assert.AreEqual(3, core.CurrentAtk, "a 2-ATK body reads as 3 the moment the match opens");
             Assert.AreEqual(3, core.CurrentHp);
+
+            Assert.AreEqual(MatchResult.None, state.Result,
+                "but three uncontested Nodes still do not win on turn 1 - the exemption covers the seat that " +
+                "clicked a partial confirm rather than a player who earned the win");
         }
 
         // ------------------------------------------------------------------
@@ -837,12 +880,12 @@ namespace Overlink.Core.Tests
         [Test]
         public void Retreat_AcrossBattlefieldsRefillsTheNodeItVacatedBecauseRetreatIsASwap()
         {
-            // Legal across battlefields, and the point of the test is what a swap does to Node control: the
-            // incoming bench body takes up the socket the outgoing unit leaves, so the Node stays ours. Control is
-            // derived from occupation (Board.IsNodeControlled reads the Node Active directly), so nothing special
-            // is done about it. The tempting wrong model - "stepping off a Node surrenders it" - would have made
-            // every cross-battlefield retreat a self-inflicted NP wound and invited a rule that nobody asked for,
-            // which is what the earlier version of this test asserted.
+            // Legal across battlefields, and under the contest rule it is also the answer to a question retreat
+            // would otherwise raise badly: a Node you are being paid for is one you must keep a body on, so moving
+            // its holder off would hand the Node - and its NP and Core bonus - straight to the opponent. Retreat is
+            // a SWAP, so the incoming bench body takes up the vacated socket and the payment does not stop.
+            // Occupation is what Board.HoldsNode answers and control is MatchState.ControlsNode reducing it
+            // against the other board; both are asserted here because the swap has to survive both readings.
             var state = new MatchState(131);
             var engine = new MatchEngine(state);
             state.InitializeMatch(DeckOf(cheapUnits(12)), DeckOf(cheapUnits(12)));
@@ -851,13 +894,16 @@ namespace Overlink.Core.Tests
             CardInstance nodeHolder = Ready(state, PlayerIndex.Player, 2, 2, SlotType.NodeActive, node: 0);
             CardInstance coreBench = Ready(state, PlayerIndex.Player, 2, 2, SlotType.CoreBench);
             Board board = state.GetPlayer(PlayerIndex.Player).Board;
-            Assert.IsTrue(board.IsNodeControlled(0, PlayerIndex.Player), "Node 1 starts held");
+            Assert.IsTrue(state.ControlsNode(PlayerIndex.Player, 0),
+                "Node 1 starts ours - held, and the opponent fields nothing on it");
 
             Assert.AreEqual(CommandResult.Success,
                 engine.ExecuteCommand(new RetreatCommand(PlayerIndex.Player, nodeHolder.InstanceId, coreBench.InstanceId)));
 
-            Assert.IsTrue(board.IsNodeControlled(0, PlayerIndex.Player),
-                "the Node is still ours, because the body that came in is standing on it");
+            Assert.IsTrue(board.HoldsNode(0, PlayerIndex.Player),
+                "the Node is still occupied, because the body that came in is standing on it");
+            Assert.IsTrue(state.ControlsNode(PlayerIndex.Player, 0),
+                "and still ours, so a retreat never pays the opponent a Node for free");
             Assert.AreEqual(coreBench, board.NodeActive[0][0].Card, "and it is the bench unit holding it now");
             Assert.AreEqual(nodeHolder, board.CoreBench[0].Card, "while the Node's former holder rests on the Core Bench");
             Assert.AreEqual(UnitState.Exhausted, nodeHolder.State, "both units gave up the action, as a retreat requires");

@@ -141,11 +141,18 @@ namespace Overlink.Match
 
         /// <summary>
         /// Fields this player's opening lineup and closes its setup: the strongest body stands in the Core
-        /// Active, the rest fill Node 1-4 in order, and nothing is rerolled.
+        /// Active, the rest fill Node 1-4 in order, nothing is left open and nothing is rerolled.
         /// <para>
-        /// Node order is not arbitrary. Node 1 and Node 2 grant Core multipliers (+1 ATK and +1 HP on the Core
-        /// Active), so the second- and third-best bodies are the ones making the best body hit harder — the
-        /// ranking pays for itself twice over at the top of the list.
+        /// Filling every socket is the whole point of the opening under the contest rule. A Node pays its bonus
+        /// only to the side that holds it while the opponent does not, so a full lineup is 4-4 and worth nothing
+        /// to either player - which is exactly neutral, and the only way to be sure the opponent cannot count
+        /// three Nodes uncontested on their first Upkeep. Leaving one open hands it to them for free.
+        /// </para>
+        /// <para>
+        /// Node order is not arbitrary either. Node 1 and Node 2 are the two that grant Core multipliers, so the
+        /// second- and third-best bodies are the ones whose survival makes the best body hit harder. The bonus
+        /// does not resolve on turn 1 - both sides hold those Nodes - so the ranking is buying the <em>durability
+        /// of the multiplier source</em>, to be cashed once a trade clears the opponent's holder off it.
         /// </para>
         /// <para>
         /// The AI never buys a reroll, which is a decision rather than an omission: a reroll is priced in NP,

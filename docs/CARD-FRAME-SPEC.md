@@ -930,10 +930,24 @@ sockets, and the seam contract was written about the ranks a player has to click
 
 There is no board-space answer this time, so it must not be "fixed" by nudging a constant. Clearing the fan's
 x-span at the piles' depth needs `|x| ≥ 4.5`, and the node plates own `x −6.9..−4.1` at exactly that depth —
-the pile would land on NODE 1. Either the piles leave the tabletop for the HUD (which contradicts the brief
-that kept them, on the grounds that they help the player place a card, which is not true of either of them)
-or Stage 3's bottom band, which is being built anyway to seat the button rail, gives them a home outside the
-fan. That is a product decision, so it is carried forward rather than taken here.
+the pile would land on NODE 1.
+
+**The decision, taken: the piles stay on the table and the resting hand gets out of their way.** The fan
+sinks while the pointer is away from it and rises back when the pointer comes to read a card, so the piles are
+reachable in the state a player is not looking at their hand, and the hand is whole in the state they are.
+Depth of sink: three quarters of the fan's own screen height, falling back to a half when three quarters would
+push it off the bottom of the frame. This is Stage 3 work and it lands with the button rail, not here.
+
+Two things Stage 3 has to measure rather than assume. First, the required sink is set by the *piles'* screen
+rect, not by the fan's: uncovering a tile that sits inside the fan's band means dropping the fan's top edge
+below the tile's top edge, so the number to hit is measured against the pile rects at the authored framing
+(70×74 px at `fz −1.0`, 73×81 at `fz −0.2`) and the ¾/½ rule is a budget, not a guarantee. If the honest
+measurement says a half is not enough, that is a finding to bring back rather than a reason to slide the
+constant past the floor. Second, **the trigger region must be the fan's resting footprint — a fixed band — and
+not its current position.** A sink that watches where the fan actually is oscillates on the boundary in one
+frame: the fan moves away, the pointer is outside, the fan rises, the pointer is inside, and the player
+watches it flutter. Hysteresis on a fixed band is the whole fix, and it is the kind of thing that reads as
+polish and is actually correctness.
 
 The pan origin moves with the bias **on purpose**. `boardCenter` is captured from the authored focus, so the
 clamp is now `[−1.55, −0.45]` at the opening framing (slack 0.55, because the table already fits the frame).

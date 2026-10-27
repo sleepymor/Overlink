@@ -342,8 +342,10 @@ namespace Overlink.Match.Tests
             }
 
             Assert.IsTrue(relayOnNode, "The Relay should have been deployed to a Node slot.");
-            Assert.AreEqual(1, board.CountControlledNodes(PlayerIndex.Opponent),
-                "A Relay in a Node Active slot must control that Node.");
+            // Held by the Relay's owner and uncontested - the human seat fields nothing on that Node - so it counts
+            // as controlled, which is the same reason a Protocol card can stand a Node.
+            Assert.AreEqual(1, state.CountControlledNodes(PlayerIndex.Opponent),
+                "A Relay in a Node Active slot must hold that Node.");
         }
 
         [Test]

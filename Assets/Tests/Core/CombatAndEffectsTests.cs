@@ -244,7 +244,7 @@ namespace Overlink.Core.Tests
             var unit = new CardInstance(UnitDef("node_unit", 2, 2), PlayerIndex.Opponent) { State = UnitState.Ready };
             state.Players[1].Board.NodeActive[0][0].Card = unit;
 
-            Assert.AreEqual(1, state.Players[1].Board.CountControlledNodes(PlayerIndex.Opponent));
+            Assert.AreEqual(1, state.CountControlledNodes(PlayerIndex.Opponent));
 
             var attacker = new CardInstance(UnitDef("attacker", 4, 2), PlayerIndex.Player) { State = UnitState.Ready };
             state.Players[0].Board.CoreActive[0].Card = attacker;
@@ -254,7 +254,7 @@ namespace Overlink.Core.Tests
             engine.ExecuteCommand(new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId, unit.InstanceId));
 
             Assert.IsFalse(unit.IsAlive(), "With an empty Bench and no promotion, the Node is no longer held.");
-            Assert.AreEqual(0, state.Players[1].Board.CountControlledNodes(PlayerIndex.Opponent));
+            Assert.AreEqual(0, state.CountControlledNodes(PlayerIndex.Opponent));
         }
 
         // ---- Effects ---------------------------------------------------------------
@@ -386,7 +386,8 @@ namespace Overlink.Core.Tests
             Assert.AreSame(relay, state.Players[0].Board.NodeActive[0][0].Card);
             Assert.IsTrue(state.Players[0].Board.NodeActive[0][0].IsOccupied(),
                 "A Relay has no HP but must still count as occupying its slot.");
-            Assert.AreEqual(1, state.Players[0].Board.CountControlledNodes(PlayerIndex.Player));
+            // Held and uncontested - the opponent fields nothing on that Node - so it counts as controlled.
+            Assert.AreEqual(1, state.CountControlledNodes(PlayerIndex.Player));
         }
 
         [Test]

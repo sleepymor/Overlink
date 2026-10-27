@@ -406,8 +406,8 @@ namespace Overlink.Match
 
             PlayerState player = matchState.Players[0];
             PlayerState opponent = matchState.Players[1];
-            int playerCap = PlayerState.NpCap(player.Board.CountControlledNodes(PlayerIndex.Player));
-            int opponentCap = PlayerState.NpCap(opponent.Board.CountControlledNodes(PlayerIndex.Opponent));
+            int playerCap = PlayerState.NpCap(matchState.CountControlledNodes(PlayerIndex.Player));
+            int opponentCap = PlayerState.NpCap(matchState.CountControlledNodes(PlayerIndex.Opponent));
 
             Debug.Log($"=== MATCH STATE ===");
             Debug.Log($"Turn {matchState.TurnNumber} - Phase: {matchState.CurrentPhase} - Active: {matchState.ActivePlayer}");

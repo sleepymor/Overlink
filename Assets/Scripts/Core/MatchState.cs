@@ -172,15 +172,23 @@ namespace Overlink.Core
 
         /// <summary>
         /// GDD 2.1.8 Node Domination: controlling 3 of the 4 Nodes at the start of your Upkeep wins the
-        /// game immediately.
+        /// game immediately. "Controlling" is <see cref="ControlsNode"/>, so a Node the opponent also holds does
+        /// not count toward the three.
         /// <para>
-        /// Except on the opening turn, and the reason is the opening lineup. A match that opens through setup
-        /// fields all five Active sockets, which is <em>four Nodes held by both players</em> before a single
-        /// card has been played. The condition as literally worded would therefore end the match at its first
-        /// Upkeep and award it to whoever won a coin flip, which is not a victory condition, it is a coin flip
-        /// with extra steps. Domination is a race about <em>keeping</em> Nodes after the opponent has been made
-        /// to lose them; at 4-4 with nothing contested it has not started, so turn 1 is exempt - exactly as turn
-        /// 1 already exempts itself from Draw, on the same logic that the opening is not a normal turn.
+        /// That reading is what keeps the opening lineup from ending the match before it begins. A full lineup
+        /// fields all four Node Actives for both seats, so at 4-4 nothing is contested and both players count zero
+        /// controlled Nodes; the first domination can be reached only after someone has been made to lose a Node
+        /// holder while the other kept theirs. The tabletop already worked on that model
+        /// (<c>BattlefieldPresenter.PaintNodes</c> colours a both-held Node as free), so this is the engine
+        /// catching up to the board rather than a rule invented to patch a symptom.
+        /// </para>
+        /// <para>
+        /// Turn 1 is still exempt, for the one case the contest rule cannot reach: a <em>partial</em> lineup.
+        /// Confirming with only the Core filled is legal - the nomination carries a 0 for a socket the player
+        /// declines - so a seat that fields one body leaves its three open Nodes to the opponent, who would then
+        /// dominate at their very first Upkeep. That is a loss caused by how the confirm UI was clicked rather than
+        /// by anything that happened in the match, so the opening turn forgives it. Exactly as turn 1 already
+        /// exempts itself from Draw, on the same logic that the opening is not a normal turn.
         /// </para>
         /// <para>
         /// Both players' opening Upkeeps are TurnNumber 1, because the counter advances only when control comes
@@ -205,7 +213,7 @@ namespace Overlink.Core
                 return;
             }
 
-            int controlled = GetPlayer(ActivePlayer).Board.CountControlledNodes(ActivePlayer);
+            int controlled = CountControlledNodes(ActivePlayer);
             if (controlled >= Board.NodesForDomination)
             {
                 Result = ActivePlayer == PlayerIndex.Player ? MatchResult.PlayerWin : MatchResult.OpponentWin;
@@ -218,8 +226,12 @@ namespace Overlink.Core
         /// Removes every destroyed card into its owner's discard, promotes a Bench unit into each emptied
         /// Active slot, then recomputes the Node Core multipliers and re-checks victory.
         /// <para>
-        /// Node control is never assigned: it stays derived from Active occupation, so removing a dead
-        /// Active unit already loses the Node before promotion fills the hole.
+        /// Node control is never assigned: it is derived from occupation on both boards, so this method never
+        /// touches it directly - the refresh at the end is all that is needed. One consequence is worth knowing
+        /// before reading a trade: because a Bench unit is promoted into an emptied Active slot, killing the
+        /// opponent's holder on a Node does <em>not</em> take the Node unless their Bench for that Node is empty
+        /// too. The Node changes hands only when the socket ends the batch unoccupied, which is what makes an
+        /// opponent's Node Bench worth clearing before the Active.
         /// </para>
         /// </summary>
         public void ResolveDestructionAndPromotion()
@@ -361,6 +373,51 @@ namespace Overlink.Core
         }
 
         /// <summary>
+        /// GDD 2.1.7 read as uncontested control: a player holds a Node only where it occupies that Node's
+        /// Active socket <em>and</em> the opponent occupies neither. Both sides field a Node Active for every
+        /// Node, so a Node both sides hold is contested and pays nothing to either.
+        /// <para>
+        /// This is the rule that makes the opening lineup survivable. A full lineup fields all four Node Actives
+        /// for both seats, so under contested-equals-held semantics both players would sit at 3-of-4 the instant
+        /// setup closed and 2.1.8 Node Domination would award the match at the first Upkeep to whoever won the
+        /// coin. The tabletop never said that: <c>BattlefieldPresenter.PaintNodes</c> has always coloured a
+        /// both-held Node as free and labelled it CONTESTED, so the view was speaking this rule while the engine
+        /// granted the bonus. The engine is what changed.
+        /// </para>
+        /// <para>
+        /// The economy follows from it. A contested Node is worth no NP and no Core multiplier, so income and the
+        /// Node 1/2 bonuses both arrive by <em>clearing</em> the opponent's holder while keeping your own - which
+        /// is what makes the four Nodes a fight worth having rather than a free tally.
+        /// </para>
+        /// </summary>
+        public bool ControlsNode(PlayerIndex who, int nodeIndex)
+        {
+            PlayerState mine = GetPlayer(who);
+            if (!mine.Board.HoldsNode(nodeIndex, who))
+            {
+                return false;
+            }
+
+            PlayerState other = GetOpponent(who);
+            return !other.Board.HoldsNode(nodeIndex, other.Index);
+        }
+
+        /// <summary>How many of the four Nodes <paramref name="who"/> holds uncontested. See <see cref="ControlsNode"/>.</summary>
+        public int CountControlledNodes(PlayerIndex who)
+        {
+            int count = 0;
+            for (int i = 0; i < Board.NodeCount; i++)
+            {
+                if (ControlsNode(who, i))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
         /// GDD 2.1.7 Core Multipliers: a controlled Node 1 grants +1 ATK and a controlled Node 2 grants
         /// +1 HP to that player's Core Active Units. Both are folded into the unit's stats here and
         /// removed immediately if the Node is lost. Node 3 (First Strike) and Node 4 (draw on kill) are
@@ -369,8 +426,8 @@ namespace Overlink.Core
         private void ApplyNodeMultipliers(PlayerState player)
         {
             Board board = player.Board;
-            bool nodeAtk = board.IsNodeControlled(0, player.Index);
-            bool nodeHp = board.IsNodeControlled(1, player.Index);
+            bool nodeAtk = ControlsNode(player.Index, 0);
+            bool nodeHp = ControlsNode(player.Index, 1);
 
             foreach (CardInstance card in board.GetAllUnits(player.Index))
             {
@@ -525,7 +582,7 @@ namespace Overlink.Core
                 unit.CannotBeBlocked = false;
             }
 
-            int controlledNodes = player.Board.CountControlledNodes(ActivePlayer);
+            int controlledNodes = CountControlledNodes(ActivePlayer);
             int cap = PlayerState.NpCap(controlledNodes);
             player.GainNP(3 + controlledNodes, cap);
             LogEvent($"{ActivePlayer} gains {3 + controlledNodes} NP (3 base + {controlledNodes} Nodes), now {player.CurrentNP}/{cap}");
