@@ -26,6 +26,12 @@ namespace Overlink.Match
         public bool enableAI = true;
         public int aiSeed = 42;
 
+        [Tooltip("Seed for the match's own randomness: both deck shuffles, the opening lineup offers and the " +
+                 "coin flip all draw from this one die, so a run is reproducible only when it is set. Zero " +
+                 "takes a fresh seed every play. It is separate from aiSeed on purpose - that one is the " +
+                 "opponent's decision noise, this one is the table's.")]
+        public int matchSeed;
+
         [Tooltip("How long the opponent holds its Combat step so the player can commit blockers, in seconds. " +
                  "Zero skips the pause entirely and the opponent attacks in one frame, which is how the slice " +
                  "behaved before blocking was clickable.")]
@@ -158,8 +164,18 @@ namespace Overlink.Match
                 }
             }
 
-            matchState = new MatchState();
-            matchState.InitializeMatch(playerDeck, opponentDeck);
+            // The match opens on a lineup rather than on whoever drew a Unit first: both seats are shown five
+            // Units costing 3 or less and field which of them stands on which Active socket. Nothing is playable
+            // and no Upkeep runs until setup closes, which it does on the second confirmation - so this
+            // coroutine's job between here and the wait is to take the toss, let the opponent field, and hold
+            // the board still until the player answers.
+            matchState = matchSeed > 0 ? new MatchState(matchSeed) : new MatchState();
+            matchState.InitializeSetup(playerDeck, opponentDeck);
+
+            // The boot flag is set before the wait, not after it: a script recompile mid-setup wipes the state
+            // and kills this coroutine, and Update's restart guard can only fire if it can tell "the match has
+            // not booted" from "it booted and lost its state on the way through".
+            matchBooted = true;
 
             // Pass the pool so EffectType.Summon can resolve a ReferenceId to a real definition.
             matchEngine = new MatchEngine(matchState, pool);
@@ -170,12 +186,107 @@ namespace Overlink.Match
                 Debug.Log("[GameCoordinator] AI opponent created");
             }
 
+            // The toss is taken under a cup: rolled here, before either lineup is fielded, and revealed only
+            // once setup closes, so neither seat can see who goes first while choosing what to stand on it.
+            // CompleteSetup would take it on demand if this line were missing, which is why no front end can
+            // open a match without a first player; taking it here keeps the die out of the closing step.
+            matchState.FlipCoin();
+
+            // The opponent fields straight away - it has no screen to choose on - and only the player's seat
+            // waits. With the AI switched off, its seat is filled mechanically too, or setup would never close.
+            if (aiOpponent != null)
+            {
+                aiOpponent.ChooseLineup();
+            }
+            else
+            {
+                FieldOfferMechanically(PlayerIndex.Opponent);
+            }
+
+            initializing = false;
+            yield return WaitForPlayerLineup();
+
+            if (matchState == null)
+            {
+                // Domain reload during the wait. Update's boot guard restarts the match, so this coroutine
+                // simply stops touching what is no longer there.
+                yield break;
+            }
+
+            // Setup has closed: what nobody fielded went back into its deck, both opening hands are drawn, and
+            // the coin winner's first Upkeep has already run - so the hand is synced before the player is
+            // allowed to act, and the toss is finally shown.
             SyncHand();
             matchStarted = true;
-            matchBooted = true;
-            initializing = false;
-            Debug.Log("[GameCoordinator] Match started - Player's turn");
+            RevealCoinFlip();
+            Debug.Log($"[GameCoordinator] Match started - {matchState.FirstPlayer} took the first turn");
             LogMatchState();
+        }
+
+        /// <summary>
+        /// Holds the match open until the player's opening lineup is confirmed, which is the second of the two
+        /// confirmations that close setup.
+        /// <para>
+        /// The wait is written against the match state rather than a flag this class owns, because
+        /// <c>CompleteSetup</c> is internal and the engine's confirm path is its only caller: if the state says
+        /// the lineup is confirmed, whatever confirmed it did the whole job, including the hands and the first
+        /// Upkeep. Stage 3's drag picker is what is meant to confirm it; until that lands the offer is fielded
+        /// mechanically so the new opening is reachable in the live game at all.
+        /// </para>
+        /// </summary>
+        IEnumerator WaitForPlayerLineup()
+        {
+            FieldOfferMechanically(PlayerIndex.Player);
+
+            while (matchState != null && matchState.SetupInProgress)
+            {
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// Fields a seat's whole offer, in the order it was dealt, onto the Active sockets in battlefield order.
+        /// This is the seat with nothing to choose on - the opponent when the AI is switched off - and the
+        /// temporary shape of the player's seat until the drag picker confirms it instead.
+        /// </summary>
+        void FieldOfferMechanically(PlayerIndex who)
+        {
+            PlayerState player = matchState.GetPlayer(who);
+            if (player.LineupConfirmed)
+            {
+                return;
+            }
+
+            int[] ids = new int[ConfirmLineupCommand.RequiredLength];
+            for (int i = 0; i < ids.Length && i < player.LineupOffer.Count; i++)
+            {
+                ids[i] = player.LineupOffer[i].InstanceId;
+            }
+
+            CommandResult result = matchEngine.ExecuteCommand(new ConfirmLineupCommand(who, ids));
+            if (result != CommandResult.Success)
+            {
+                Debug.LogError($"[GameCoordinator] {who}'s opening lineup was rejected ({result}) " +
+                               "- setup cannot close and the match will not open.");
+            }
+        }
+
+        /// <summary>
+        /// Shows the player the toss the whole setup has been holding. The face of the coin is not stored
+        /// anywhere, so this names the outcome and the compensation rather than claiming a head or a tail; the
+        /// engine's own log line, which does name the face, is already in the log panel.
+        /// </summary>
+        void RevealCoinFlip()
+        {
+            if (presenter == null || matchState == null || !matchState.CoinFlipped)
+            {
+                return;
+            }
+
+            presenter.ShowNotice(matchState.FirstPlayer == PlayerIndex.Player
+                ? "Coin flip - you take the first turn."
+                : "Coin flip - the opponent takes the first turn, and you open with " +
+                  $"+{MatchState.SecondPlayerNPBonus} NP.");
         }
 
         void Update()
@@ -1112,5 +1223,13 @@ namespace Overlink.Match
 
         public MatchState GetMatchState() => matchState;
         public MatchEngine GetMatchEngine() => matchEngine;
+
+        /// <summary>
+        /// True while the opening lineup setup is holding the match open. The views ask this rather than reading
+        /// <c>MatchState.SetupInProgress</c> directly so that "the board is not yours yet" has one meaning in
+        /// the front end: the key legend, the button rail and the drag gate all stand down, and the setup picker
+        /// is the only thing that is live.
+        /// </summary>
+        public bool IsSetupInProgress => matchState != null && matchState.SetupInProgress;
     }
 }
