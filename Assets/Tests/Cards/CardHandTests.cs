@@ -156,6 +156,151 @@ public class CardHandTests
     }
 
     /// <summary>
+    /// Every layer of a card face lies on ONE plane, and every card of the fan lies on the plane the row
+    /// was built in. That is not tidiness, it is what makes the face immune to the lens it is drawn through.
+    /// <para>
+    /// The hand hangs in the camera's own plane, so its cards are parallel to the image plane and project at
+    /// a uniform f/Z. Give any layer a depth offset and that layer projects at f/(Z+dz) instead: the frame
+    /// keeps its size, the text does not, and the difference is proportional to the card's distance from the
+    /// optical axis - so the centre card looks fine and the wing cards read as type that has slid out of its
+    /// plate, in opposite directions. Orthographic has no Z in the denominator, which is why the same art
+    /// looks correct under an ortho camera and "messed up" under a perspective one. It was never a camera bug.
+    /// </para>
+    /// <para>
+    /// The offsets were -0.04 for text, +0.02 for art, +0.01 for the art mask, and a -0.002 per card stair
+    /// across the row. None of them bought anything: the tier shaders are Cull Off / ZWrite Off / ZTest
+    /// Always, so depth is not what keeps art under frame under text - sortingOrder does that, per card, in
+    /// ApplyRenderLayers. The one thing the text offset did earn was clearing the legacy placeholder cube,
+    /// which is opaque; that cube now sits behind the plane instead (CardView.PlaceLegacyBody).
+    /// </para>
+    /// </summary>
+    [Test]
+    public void FaceLayers_AreCoPlanar_SoTheLensCannotPullThemApart()
+    {
+        var holder = new GameObject("CoPlanarFace");
+        try
+        {
+            CardFaceView face = holder.AddComponent<CardFaceView>();
+            face.Bind(new CardFaceData("card_test_coplanar", "Interdiction Net", CardType.Unit, Faction.Fsti,
+                Rarity.Common, 4, null, 2, 3, 0, "Piercing."), null);
+            face.SetSize(CardView.CardSize);
+
+            var renderers = holder.GetComponentsInChildren<Renderer>(true);
+            Assert.GreaterOrEqual(renderers.Length, 8,
+                "a bound face must have the art, the frame and the label meshes to check, " +
+                "or this test is counting nothing");
+
+            // Measured in face space rather than as a localPosition, so a layer nested under an
+            // intermediate (the CombatStats group) is still held to the one plane.
+            foreach (Renderer r in renderers)
+            {
+                float z = face.transform.InverseTransformPoint(r.transform.position).z;
+                Assert.AreEqual(0f, z, 1e-6f,
+                    $"{r.name}: a layer off the face plane is scaled by f/(Z+dz), which is the whole bug");
+            }
+            Assert.AreEqual(0f, face.ArtMask.transform.localPosition.z, 1e-6f,
+                "the art mask is a clipping window for co-planar art, so it rides with it");
+        }
+        finally
+        {
+            Object.Destroy(holder);
+        }
+    }
+
+    /// <summary>
+    /// The fan's own contribution: no card in the row is nudged along the view axis. A per-card stair is the
+    /// same defect as a per-layer offset, one level up - it makes neighbouring cards' magnification differ,
+    /// so the row stops being congruent even though the poses are.
+    /// </summary>
+    [Test]
+    public void FanSlots_AllRideOnePlane_BothLayouts()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            HandController.ComputeSlot(i, 5, ShippedFanSpacing, ShippedArcHeight, ShippedMaxYaw,
+                ShippedHandY, true, out Vector3 pivoted, out _);
+            HandController.ComputeSlot(i, 5, ShippedFanSpacing, ShippedArcHeight, ShippedMaxYaw,
+                ShippedHandY, false, out Vector3 flat, out _);
+
+            Assert.AreEqual(0f, pivoted.z, 1e-6f, $"card {i}: the pivoted row must stay in one plane");
+            Assert.AreEqual(0f, flat.z, 1e-6f, $"card {i}: and so must the unpivoted fallback");
+        }
+    }
+
+    /// <summary>
+    /// Proves the deleted offsets were the reported symptom, so the two tests above cannot be vacuous.
+    /// <para>
+    /// Projects the same point on the outer card of the shipped fan twice: once on the face plane, once at the
+    /// depth the layer used to carry. The answer is reported as a fraction of that card's own name plate,
+    /// because a pixel count would depend on the game view's size while visibility does not: the type used to
+    /// land two and a half percent of a plate width off centre on the wing cards, in opposite directions for
+    /// text and art, and the error reversed sign across the centre line. That is a plate that reads as
+    /// misregistered rather than as printed.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void DeletedDepthOffsets_ReallyDidSeparateTextFromFrame()
+    {
+        Camera cam = CreateRigCamera();
+        GameObject holderGo = null;
+        GameObject faceGo = null;
+        try
+        {
+            // The plate is gauged off a real bound face rather than restated as a constant, so this cannot
+            // drift away from the frame canvas it is measuring. localScale.y is the true em: the x scale is
+            // the CondenseToFitWidth squeeze, which would make a long name look like a narrow plate.
+            faceGo = new GameObject("PlateGauge");
+            CardFaceView face = faceGo.AddComponent<CardFaceView>();
+            face.Bind(new CardFaceData("card_test_gauge", "Volley", CardType.Unit, Faction.Fsti,
+                Rarity.Common, 2, null, 2, 1, 0, "Deal 2 damage."), null);
+            face.SetSize(CardView.CardSize);
+            float plateWorld = face.NameValue.rectTransform.rect.width * face.NameValue.transform.localScale.y;
+            Assert.Greater(plateWorld, 0.05f, "the gauge has to be a real name plate, not an empty rect");
+
+            Transform hand = CreateHandHolder(cam, ShippedHandPlacement);
+            holderGo = hand.gameObject;
+
+            HandController.ComputeSlot(4, 5, ShippedFanSpacing, ShippedArcHeight, ShippedMaxYaw,
+                ShippedHandY, true, out Vector3 outer, out _);
+            Assert.Greater(Mathf.Abs(outer.x), 1f,
+                "the outer card has to be well off the axis for this to measure anything");
+
+            Vector3 ScreenOf(Vector3 inHolder) =>
+                cam.WorldToScreenPoint(hand.TransformPoint(inHolder));
+
+            float pxPerUnit = ScreenOf(outer + Vector3.right).x - ScreenOf(outer).x;
+            float platePx = plateWorld * pxPerUnit;
+            Assert.Greater(platePx, 20f, "the plate is tens of pixels wide on screen, or the ratio means nothing");
+
+            // How far the projection walks for a layer sitting dz off the face plane.
+            float ShiftPx(float dz, Vector3 inHolder) =>
+                ScreenOf(inHolder + new Vector3(0f, 0f, dz)).x - ScreenOf(inHolder).x;
+
+            float textRight = ShiftPx(-0.04f, outer);   // where the labels used to sit
+            float artRight = ShiftPx(+0.02f, outer);    // where the art used to sit
+            float textLeft = ShiftPx(-0.04f, new Vector3(-outer.x, outer.y, outer.z));
+
+            Assert.AreEqual(0f, ShiftPx(0f, outer), 1e-3f,
+                "a layer on the face plane does not move at all - this is what the fix buys");
+            Assert.Greater(Mathf.Abs(textRight) / platePx, 0.02f,
+                "the old text offset walked the type over two percent of its own plate, which is visible " +
+                "on a plate this narrow and is the symptom that was reported");
+            Assert.Greater(Mathf.Abs(artRight) / platePx, 0.01f,
+                "and the old art offset walked the art the same way, so text and art disagreed separately");
+            Assert.Less(textRight * artRight, 0f,
+                "opposite directions, which is why it read as misregistration rather than as a soft focus");
+            Assert.Less(textRight * textLeft, 0f,
+                "and the error reverses across the centre line, which is why only the side cards looked wrong");
+        }
+        finally
+        {
+            if (cam != null) Object.Destroy(cam.gameObject);
+            if (holderGo != null) Object.Destroy(holderGo);
+            if (faceGo != null) Object.Destroy(faceGo);
+        }
+    }
+
+    /// <summary>
     /// The widest laid-out line of a label, in the same rect units StyleLabel authors the plate in, so
     /// the two are comparable without a scale conversion: the plate is written as
     /// pointSize x (plate px / em px) and the mesh comes back in pointSize units too.

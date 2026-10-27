@@ -295,14 +295,18 @@ namespace Overlink.Cards
             // own row; both fall back to the plain placement rather than dividing by zero.
             if (!pivoted || n < 2 || Mathf.Abs(yawDeg) < 1e-4f)
             {
-                pos = new Vector3((i - c) * spacing, y + arc * (1f - t * t), -0.002f * i);
+                // z stays 0 for every card in the row. A per-card depth stair is the same bug as a per-layer
+                // offset inside the face: it pushes each neighbour slightly along the view axis, so the
+                // magnification differs across the row and the cards stop being congruent. Overlap order is
+                // sortingOrder's business (HandController raises the baseline of a lifted card), not depth's.
+                pos = new Vector3((i - c) * spacing, y + arc * (1f - t * t), 0f);
                 return;
             }
 
             float halfRow = c * spacing;
             float r = halfRow / Mathf.Sin(Mathf.Abs(yawDeg) * Mathf.Deg2Rad);
             float rad = phi * Mathf.Deg2Rad;
-            pos = new Vector3(-r * Mathf.Sin(rad), y - r * (1f - Mathf.Cos(rad)), -0.002f * i);
+            pos = new Vector3(-r * Mathf.Sin(rad), y - r * (1f - Mathf.Cos(rad)), 0f);
         }
 
         /// <summary>

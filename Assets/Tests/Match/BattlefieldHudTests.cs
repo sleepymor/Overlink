@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using NUnit.Framework;
+using Overlink.Core;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Overlink.Match.Tests
 {
@@ -274,6 +276,296 @@ namespace Overlink.Match.Tests
 
             Assert.IsFalse(hud.InterceptsPointerInput,
                 "Both panels are display-only: dismissal is a click elsewhere or Escape, never a button.");
+        }
+
+        // ---- The status layer ------------------------------------------------------------
+
+        /// <summary>
+        /// The seven slabs that used to be painted on the tabletop. Named here rather than reached for through
+        /// an accessor, because the names are the contract a designer edits against: these are the objects in
+        /// the scene's <c>Battlefield HUD</c>, and renaming one in the editor has to be a deliberate act.
+        /// </summary>
+        static readonly string[] StatusBoxNames =
+        {
+            "Banner", "ControlsHint", "OpponentChip", "PlayerChip", "NodeList", "Notice", "Result"
+        };
+
+        /// <summary>
+        /// The resolution the boxes are authored against. They are fixed reference-pixel rectangles, and the
+        /// <c>CanvasScaler</c> maps reference pixels onto whatever the window is, so what a box has to fit is
+        /// never the screen itself but the viewport the scaler turns that screen into.
+        /// </summary>
+        const float ReferenceWidth = 1920f;
+        const float ReferenceHeight = 1080f;
+
+        /// <summary>
+        /// The scaler's width/height blend, read off the scene's HUD canvas. The tests hard-code it rather
+        /// than reading the component so that changing the Inspector value cannot quietly change what the
+        /// layout is judged against.
+        /// </summary>
+        const float MatchWidthOrHeight = 0.5f;
+
+        static RectTransform Box(BattlefieldHud hud, string name)
+        {
+            Transform found = hud.transform.Find(name);
+            Assert.IsNotNull(found, $"{name} must be a direct child of the HUD canvas, not buried in a panel.");
+            return (RectTransform)found;
+        }
+
+        /// <summary>
+        /// The pixels a box occupies, expressed in reference pixels, on a screen of the given size.
+        /// <para>
+        /// Computed rather than read off <c>worldCorners</c> on purpose: an EditMode run has no determined
+        /// screen size, so the only way to ask what these boxes do <em>at</em> a resolution is to do the
+        /// layout maths against one. Valid only because every status box is a point anchor rather than a
+        /// stretched one, which the containment test asserts before trusting this.
+        /// </para>
+        /// </summary>
+        static Rect ScreenRect(RectTransform rect, float width, float height)
+        {
+            Vector2 anchor = new Vector2(rect.anchorMin.x * width, rect.anchorMin.y * height);
+            Vector2 size = rect.rect.size;
+            Vector2 offsetMin = rect.anchoredPosition - Vector2.Scale(rect.pivot, size);
+            return new Rect(anchor + offsetMin, size);
+        }
+
+        /// <summary>
+        /// The reference-pixel viewport a screen size actually maps to.
+        /// <para>
+        /// The boxes are authored in reference pixels and the <c>CanvasScaler</c> turns them into screen
+        /// pixels, so asking whether a box "fits the screen" means asking whether it fits <em>this</em>. The
+        /// formula is Unity's own <c>MatchWidthOrHeight</c> interpolation, a plain linear lerp between the
+        /// width and height scale factors, and it is not a guess: it was solved for against the running
+        /// editor, whose 780&times;439 game view reports <c>scaleFactor 0.406365722</c> against a
+        /// 1920&times;1080 reference at match 0.5, and
+        /// <c>0.5&middot;(780/1920) + 0.5&middot;(439/1080) = 0.40636574</c> agrees to seven digits. The
+        /// harmonic mean the documentation is often read as describing does not match that number.
+        /// </para>
+        /// </summary>
+        static Vector2 ReferenceViewport(float screenWidth, float screenHeight)
+        {
+            float scale = (1f - MatchWidthOrHeight) * (screenWidth / ReferenceWidth)
+                        + MatchWidthOrHeight * (screenHeight / ReferenceHeight);
+            return new Vector2(screenWidth / scale, screenHeight / scale);
+        }
+
+        /// <summary>
+        /// The screen sizes the layout has to survive. Every 16:9 size collapses to the reference viewport
+        /// exactly, so what is being swept is the <em>aspect</em>: 4:3 squeezes the width to 1646 reference
+        /// pixels and 21:9 squeezes the height to 926, and those are the two directions a fixed-size box can
+        /// be caught by. Portrait is deliberately absent - see <see cref="StatusLayer_FitsEverySupportedAspect"/>.
+        /// </summary>
+        static readonly Vector2[] SupportedScreens =
+        {
+            new Vector2(1920f, 1080f),
+            new Vector2(1280f, 720f),
+            new Vector2(2560f, 1440f),
+            new Vector2(1366f, 768f),
+            new Vector2(1024f, 768f),
+            new Vector2(2560f, 1080f),
+            new Vector2(3440f, 1440f),
+        };
+
+        static bool Disjoint(RectTransform a, RectTransform b, Vector2 viewport)
+        {
+            Rect ra = ScreenRect(a, viewport.x, viewport.y);
+            Rect rb = ScreenRect(b, viewport.x, viewport.y);
+            return ra.xMax <= rb.xMin || rb.xMax <= ra.xMin
+                || ra.yMax <= rb.yMin || rb.yMax <= ra.yMin;
+        }
+
+        [Test]
+        public void Build_AlsoProducesTheStatusLayer()
+        {
+            // The presenter treats a HUD missing its status layer as a HUD needing a rebuild, so IsStatusBuilt
+            // has to be true straight out of Build() or every Refresh would re-enter the builder.
+            BattlefieldHud hud = NewHud();
+
+            Assert.IsTrue(hud.IsStatusBuilt, "The status layer is part of Build, not a second call.");
+            foreach (string name in StatusBoxNames)
+            {
+                Assert.IsNotNull(Box(hud, name), $"{name} must exist: it is a board label that moved inside.");
+            }
+        }
+
+        [Test]
+        public void StatusLayer_CannotSwallowACardDrag()
+        {
+            // The log occupied the right-hand column. These seven do not: the banner and the notice straddle
+            // the middle of the screen exactly where the sockets are, and the chips sit over the near ranks.
+            // One raycastTarget among them would swallow board clicks and card drags alike, since the hand
+            // resolves a drag by raycasting from the pointer.
+            BattlefieldHud hud = NewHud();
+
+            Assert.IsFalse(hud.InterceptsPointerInput,
+                "The overlay canvas must carry no GraphicRaycaster at all, status layer included.");
+
+            foreach (string name in StatusBoxNames)
+            {
+                RectTransform box = Box(hud, name);
+                Graphic[] graphics = box.GetComponentsInChildren<Graphic>(true);
+
+                Assert.Greater(graphics.Length, 0, $"{name} must actually draw something.");
+                foreach (Graphic graphic in graphics)
+                {
+                    Assert.IsFalse(graphic.raycastTarget,
+                        $"{graphic.gameObject.name} sits over the board and must not intercept the pointer.");
+                }
+            }
+        }
+
+        [Test]
+        public void StatusSetters_WriteWhereTheyAreRead()
+        {
+            // The presenter only ever speaks to this layer through the setters, and the accessors beside them
+            // are the only way a test can hear the reply. A setter that writes to a field the accessor does
+            // not read is a panel that silently never updates in game.
+            BattlefieldHud hud = NewHud();
+
+            hud.SetBanner("TURN 3 - COMBAT");
+            hud.SetHint("1-5 attack   Q/E switch   R retreat");
+            hud.SetStatus(PlayerIndex.Player, "CORE 20/20   NP 4/8");
+            hud.SetStatus(PlayerIndex.Opponent, "CORE 14/20   NP 2/8");
+            hud.SetNodeRow(2, "Node 3 - contested", Color.cyan);
+            hud.SetNotice("Not enough NP for that.");
+            hud.SetResult("VICTORY", Color.green);
+
+            Assert.AreEqual("TURN 3 - COMBAT", hud.BannerText);
+            Assert.AreEqual("1-5 attack   Q/E switch   R retreat", hud.HintText);
+            Assert.AreEqual("CORE 20/20   NP 4/8", hud.StatusText(PlayerIndex.Player));
+            Assert.AreEqual("CORE 14/20   NP 2/8", hud.StatusText(PlayerIndex.Opponent));
+            Assert.AreEqual("Node 3 - contested", hud.NodeRowText(2));
+            Assert.AreEqual("Not enough NP for that.", hud.NoticeText);
+            Assert.AreEqual("VICTORY", hud.ResultText);
+        }
+
+        [Test]
+        public void SetStatusMarked_ChangesOnlyTheTintAndTheRule()
+        {
+            // Marking a chip is the successor to the table's Core highlight: it has to be legible without
+            // rewriting the numbers, or the readout flickers every time a click target moves.
+            BattlefieldHud hud = NewHud();
+            hud.SetStatus(PlayerIndex.Opponent, "CORE 14/20   NP 2/8");
+
+            hud.SetStatusMarked(PlayerIndex.Opponent, true);
+            Assert.AreEqual("CORE 14/20   NP 2/8", hud.StatusText(PlayerIndex.Opponent),
+                "Marking must not touch the text.");
+            Assert.AreNotEqual(hud.StatusText(PlayerIndex.Player), hud.StatusText(PlayerIndex.Opponent),
+                "and it must not smear one side's readout onto the other.");
+
+            hud.SetStatusMarked(PlayerIndex.Opponent, false);
+            Assert.AreEqual("CORE 14/20   NP 2/8", hud.StatusText(PlayerIndex.Opponent));
+        }
+
+        [Test]
+        public void SetResult_EmptyTextHidesTheOverlay()
+        {
+            // A result slab that stays up after the match is over sits over the fan for good.
+            BattlefieldHud hud = NewHud();
+
+            hud.SetResult("DEFEAT", Color.red);
+            Assert.IsTrue(Box(hud, "Result").gameObject.activeSelf, "A result has to be visible.");
+
+            hud.SetResult(string.Empty, Color.red);
+            Assert.IsFalse(Box(hud, "Result").gameObject.activeSelf,
+                "Clearing it has to take the overlay off the screen, not just off the label.");
+        }
+
+        [Test]
+        public void StatusSetters_BeforeBuildAreSafe()
+        {
+            // The presenter resolves its HUD and may paint before the scene's canvas has finished building,
+            // and a domain reload hands it a HUD whose fields are all null. Nothing here may throw.
+            var go = new GameObject(TestRootName, typeof(RectTransform));
+            spawned.Add(go);
+            BattlefieldHud hud = go.AddComponent<BattlefieldHud>();
+
+            hud.SetBanner("x");
+            hud.SetHint("x");
+            hud.SetStatus(PlayerIndex.Player, "x");
+            hud.SetStatus(PlayerIndex.Opponent, "x");
+            hud.SetStatusMarked(PlayerIndex.Player, true);
+            hud.SetNodeRow(0, "x", Color.white);
+            hud.SetNodeRow(99, "x", Color.white);
+            hud.SetNotice("x");
+            hud.SetResult("x", Color.white);
+
+            Assert.IsFalse(hud.IsStatusBuilt, "Untouched, so still unbuilt - but nothing threw.");
+        }
+
+        [Test]
+        public void StatusBoxes_ArePointAnchorsSoTheirPixelsCanBePredicted()
+        {
+            // The layout maths in ScreenRect is only meaningful for a box pinned to a single anchor. If a
+            // stretched box ever appears here these tests are measuring its rect at build time rather than
+            // what it draws, and they would pass while the panel clipped on screen.
+            BattlefieldHud hud = NewHud();
+            foreach (string name in StatusBoxNames)
+            {
+                RectTransform box = Box(hud, name);
+                Assert.AreEqual(box.anchorMin, box.anchorMax,
+                    $"{name} must be pinned to one anchor: its size is authored in pixels.");
+                Assert.AreEqual(box.sizeDelta, box.rect.size,
+                    $"{name}'s size is its sizeDelta, which is what ScreenRect assumes.");
+            }
+        }
+
+        [Test]
+        public void StatusLayer_FitsEverySupportedAspect()
+        {
+            // The acceptance test for the whole move: information that used to be geometry on the board is
+            // now a slab of screen-space UI, and a slab that hangs off an edge or lies under its neighbour has
+            // simply become unreadable. Sweeping aspects rather than resolutions is the point - a 16:9 window
+            // of any size maps to the same reference viewport, so only 4:3 and 21:9 can actually catch
+            // something.
+            BattlefieldHud hud = NewHud();
+
+            foreach (Vector2 screen in SupportedScreens)
+            {
+                Vector2 vp = ReferenceViewport(screen.x, screen.y);
+                string at = $" at {(int)screen.x}x{(int)screen.y} (viewport {vp.x:F0}x{vp.y:F0})";
+
+                foreach (string name in StatusBoxNames)
+                {
+                    Rect r = ScreenRect(Box(hud, name), vp.x, vp.y);
+                    Assert.GreaterOrEqual(r.xMin, 0f, $"{name} runs off the left edge{at}.");
+                    Assert.GreaterOrEqual(r.yMin, 0f, $"{name} runs off the bottom edge{at}.");
+                    Assert.LessOrEqual(r.xMax, vp.x, $"{name} runs off the right edge{at}.");
+                    Assert.LessOrEqual(r.yMax, vp.y, $"{name} runs off the top edge{at}.");
+                }
+
+                // The top-left band - banner, legend, opponent chip - is stacked vertically with 2 pixel seams
+                // rather than separated by horizontal gaps, because a horizontal gap between a centred fixed-width
+                // box and an edge-pinned one closes as soon as the viewport narrows. These three assertions are
+                // what that stacking buys, and they are the only ones that can still be true at 4:3.
+                Assert.IsTrue(Disjoint(Box(hud, "Banner"), Box(hud, "OpponentChip"), vp),
+                    "The banner must clear the opponent chip" + at);
+                Assert.IsTrue(Disjoint(Box(hud, "ControlsHint"), Box(hud, "OpponentChip"), vp),
+                    "The key legend must clear the opponent chip" + at);
+                Assert.IsTrue(Disjoint(Box(hud, "PlayerChip"), Box(hud, "NodeList"), vp),
+                    "The left column's own members must not stack on each other" + at);
+            }
+        }
+
+        [Test]
+        public void StatusLayer_IsAuthoredAgainstALandscapeViewport()
+        {
+            // The honest boundary of the design, stated rather than pretended away. Every box here is a fixed
+            // reference width, and the narrowest viewport the scaler can produce for a landscape window is the
+            // 4:3 one - 1646 reference pixels across. Portrait maps 1080x1920 to only 923, which would cut the
+            // notice and the result overlay, but the board is a 16.5 x 10.3 landscape tabletop and its camera
+            // framing is derived from it, so portrait is not a configuration this game supports. What this
+            // locks is the width the layout does need, which makes widening any box past the tightest
+            // supported viewport a deliberate act rather than a slip.
+            BattlefieldHud hud = NewHud();
+
+            const float narrowest = 1646f;  // 4:3, the tightest landscape viewport in the sweep
+            foreach (string name in StatusBoxNames)
+            {
+                RectTransform box = Box(hud, name);
+                Assert.LessOrEqual(box.rect.width, narrowest,
+                    $"{name} is wider than the narrowest viewport the layout is authored for.");
+            }
         }
     }
 }

@@ -113,6 +113,8 @@ namespace Overlink.Match.Tests
         [TestCase("NodeOppBench0_1")]
         [TestCase("NodePlate1")]
         [TestCase("PlayProtocol")]
+        [TestCase("PlayCorePlate")]
+        [TestCase("OppCorePlate")]
         [TestCase("Header")]
         [TestCase("ControlsHint")]
         [TestCase("Table")]
@@ -120,8 +122,10 @@ namespace Overlink.Match.Tests
         [TestCase(null)]
         public void SlotIdentity_NonTargetsDoNotParse(string name)
         {
-            // Opponent sockets, Node plates, the Protocol tiles and the board furniture are never drop
-            // targets. Parsing one as a slot would let a unit be deployed onto the opponent's half.
+            // Opponent sockets, Node plates, the Protocol tiles, the two Core plates and the board furniture
+            // are never drop targets. Parsing one as a slot would let a unit be deployed onto the opponent's
+            // half — or, for the plates, onto scenery that holds no unit at all. The plates are clickable and
+            // the ownership parser knows them; being a drop target is a strictly narrower claim.
             Assert.IsFalse(BattlefieldPresenter.TryParseSlotIdentity(name, out _, out _, out _),
                 $"{name ?? "<null>"} is not a player socket and must not parse.");
         }
@@ -390,18 +394,38 @@ namespace Overlink.Match.Tests
             BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
             presenter.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
+            // The rig is read off the camera controller's own shipped defaults rather than retyped here. This
+            // test used to hard-code focus z = 0.35 / distance = 16 with a comment demanding that any change to
+            // Gameplay.unity be admitted by hand, and a reframe proved exactly why that does not work: the
+            // numbers drifted, the test kept passing, and it was validating a framing the game no longer
+            // renders. Deriving them makes that drift impossible - the framing has since moved again, which is
+            // the point.
+            //
+            // Read from a throwaway and destroyed before the next line: the real component drives its transform
+            // from LateUpdate, and a rig the test has just placed would be smoothed somewhere else by the time
+            // the frame below renders. Only Awake runs on the way in, and Awake does not move anything.
+            var defaults = new GameObject("FramingDefaults");
+            BattlefieldCameraController shipped = defaults.AddComponent<BattlefieldCameraController>();
+            Vector3 focus = shipped.focus;
+            float pitch = shipped.pitch;
+            float yaw = shipped.yaw;
+            float distance = shipped.distance;
+            float fieldOfView = shipped.fieldOfView;
+            Object.DestroyImmediate(defaults);
+
             var rig = new GameObject("DropRayRig");
             rig.tag = "MainCamera";
             Camera cam = rig.AddComponent<Camera>();
-            cam.fieldOfView = 38f;
-            Quaternion rot = Quaternion.Euler(52f, 0f, 0f);
+            cam.fieldOfView = fieldOfView;
+            Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
             rig.transform.rotation = rot;
-            rig.transform.position = new Vector3(0f, 0f, 0.35f) - rot * Vector3.forward * 16f;
+            rig.transform.position = focus - rot * Vector3.forward * distance;
             // The view ray only matters because the hand hangs where the lens sees it, so the depth used
-            // below is the shipped HandRoot placement rather than an arbitrary one. Change Gameplay.unity
-            // and this has to be admitted here too, or the test passes against a framing the game never
-            // renders. 6.7 = the closest placement that loses less than a quarter of a card to the bottom
-            // edge (2.662 - 0.3443 * z < 0.365); see CardHandTests.ShippedHandDepth for the derivation.
+            // below is the shipped HandRoot placement rather than an arbitrary one. Unlike the rig above it
+            // cannot be read off a component - it lives in the Cards assembly, which this one cannot see - so
+            // it is still a number admitted by hand, and CardHandTests.ShippedHandDepth is what pins it to the
+            // derivation: 6.7 is the closest placement that loses less than a quarter of a card to the bottom
+            // edge (2.662 - 0.3443 * z < 0.365) under the same 38 degree lens.
             const float shippedHandDepth = 6.7f;
 
             // WorldToScreenPoint reads the camera's matrices, which are not refreshed until it renders.

@@ -4,6 +4,7 @@
   "references": [
     "Overlink.Core",
     "Overlink.Match",
+    "Overlink.Cards",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

@@ -200,6 +200,16 @@ namespace Overlink.EditorTools
             // Resolution is a framing problem as much as an import problem. The old ortho 3.1 drew
             // a 1216px frame texture into ~190 screen pixels. 1.35 fills ~585px per card at 1080p
             // and the five-card fan still fits horizontally (4.28 wide vs 4.80 visible).
+            //
+            // WARNING: an orthographic camera cannot see ANY face-depth defect, and this is the reason
+            // the card-face work was validated here for so long without catching the one that mattered.
+            // Ortho drops Z from the projection, so a label written at local z = -0.04 behind a frame at
+            // z = 0 lands exactly where the frame puts it; under the game's perspective lens the same
+            // offset scales by f/(Z+dz) against the frame's f/Z and walks the type out of its plate, most
+            // on the wing cards, in opposite directions for text and art. Face layers are therefore held
+            // co-planar by CardFaceView.PixelPosition, and CardHandTests pins that plus the projection
+            // arithmetic that this scene cannot demonstrate. Read a card face here for CONTENT and raster
+            // density; read it for ALIGNMENT only through the live Gameplay scene.
             camera.orthographicSize = framing.orthoSize;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 100f;

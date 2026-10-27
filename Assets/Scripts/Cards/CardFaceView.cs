@@ -187,10 +187,17 @@ namespace Overlink.Cards
         /// <summary>Converts an 832x1216 pixel coordinate into local card space.</summary>
         public static Vector3 PixelPosition(Vector3 faceSize, float x, float y)
         {
+            // z is zero, and that is load-bearing rather than tidy. Every layer of a face sits on ONE plane
+            // so the whole card is co-planar with the hand's plane, which is parallel to the image plane.
+            // Give the labels a depth offset and perspective scales them by f/(Z+dz) against a frame at f/Z:
+            // at the shipped lens (Z 6.7) a -0.04 offset walks a wing card's text ~3.2px out of its plate and
+            // flips the sign across the centre line, which is the "text does not line up on the side cards"
+            // symptom. Orthographic hides it completely, which is why this reads as a camera bug and is not.
+            // Draw order is sortingOrder's job (see ApplyRenderLayers), never depth's.
             return new Vector3(
                 faceSize.x * (x / FrameWidthPixels - 0.5f),
                 faceSize.y * (0.5f - y / FrameHeightPixels),
-                -0.04f);
+                0f);
         }
 
         /// <summary>
@@ -342,7 +349,8 @@ namespace Overlink.Cards
                 ConfigureArtMask(center, artSize);
             }
 
-            ArtImage.transform.localPosition = new Vector3(center.x, center.y, 0.02f);
+            // On the face plane, not in front of it: see PixelPosition for why any z here is a bug.
+            ArtImage.transform.localPosition = new Vector3(center.x, center.y, 0f);
             FitSpriteCover(ArtImage, artSize);
             if (!zones.FullArt) BiasCoverCrop(center.y, artHeight, zones.ArtFocusY);
         }
@@ -417,7 +425,7 @@ namespace Overlink.Cards
             if (ArtMask.sprite == null) ArtMask.sprite = NeutralSprite();
             ArtMask.gameObject.SetActive(true);
             // The mask is a 1x1 world-unit sprite, so its scale is the window size verbatim.
-            ArtMask.transform.localPosition = new Vector3(center.x, center.y, 0.01f);
+            ArtMask.transform.localPosition = new Vector3(center.x, center.y, 0f);
             ArtMask.transform.localScale = new Vector3(size.x, size.y, 1f);
             // Keep the mask inside this card's own sorting slice; ApplyRenderLayers may have run
             // before this, and a hardcoded order here would let a neighbour card's art leak in.

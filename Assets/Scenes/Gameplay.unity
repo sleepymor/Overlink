@@ -816,7 +816,7 @@ Transform:
   m_GameObject: {fileID: 885214149}
   serializedVersion: 2
   m_LocalRotation: {x: 0.43837115, y: 0, z: 0, w: 0.89879405}
-  m_LocalPosition: {x: 0, y: 12.608172, z: -9.500584}
+  m_LocalPosition: {x: 0, y: 11.8201613, z: -10.2349224}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -879,22 +879,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37224adda9de990459782f946ea04c10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  focus: {x: 0, y: 0, z: 0.35}
+  focus: {x: 0, y: 0, z: -1}
   pitch: 52
   yaw: 0
-  distance: 16
+  distance: 15
   fieldOfView: 38
-  minDistance: 6
-  maxDistance: 16
-  zoomStep: 6
+  minDistance: 7
+  maxDistance: 17
+  zoomStep: 1.5
   birdDistance: 18
   birdPitch: 89
   birdTravelNotches: 3
   smooth: 12
-  panBoundsXMin: -8
-  panBoundsXMax: 8
-  panBoundsZMin: -5.5
-  panBoundsZMax: 6
+  panSlackX: 0.55
+  panSlackZ: 0.55
+  referenceAspect: 1.7777777777777777
   keyboardPanSpeed: 10
   groundY: 0
 --- !u!81 &885214153

@@ -37,23 +37,21 @@ namespace Overlink.Match
         public GameCoordinator coordinator;
 
         [Header("Board layout (world units)")]
-        public float headerY = 5.35f;
-
-        [Header("Event log")]
         [Tooltip("The screen-space panel the match log renders into. Found automatically; created on the " +
                  "first refresh when the scene has none, so the legacy standalone hand still gets a log.")]
         public BattlefieldHud hud;
 
         // ---- Tabletop -------------------------------------------------------------
-        // The tabletop is sized to its content, not to the log column it used to reserve on the right. The
-        // widest content is the pair of outer Node plates, which reach x = +/-6.9, so 16.5 units leaves a
-        // deliberate margin at each edge and nothing more.
+        // The tabletop is sized to its content and nothing else. Since the status layer moved to
+        // BattlefieldHud the widest content is still the pair of outer Node plates (x = +/-6.9) and the
+        // tallest is the same plates plus the two piles, spanning y -4.85..+4.5, so 10.3 deep with the
+        // centre at -0.2 hugs the board with a deliberate margin and nothing more.
         //
         // Public because the camera's overhead tier is defined by these numbers: it exists to frame exactly
         // this rectangle, and its test reads them rather than copying them so the two cannot drift apart.
         public const float TableWidth = 16.5f;
-        public const float TableDepth = 11.4f;
-        const float TableCenterY = 0.3f;
+        public const float TableDepth = 10.3f;
+        public const float TableCenterY = -0.2f;
 
         // Name of the child this component paints. The scene ships it as a prefab instance so the board
         // is a real, editable hierarchy object; BuildBoard() binds to it by name rather than rebuilding.
@@ -72,7 +70,10 @@ namespace Overlink.Match
         // further back so the taller Active never crowds it and the caption in the dead band between the
         // two facing Actives keeps its own clear space.
         const float CorePlayerActiveY = -1.12f;
-        const float CorePlayerBenchY = -2.5f;
+
+        // Public for the same reason TableWidth is: the resting camera framing is derived from where this row
+        // lands on screen, and BattlefieldCameraControllerTests pins the seam between it and the hand fan.
+        public const float CorePlayerBenchY = -2.5f;
         const float CoreOpponentActiveY = 1.12f;
         const float CoreOpponentBenchY = 2.5f;
         const float CoreSpacing = 0.9f;
@@ -82,8 +83,26 @@ namespace Overlink.Match
         // The back rank is a touch smaller than the Protocol socket beside the Active. Being the furthest
         // thing from the centre line it is also the furthest from the camera, and a slightly tighter
         // footprint is what leaves the status strip a clear band between here and the hand fan.
-        static readonly Vector3 CoreBenchSize = new Vector3(0.66f, 0.924f, 0.06f);
+        // Public because the near edge of this row is the number the camera's rest bias is derived against.
+        public static readonly Vector3 CoreBenchSize = new Vector3(0.66f, 0.924f, 0.06f);
         static readonly Vector3 CoreProtocolSize = new Vector3(0.72f, 1.008f, 0.06f);
+
+        // ---- The Core plate -------------------------------------------------------
+        // Each half of the Core battlefield gets a plate behind its two ranks, mirroring what a Node plate
+        // does for a Node. It is not decoration. With the status strips off the table it is the footprint of
+        // an unblocked direct Core strike (GDD 2.1.6 Step 4), and unlike the Core Active socket it survives
+        // the opponent putting a unit down, so a direct attack always has a visible place to be aimed at
+        // rather than an invisible rectangle of empty tabletop or a screen-space hit into the UI.
+        //
+        // Centred on the two ranks it backs: the Active spans y -1.89..-0.35 and the Bench -2.96..-2.04 on
+        // the player's side, so the block is 2.61 tall about -1.656, and 3.36 wide across the Bench row.
+        // The plate is that plus a margin, and it is mirrored exactly about the centre line.
+        //
+        // Public because the targeting test probes the plate's own margin to prove it is still reachable
+        // under the ranks, and copying this size into the test is how the two drift apart.
+        const float CorePlayerPlateY = -1.656f;
+        const float CoreOpponentPlateY = 1.656f;
+        public static readonly Vector3 CorePlateSize = new Vector3(3.7f, 2.95f, 0.05f);
 
         // ---- Node battlefields (four corners): the same two-rank shape at a smaller scale. ----
         const float NodeCenterX = 5.5f;
@@ -129,11 +148,6 @@ namespace Overlink.Match
         static readonly Color DeckTint = new Color(0.13f, 0.19f, 0.25f);
         static readonly Color DiscardTint = new Color(0.21f, 0.17f, 0.14f);
 
-        // Status strips live in the clear centre column above/below the Core rows, so they never overlap
-        // the corner Node plates.
-        const float PlayerStatusY = -3.1f;
-        const float OpponentStatusY = 3.1f;
-
         // Depth stacking. Local -Z faces the pitched camera, so a smaller Z draws on top of a larger one:
         // cards above their plates, caption text above the plates, tabletop furthest back.
         const float CardZ = 0f;
@@ -141,16 +155,9 @@ namespace Overlink.Match
         const float LabelZ = 0.02f;
         const float TableZ = 0.14f;
 
-        // The control legend is code-owned, not authored: the prefab binds by name and would otherwise
-        // keep whatever stale string was baked into it the last time the prefab was rebuilt. Binding
-        // re-applies both the size and the text so a key added to GameCoordinator shows up without a
-        // prefab rebuild.
-        //
-        // Two lines, because the mouse layer doubled what the legend has to say: at 11pt a single line of
-        // this length is ~13 board units wide against a 16.5-unit table, and the third bullet point was
-        // already running off the edge.
-        const float ControlsHintFontSize = 11f;
-        static readonly Vector2 ControlsHintSize = new Vector2(17f, 0.78f);
+        // The control legend is code-owned, not authored: a key binding added to GameCoordinator has to reach
+        // the screen without anybody rebuilding a scene file or a prefab. It is written onto the HUD by
+        // ResolveHud, which is the one place that knows the canvas exists.
         const string ControlsHintText =
             "Click a card to read it   \u2022   Click a Ready unit, then a red socket, to attack   \u2022   " +
             "Drag onto a lit socket to deploy\n" +
@@ -176,9 +183,19 @@ namespace Overlink.Match
         static readonly Color ActiveRim = new Color(0.80f, 0.64f, 0.28f);
         static readonly Color TableTint = new Color(0.09f, 0.11f, 0.15f);
         static readonly Color NodeFree = new Color(0.26f, 0.28f, 0.32f);
+        // The Core plate sits under two full ranks, so it stays darker than a Node plate: at NodeFree it
+        // would compete with the socket fills stacked on top of it.
+        static readonly Color CorePlateTint = new Color(0.16f, 0.18f, 0.25f);
         static readonly Color NodePlayer = new Color(0.14f, 0.48f, 0.28f);
         static readonly Color NodeOpponent = new Color(0.56f, 0.38f, 0.12f);
         static readonly Color BlockMark = new Color(1f, 0.84f, 0.20f);
+
+        // Owner tints for the HUD's node list. Brightened from the plate albedos above: NodePlayer and
+        // NodeOpponent are cube colours meant to sit under the board light, and as 21pt text on a dark slab
+        // they read as mud.
+        static readonly Color RowNeutral = new Color(0.58f, 0.65f, 0.77f);
+        static readonly Color RowPlayer = new Color(0.45f, 0.95f, 0.62f);
+        static readonly Color RowOpponent = new Color(1f, 0.72f, 0.35f);
 
         // Pointer marks. Chosen to be distinguishable from the owner tints they are drawn over - blue for the
         // player's own units, warm red/orange for the enemy's - so "I picked this" and "I could hit this"
@@ -187,8 +204,6 @@ namespace Overlink.Match
         static readonly Color AttackMark = new Color(1.00f, 0.42f, 0.32f);
         static readonly Color BlockerMark = new Color(0.42f, 0.95f, 0.55f);
         static readonly Color BlockTargetMark = new Color(1.00f, 0.72f, 0.30f);
-        static readonly Color CoreTargetMark = new Color(1.00f, 0.55f, 0.35f);
-        static readonly Color StatusIdle = new Color(0.92f, 0.95f, 1f);
 
         Transform boardRoot;
 
@@ -197,17 +212,18 @@ namespace Overlink.Match
         Tile[] opponentCoreActive, opponentCoreBench;
         Tile playerProtocol, opponentProtocol;
 
+        // The plate behind each Core rank. See the layout note at CorePlayerPlateY.
+        Tile playerCorePlate, opponentCorePlate;
+
         // Node battlefield tiles, [node][slot].
         Tile[] nodePlate;
         Tile[][] nodePlayerActive, nodePlayerBench;
         Tile[][] nodeOpponentActive, nodeOpponentBench;
-        TextMeshPro[] nodeHeader;
 
         // The deck and discard stacks. Not sockets: they carry no slot identity and are never probed as drop
         // targets, because nothing is played TO the deck or the discard from the hand.
         Tile deckPile, discardPile;
 
-        TextMeshPro headerText, playerStatus, opponentStatus, victoryText, controlsHint;
         Tile highlightedTile;
 
         void Start()
@@ -222,7 +238,7 @@ namespace Overlink.Match
         }
 
         /// <summary>
-        /// Binds the screen-space log panel. The gameplay scene ships one as an editable root object; when
+        /// Binds the screen-space HUD. The gameplay scene ships one as an editable root object; when
         /// it is missing (the legacy standalone hand, a bare test scene) one is created &mdash; but only in play
         /// mode, because <see cref="BuildBoard"/> also runs from the editor prefab build, where creating a
         /// scene root would leave a stray object behind.
@@ -237,6 +253,23 @@ namespace Overlink.Match
             if (hud == null && Application.isPlaying)
             {
                 hud = BattlefieldHud.Ensure();
+            }
+
+            // A HUD serialized before the status layer existed is a valid, complete log panel that simply has
+            // no banner, chips or node list on it. Building it in place is idempotent and re-binds every child
+            // by name, so the authored object survives and only the missing panels are added. Guarded to play
+            // mode for the same reason as Ensure(): an editor build must not grow scene objects.
+            if (hud != null && Application.isPlaying &&
+                (!hud.IsBuilt || !hud.IsReaderBuilt || !hud.IsStatusBuilt))
+            {
+                hud.Build();
+            }
+
+            // The legend is code-owned, not authored: a key binding added to GameCoordinator has to reach the
+            // screen without anybody rebuilding a scene file.
+            if (hud != null)
+            {
+                hud.SetHint(ControlsHintText);
             }
         }
 
@@ -299,27 +332,14 @@ namespace Overlink.Match
             MakeBody(boardRoot, "Table", new Vector3(0f, TableCenterY, TableZ),
                 new Vector3(TableWidth, TableDepth, 0.05f), TableTint);
 
-            headerText = MakeLabel(boardRoot, "Header", new Vector3(0f, headerY, LabelZ),
-                new Vector2(17f, 0.7f), 32, FontStyles.Bold);
-            headerText.alignment = TextAlignmentOptions.Center;
-
-            controlsHint = MakeLabel(boardRoot, "ControlsHint", new Vector3(0f, headerY - 0.62f, LabelZ),
-                new Vector2(17f, 0.42f), ControlsHintFontSize, FontStyles.Normal);
-            controlsHint.alignment = TextAlignmentOptions.Center;
-            controlsHint.color = new Color(0.60f, 0.68f, 0.80f);
-            ApplyControlsHint(controlsHint);
+            // Everything that used to be painted here — the turn header, the key legend, the two status
+            // strips, the victory banner and the notice line — now lives on BattlefieldHud's overlay canvas.
+            // World text on a 52 degree pitch foreshortens, shrinks with zoom, and eats two bands of table
+            // that the tiles themselves could use; see BattlefieldHud.EnsureStatus.
 
             BuildCoreBattlefield();
             BuildNodeBattlefields();
             BuildPiles();
-
-            Transform status = Group(boardRoot, "Status");
-            opponentStatus = MakeStatusStrip(status, "OStatus", OpponentStatusY);
-            playerStatus = MakeStatusStrip(status, "PStatus", PlayerStatusY);
-
-            victoryText = MakeLabel(boardRoot, "Victory", new Vector3(0f, 0.1f, -0.25f),
-                new Vector2(14f, 2f), 72, FontStyles.Bold);
-            victoryText.text = "";
 
             SyncPileAnchors();
         }
@@ -332,15 +352,14 @@ namespace Overlink.Match
         {
             boardRoot = root;
             bindFailed = false;
-            IndexHierarchy(root);
 
-            headerText = FindLabel("Header");
-            controlsHint = FindLabel("ControlsHint");
-            // Code-owned, so binding writes it rather than trusting whatever the prefab last baked in.
-            ApplyControlsHint(controlsHint);
-            opponentStatus = FindLabel("OStatus");
-            playerStatus = FindLabel("PStatus");
-            victoryText = FindLabel("Victory");
+            // The status layer moved onto BattlefieldHud's overlay canvas. A board authored before that change
+            // still carries the old world labels, and binding resolves children by name — so unless they are
+            // deleted here they keep painting stale strings straight over the new HUD. Pruned before the name
+            // index is built, so nothing downstream can resolve them at all.
+            PurgeRetiredTabletop(root);
+
+            IndexHierarchy(root);
 
             int activeCount = Board.CoreActiveSlots;
             int benchCount = Board.CoreBenchSlots;
@@ -359,6 +378,9 @@ namespace Overlink.Match
             opponentProtocol = FindTile("OppProtocol");
             playerProtocol = FindTile("PlayProtocol");
 
+            opponentCorePlate = FindTile("OppCorePlate");
+            playerCorePlate = FindTile("PlayCorePlate");
+
             for (int i = 0; i < benchCount; i++)
             {
                 opponentCoreBench[i] = FindTile($"OppCoreBench{i}");
@@ -366,7 +388,6 @@ namespace Overlink.Match
             }
 
             nodePlate = new Tile[Board.NodeCount];
-            nodeHeader = new TextMeshPro[Board.NodeCount];
             nodePlayerActive = new Tile[Board.NodeCount][];
             nodePlayerBench = new Tile[Board.NodeCount][];
             nodeOpponentActive = new Tile[Board.NodeCount][];
@@ -375,7 +396,6 @@ namespace Overlink.Match
             for (int n = 0; n < Board.NodeCount; n++)
             {
                 nodePlate[n] = FindTile($"NodePlate{n}");
-                nodeHeader[n] = FindLabel($"NodeHeader{n}");
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
                 nodePlayerActive[n] = new Tile[Board.NodeActiveSlots];
@@ -398,6 +418,48 @@ namespace Overlink.Match
             discardPile = FindTile("DiscardPile");
 
             return !bindFailed && root.Find("Table/Body") != null;
+        }
+
+        /// <summary>
+        /// Names that used to be painted onto the tabletop and now live on <see cref="BattlefieldHud"/>.
+        /// <para>
+        /// Binding resolves descendants by name, so an authored board that still carries these objects would
+        /// keep rendering them straight through the new HUD — two turn counters, two legends, and a victory
+        /// banner neither writer can clear. Deleting them on bind makes the migration self-healing: the same
+        /// code path serves a freshly built board, the re-authored prefab, and any stale copy still sitting
+        /// in a scene file.
+        /// </para>
+        /// </summary>
+        static readonly string[] RetiredTabletopNames =
+        {
+            "Header", "ControlsHint", "Notice", "Victory", "OStatus", "PStatus", "Status",
+            "NodeHeader0", "NodeHeader1", "NodeHeader2", "NodeHeader3",
+        };
+
+        void PurgeRetiredTabletop(Transform root)
+        {
+            Transform[] all = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == root || all[i] == null)
+                {
+                    continue;
+                }
+
+                for (int r = 0; r < RetiredTabletopNames.Length; r++)
+                {
+                    if (all[i].name != RetiredTabletopNames[r])
+                    {
+                        continue;
+                    }
+
+                    // "Status" is the group that held the two strips, and it is named the same as nothing the
+                    // tiles use, so taking the group takes the strips with it. Guard against a component that
+                    // was already destroyed by an earlier iteration of the outer loop.
+                    DestroyTarget(all[i].gameObject);
+                    break;
+                }
+            }
         }
 
         /// <summary>
@@ -457,17 +519,6 @@ namespace Overlink.Match
             }
 
             return boardRoot != null ? boardRoot.Find(name) : null;
-        }
-
-        TextMeshPro FindLabel(string name)
-        {
-            Transform found = FindNamed(name);
-            var label = found != null ? found.GetComponent<TextMeshPro>() : null;
-            if (label == null)
-            {
-                bindFailed = true;
-            }
-            return label;
         }
 
         Tile FindTile(string name)
@@ -585,6 +636,17 @@ namespace Overlink.Match
 
             owner = opponent ? PlayerIndex.Opponent : PlayerIndex.Player;
 
+            // The Core's own plate, one per side. Deliberately below the owner split: this is the only
+            // scenery-shaped tile on the table that carries a rule (hitting the opponent's is an unblocked
+            // direct Core strike), so getting its owner backwards would aim the player's attacks at their own
+            // Core. Above the rank rules because it is the one Core object that is not a socket, and it
+            // contains neither "Active" nor "Bench" to be caught by them.
+            if (name.EndsWith("CorePlate"))
+            {
+                role = TileRole.Core;
+                return true;
+            }
+
             if (name.EndsWith("Protocol"))
             {
                 role = TileRole.Protocol;
@@ -686,6 +748,7 @@ namespace Overlink.Match
             if (name.StartsWith("Table")) return TableTint;
             if (name.Contains("Socket")) return ActiveRim;
             if (name.StartsWith("NodePlate")) return NodeFree;
+            if (name.EndsWith("CorePlate")) return CorePlateTint;
             if (name.Contains("Active")) return ActiveEmpty;
             if (name.Contains("Bench")) return BenchEmpty;
             if (name.Contains("Protocol")) return ProtocolEmpty;
@@ -706,10 +769,6 @@ namespace Overlink.Match
             Transform player = Group(core, "Player");
             Transform opponent = Group(core, "Opponent");
 
-            // Caption sits in the dead band between the two facing Active ranks, at the table centre.
-            MakeLabel(core, "CoreCaption", new Vector3(0f, 0f, LabelZ),
-                new Vector2(6f, 0.36f), 15, FontStyles.Bold).text = "CORE BATTLEFIELD";
-
             // Each half splits into the three things you might want to reposition independently: the front
             // rank, the Protocol socket beside it, and the back rank.
             Transform playerActiveGroup = Group(player, "Active");
@@ -718,6 +777,17 @@ namespace Overlink.Match
             Transform opponentActiveGroup = Group(opponent, "Active");
             Transform opponentProtocolGroup = Group(opponent, "Protocol");
             Transform opponentBenchGroup = Group(opponent, "Bench");
+
+            // Plates first: they are at PlateZ, behind every socket on top of them, so build order is the
+            // only thing that keeps the hierarchy readable when a designer opens the prefab.
+            opponentCorePlate = MakeTile(opponent, "OppCorePlate",
+                new Vector3(0f, CoreOpponentPlateY, PlateZ), CorePlateSize, CorePlateTint, "", 14);
+            playerCorePlate = MakeTile(player, "PlayCorePlate",
+                new Vector3(0f, CorePlayerPlateY, PlateZ), CorePlateSize, CorePlateTint, "", 14);
+
+            // The dead band between the two facing Active ranks is left clear. It used to carry a
+            // "CORE BATTLEFIELD" caption, which said nothing a player needed the table to tell them and sat
+            // directly on the line the eye follows when aiming an attack.
 
             // Front rank: the Active socket on the board's centre line, with the player's single Protocol
             // socket beside it at Bench size. This rank sits nearer the middle of the table, so the Active
@@ -756,7 +826,6 @@ namespace Overlink.Match
         void BuildNodeBattlefields()
         {
             nodePlate = new Tile[Board.NodeCount];
-            nodeHeader = new TextMeshPro[Board.NodeCount];
             nodePlayerActive = new Tile[Board.NodeCount][];
             nodePlayerBench = new Tile[Board.NodeCount][];
             nodeOpponentActive = new Tile[Board.NodeCount][];
@@ -775,13 +844,14 @@ namespace Overlink.Match
                 Transform node = Group(nodes, $"Node {n + 1}");
                 node.localPosition = new Vector3(c.x, c.y, 0f);
 
+                // The plate keeps a bare NODE tag so the HUD's bonus list still reads against the board — you
+                // can see which plate row 2 of the list is describing — but the bonus wording itself moved to
+                // that list. It used to be a 13pt caption on the plate, which is the least legible place on
+                // the table for it: dead centre, foreshortened by the pitch, and under a card as soon as
+                // anyone contests the node. Riding the plate's own label rather than a sibling means the tag
+                // travels with the plate when a node is moved in the editor.
                 nodePlate[n] = MakeTile(node, $"NodePlate{n}",
-                    new Vector3(0f, 0f, PlateZ), NodePlateSize, NodeFree, "", 14);
-
-                // Caption sits in the dead band between the two facing Active ranks, at the node centre.
-                nodeHeader[n] = MakeLabel(node, $"NodeHeader{n}", new Vector3(0f, 0f, LabelZ),
-                    new Vector2(NodePlateSize.x, 0.26f), 13, FontStyles.Bold);
-                nodeHeader[n].text = NodeCaption[n % NodeCaption.Length];
+                    new Vector3(0f, 0f, PlateZ), NodePlateSize, NodeFree, $"NODE {n + 1}", 14);
 
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
@@ -873,18 +943,6 @@ namespace Overlink.Match
         static Color Darken(Color c, float k)
         {
             return new Color(c.r * k, c.g * k, c.b * k, c.a);
-        }
-
-        TextMeshPro MakeStatusStrip(Transform parent, string name, float y)
-        {
-            TextMeshPro tmp = MakeLabel(parent, name, new Vector3(0f, y, LabelZ),
-                new Vector2(7f, 0.4f), 16, FontStyles.Normal);
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = new Color(0.92f, 0.95f, 1f);
-            tmp.enableAutoSizing = true;
-            tmp.fontSizeMin = 8f;
-            tmp.fontSizeMax = 16f;
-            return tmp;
         }
 
         // ---- Drop targeting ---------------------------------------------------------
@@ -1123,13 +1181,11 @@ namespace Overlink.Match
         //
         // Like the drop test, this is geometry and nothing else. It reports what is under the pointer and
         // whose it is; GameCoordinator decides whether the player may act on it.
-
-        // The two status strips double as the Core counters, and therefore as the target of an unblocked
-        // direct attack (GDD 2.1.6 Step 4). Their footprint is MakeStatusStrip's rect, in board-root units.
-        static readonly Vector2 PlayerCoreStripCenter = new Vector2(0f, PlayerStatusY);
-        static readonly Vector2 OpponentCoreStripCenter = new Vector2(0f, OpponentStatusY);
-        internal const float CoreStripHalfWidth = 3.5f;
-        internal const float CoreStripHalfHeight = 0.2f;
+        //
+        // The two Core plates are part of that geometry like any other tile, so an unblocked direct Core
+        // strike (GDD 2.1.6 Step 4) is aimed at a real object on the table. It used to be aimed at an
+        // invisible rectangle where the status strips had stood, which was defensible only while the strips
+        // were drawn there and the rectangle was their footprint.
 
         readonly List<Tile> pickables = new List<Tile>();
         readonly Dictionary<Tile, CardInstance> cardByTile = new Dictionary<Tile, CardInstance>();
@@ -1192,6 +1248,7 @@ namespace Overlink.Match
 
             Tile best = null;
             float bestDistance = float.MaxValue;
+            int bestRank = -1;
 
             for (int i = 0; i < pickables.Count; i++)
             {
@@ -1200,39 +1257,41 @@ namespace Overlink.Match
                     continue;
                 }
 
-                if (best == null || distance < bestDistance)
+                int rank = SpecificityRank(pickables[i]);
+                if (best == null || rank > bestRank || (rank == bestRank && distance < bestDistance))
                 {
                     best = pickables[i];
                     bestDistance = distance;
+                    bestRank = rank;
                 }
             }
 
-            BoardHit hit = best == null ? null : FromTile(best);
-
-            // The Core counters compete on the same nearest-centre rule, so a click that lands on both a
-            // strip and a socket gets the socket: it is the smaller, more specific target.
-            if (WithinStrip(OpponentCoreStripCenter, point, out float opponentDistance)
-                && (hit == null || opponentDistance < bestDistance))
-            {
-                hit = new BoardHit { Kind = BoardHitKind.OpponentCore, Owner = PlayerIndex.Opponent };
-                bestDistance = opponentDistance;
-            }
-
-            if (WithinStrip(PlayerCoreStripCenter, point, out float playerDistance)
-                && (hit == null || playerDistance < bestDistance))
-            {
-                hit = new BoardHit { Kind = BoardHitKind.PlayerCore, Owner = PlayerIndex.Player };
-            }
-
-            return hit;
+            return best == null ? null : FromTile(best);
         }
 
-        static bool WithinStrip(Vector2 center, Vector3 point, out float distanceSquared)
+        /// <summary>
+        /// How specific a tile is as a click target, used to break the overlap between a plate and the ranks
+        /// drawn on top of it.
+        /// <para>
+        /// A plate is scenery. It exists so a Node's bonus has something to hang on and so a direct Core strike
+        /// has somewhere to be aimed from; it must never intercept a click that was meant for a unit. And the
+        /// overlap is not hypothetical: the Core plate is 2.95 units tall and centred in the dead band between
+        /// its two ranks, which puts a third of the Active tile's own footprint closer to the plate's centre
+        /// than to the Active's. Decided on distance alone, clicking the bottom of an enemy unit would strike
+        /// their Core. Decided on role, the plate keeps only the margin of tabletop nothing more specific covers
+        /// &mdash; which is what the drop layer has always assumed, in words if not in code.
+        /// </para>
+        /// </summary>
+        static int SpecificityRank(Tile tile)
         {
-            float dx = point.x - center.x;
-            float dy = point.y - center.y;
-            distanceSquared = dx * dx + dy * dy;
-            return Mathf.Abs(dx) <= CoreStripHalfWidth && Mathf.Abs(dy) <= CoreStripHalfHeight;
+            switch (tile.Role)
+            {
+                case TileRole.Plate:
+                case TileRole.Core:
+                    return 0;
+                default:
+                    return 1;
+            }
         }
 
         BoardHit FromTile(Tile tile)
@@ -1260,6 +1319,10 @@ namespace Overlink.Match
             {
                 case TileRole.Protocol: return BoardHitKind.Protocol;
                 case TileRole.Plate: return BoardHitKind.Plate;
+                case TileRole.Core:
+                    return tile.Owner == PlayerIndex.Opponent
+                        ? BoardHitKind.OpponentCore
+                        : BoardHitKind.PlayerCore;
                 case TileRole.Pile: return tile.Name == "DeckPile" ? BoardHitKind.DeckPile : BoardHitKind.DiscardPile;
                 default: return BoardHitKind.Socket;
             }
@@ -1279,6 +1342,13 @@ namespace Overlink.Match
             Add(opponentCoreBench);
             AddTile(playerProtocol);
             AddTile(opponentProtocol);
+
+            // The Core plates are pickable even though they underlie both Core ranks: TryHit resolves by
+            // nearest centre, and a socket's centre is always closer to a click inside that socket than the
+            // plate's is. So the plates only ever win the margin of tabletop around the ranks, which is
+            // precisely the generous, visible area a direct Core strike should be aimable at.
+            AddTile(playerCorePlate);
+            AddTile(opponentCorePlate);
 
             if (nodePlate != null)
             {
@@ -1377,16 +1447,24 @@ namespace Overlink.Match
             return lit;
         }
 
-        /// <summary>Glows the opponent's Core counter, which is the click target for an unblocked direct attack.</summary>
+        /// <summary>
+        /// Lights the opponent's Core plate, which is the click target for an unblocked direct attack.
+        /// <para>
+        /// This is the one mark that cannot go through <see cref="MarkCards"/>: a plate holds no card, so
+        /// there is nothing in <c>cardByTile</c> to resolve it from. Marking the tile directly is also what
+        /// keeps the footprint stable — the plate is there whether or not the opponent has a unit on their
+        /// Core Active rank, whereas aiming at the socket would vanish the moment they deployed to it.
+        /// </summary>
         public void MarkCoreTarget(bool on)
         {
             coreMarked = on;
+            Mark(opponentCorePlate, on ? PickMark.AttackTarget : PickMark.None);
         }
 
         /// <summary>
-        /// Whether the opponent's Core is currently lit as an attack target. It has no cube to tint - the
-        /// counter is a text strip - so this is how anything outside the view (a test, or a future cursor
-        /// state) can tell that the glow is on.
+        /// Whether the opponent's Core is currently lit as an attack target. A test or a cursor state asks
+        /// this rather than reading the plate's colour, because the colour is a blend of the mark over
+        /// whatever the plate's base tint happens to be.
         /// </summary>
         public bool CoreTargetMarked => coreMarked;
 
@@ -1680,60 +1758,22 @@ namespace Overlink.Match
 
         // ---- Notice ---------------------------------------------------------------------
 
-        /// <summary>How long a rejection reason stays painted under the header.</summary>
+        /// <summary>How long a rejection reason stays painted on the notice line before it clears itself.</summary>
         const float NoticeSeconds = 4f;
 
-        TextMeshPro noticeText;
         float noticeUntil;
         int deployPulseCardId = -1;
         float deployPulseUntil;
 
         /// <summary>
-        /// Shows a short-lived explanation under the header. The play gate routes every rejected drag
+        /// Shows a short-lived explanation on the notice line. The play gate routes every rejected drag
         /// through here so the reason reaches the player, not just the Editor console: a card that bounces
         /// back with no message at all reads as a broken game rather than as an illegal play.
         /// </summary>
         public void ShowNotice(string message)
         {
-            EnsureNoticeLabel();
-            if (noticeText == null)
-            {
-                return;
-            }
-
-            noticeText.text = message;
+            SetNotice(message);
             noticeUntil = Time.unscaledTime + NoticeSeconds;
-        }
-
-        /// <summary>
-        /// The notice label is created on demand rather than authored: the shipped <c>Battlefield</c> prefab
-        /// predates it, and binding must never fail over one optional decoration. A Notice child written by
-        /// an earlier run is re-bound instead of duplicated.
-        /// </summary>
-        void EnsureNoticeLabel()
-        {
-            if (noticeText != null || boardRoot == null)
-            {
-                return;
-            }
-
-            // Resolved through the index directly rather than FindLabel: the Notice is optional decoration,
-            // so its absence must not flag the whole bind as failed.
-            var noticeNode = FindNamed("Notice");
-            noticeText = noticeNode != null ? noticeNode.GetComponent<TextMeshPro>() : null;
-            if (noticeText == null)
-            {
-                // Sits in the clear band between the controls legend and the opponent's status strip.
-                noticeText = MakeLabel(boardRoot, "Notice", new Vector3(0f, headerY - 1.24f, LabelZ),
-                    new Vector2(17f, 0.44f), 15, FontStyles.Bold);
-                noticeText.alignment = TextAlignmentOptions.Center;
-            }
-
-            noticeText.color = new Color(1f, 0.78f, 0.45f);
-            if (Time.unscaledTime > noticeUntil)
-            {
-                noticeText.text = "";
-            }
         }
 
         /// <summary>
@@ -1776,16 +1816,16 @@ namespace Overlink.Match
 
         void Refresh(MatchState state)
         {
-            if (noticeText != null && Time.unscaledTime > noticeUntil)
+            if (Time.unscaledTime > noticeUntil)
             {
-                noticeText.text = "";
+                SetNotice(string.Empty);
             }
 
             // Rebuilt from the tiles this frame paints, so a unit that moved slots cannot keep an old tile.
             tileByCard.Clear();
             if (state == null)
             {
-                headerText.text = "Waiting for the match to initialize...";
+                SetBanner("Waiting for the match to initialize...");
                 highlightedTile = null;
                 return;
             }
@@ -1796,19 +1836,17 @@ namespace Overlink.Match
             bool over = state.IsMatchOver();
 
             string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
-            headerText.text = $"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}";
+            SetBanner($"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}");
 
-            PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench, opponentProtocol);
-            PaintCore(state, engine, PlayerIndex.Player, playerCoreActive, playerCoreBench, playerProtocol);
+            PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench,
+                opponentProtocol, opponentCorePlate);
+            PaintCore(state, engine, PlayerIndex.Player, playerCoreActive, playerCoreBench,
+                playerProtocol, playerCorePlate);
             PaintNodes(state, engine);
             PaintPiles(state);
 
-            // The opponent's Core counter is a click target for an unblocked direct attack, so it is the one
-            // piece of board furniture that takes a pointer mark. It has no cube to tint, only its text.
-            if (opponentStatus != null)
-            {
-                opponentStatus.color = coreMarked ? CoreTargetMark : StatusIdle;
-            }
+            // The Core's pointer mark now lives on the plate, so PaintCore's TintForMark is the only writer.
+            // Nothing here has to do with it any more.
 
             RefreshLog(state);
 
@@ -1818,21 +1856,41 @@ namespace Overlink.Match
                     : state.Result == MatchResult.OpponentWin ? "DEFEAT"
                     : state.Result == MatchResult.Draw ? "DRAW" : "";
 
-                // The reason rides on the same line at a third of the size: at full 72pt a phrase like
-                // "BOTH CORES DESTROYED" would run past the 14-unit banner box in both directions.
+                // The reason rides on the same line at a third of the size: at the overlay's full 84pt a
+                // phrase like "BOTH CORES DESTROYED" would run off a 1500px panel at the reference resolution.
                 string reason = string.IsNullOrEmpty(state.ResultReason)
                     ? ""
                     : $"<size=36%>   \u2022   {state.ResultReason}</size>";
 
-                victoryText.text = word + reason;
-                victoryText.color = state.Result == MatchResult.PlayerWin ? new Color(0.45f, 1f, 0.55f)
+                SetResult(word + reason, state.Result == MatchResult.PlayerWin
+                    ? new Color(0.45f, 1f, 0.55f)
                     : state.Result == MatchResult.Draw ? new Color(0.95f, 0.9f, 0.6f)
-                    : new Color(1f, 0.45f, 0.45f);
+                    : new Color(1f, 0.45f, 0.45f));
             }
             else
             {
-                victoryText.text = "";
+                SetResult(string.Empty, Color.white);
             }
+        }
+
+        // ---- HUD writes ---------------------------------------------------------------
+        // Every one of these null-guards the HUD rather than the caller, because the HUD is a reference the
+        // presenter resolves lazily: a board built by an editor menu or a bare test fixture legitimately has
+        // no canvas, and the board still has to paint.
+
+        void SetBanner(string text)
+        {
+            if (hud != null) hud.SetBanner(text);
+        }
+
+        void SetNotice(string text)
+        {
+            if (hud != null) hud.SetNotice(text);
+        }
+
+        void SetResult(string text, Color tint)
+        {
+            if (hud != null) hud.SetResult(text, tint);
         }
 
         /// <summary>
@@ -1889,7 +1947,7 @@ namespace Overlink.Match
         }
 
         void PaintCore(MatchState state, MatchEngine engine, PlayerIndex who,
-            Tile[] active, Tile[] bench, Tile protocol)
+            Tile[] active, Tile[] bench, Tile protocol, Tile plate)
         {
             PlayerState p = state.GetPlayer(who);
             for (int i = 0; i < active.Length; i++)
@@ -1902,13 +1960,26 @@ namespace Overlink.Match
             }
             PaintTile(protocol, p.Board.Protocol, engine);
 
-            TextMeshPro strip = who == PlayerIndex.Player ? playerStatus : opponentStatus;
-            string label = who == PlayerIndex.Player ? "YOU" : "OPPONENT";
+            // The plate is pure geometry: a slab to aim at and a surface for the pointer mark. It carries no
+            // caption on purpose. Its centre is behind the Active rank, so any text written there is covered
+            // by a card the moment the opponent fields one, and the durability it would show is already on
+            // this side's HUD chip, permanently — which is the whole reason it left the table.
+            if (plate != null)
+            {
+                SetBodyColor(plate.Body, TintForHover(plate, TintForMark(plate, plate.BaseColor)));
+            }
+
+            // The readout moved off the table onto this side's chip. Formatting stays here because the HUD is
+            // a view of strings, not of match state.
             int nodes = p.Board.CountControlledNodes(who);
-            strip.text =
-                $"{label}   CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}   " +
-                $"NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}   NODES {nodes}/{Board.NodeCount}   " +
-                $"HAND {p.Hand.Count}   DECK {p.Deck.Count}";
+            if (hud != null)
+            {
+                hud.SetStatus(who,
+                    $"CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}   " +
+                    $"NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}   " +
+                    $"NODES {nodes}/{Board.NodeCount}   " +
+                    $"HAND {p.Hand.Count}   DECK {p.Deck.Count}");
+            }
         }
 
         void PaintNodes(MatchState state, MatchEngine engine)
@@ -1926,6 +1997,19 @@ namespace Overlink.Match
                     : pControls ? NodePlayer
                     : oControls ? NodeOpponent
                     : NodeFree)));
+
+                // The bonus text and the ownership readout, which used to be the plate caption. The plate keeps
+                // only its bare NODE tag now, so this is the one place a player can read what holding a node
+                // is actually worth.
+                if (hud != null)
+                {
+                    bool contested = pControls && oControls;
+                    hud.SetNodeRow(n,
+                        $"{NodeCaption[n % NodeCaption.Length]}   \u2022   " +
+                        (contested ? "CONTESTED" : pControls ? "YOURS" : oControls ? "THEIRS" : "OPEN"),
+                        contested || (!pControls && !oControls) ? RowNeutral
+                        : pControls ? RowPlayer : RowOpponent);
+                }
 
                 for (int i = 0; i < Board.NodeActiveSlots; i++)
                 {
@@ -2295,22 +2379,6 @@ namespace Overlink.Match
             return tmp;
         }
 
-        /// <summary>
-        /// Writes the control legend onto a hint label. Called from both construction and binding: the
-        /// legend is owned by this class rather than by the authored prefab, so a key binding added to
-        /// <c>GameCoordinator</c> shows up without rebuilding <c>Battlefield.prefab</c>.
-        /// </summary>
-        static void ApplyControlsHint(TextMeshPro hint)
-        {
-            if (hint == null)
-            {
-                return;
-            }
-
-            hint.fontSize = ControlsHintFontSize;
-            hint.text = ControlsHintText;
-        }
-
         Tile MakeTile(Transform parent, string name, Vector3 pos, Vector3 size, Color emptyColor,
             string emptyLabel, float fontSize, bool socketBorder = false)
         {
@@ -2394,7 +2462,7 @@ namespace Overlink.Match
         /// </summary>
         public enum TileRole
         {
-            /// <summary>Board furniture: the tabletop, the header, the status strips.</summary>
+            /// <summary>Board furniture: the tabletop slab, and anything not yet given a role.</summary>
             Other,
 
             /// <summary>An Active or Bench socket, either player's.</summary>
@@ -2405,6 +2473,12 @@ namespace Overlink.Match
 
             /// <summary>A Node's plate, behind its two ranks.</summary>
             Plate,
+
+            /// <summary>
+            /// A player's Core plate, behind their two Core ranks. Unlike a Node plate this one carries a
+            /// rule: hitting the opponent's is an unblocked direct Core strike.
+            /// </summary>
+            Core,
 
             /// <summary>The deck or the discard stack.</summary>
             Pile,

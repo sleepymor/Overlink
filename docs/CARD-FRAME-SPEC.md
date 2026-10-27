@@ -778,6 +778,209 @@ additive: `includePlatforms: []` and `optionalUnityReferences` are untouched, so
 PlayMode and discovery still reports 1068 EditMode / **197** PlayMode. Full runs: **197/197 PlayMode**,
 **1068 / 1062 / 2 failed / 4 skipped** EditMode — the same two pre-existing failures, unchanged.
 
+### Addendum: the face was not flat — depth offsets inside a card, and why only a perspective lens shows them — measured 2026-10-27
+
+The player's report, in their words: on the perspective camera, "when the card moves to the side the text
+is no longer lined up with the frame … it's normal on ortho camera, but on perspective camera we use it's
+messed up." Same for the art. That second clause is not a workaround observation, it is the diagnosis.
+
+For a plane parallel to the image plane, magnification is uniform: everything at depth `Z` scales by
+`f/Z`, so a face drawn flat **cannot** desynchronise, wherever the card sits. Push one layer `dz` in front
+of its plate and that layer is at `Z + dz` and scales by `f/(Z+dz)` instead. The slip, in pixels:
+
+```
+Δ = (f_px / Z) · x · dz / Z
+```
+
+`f_px / Z` is the lens's px-per-unit at the card and `x` is the card's camera-space lateral offset from the
+axis. Two things follow, and both were seen. The error grows with `|x|`, so it is nil at the middle of the
+fan and worst at the ends. And it **changes sign with `x`**, so the type leans one way on the left half of
+the screen and the other way on the right. No ordinary layout bug does that — a mis-set rect is wrong the
+same amount everywhere. Sign reversal across the centre line is the fingerprint of depth.
+
+At the shipped hand: a 705 px screen at 38° vertical field of view gives `f_px = 352.5 / tan(19°) =
+1023.8` px, and `Z = 6.7` gives **152.8 px per unit**. The name plate's old `dz = -0.04` on the outer card
+at `x = ±3.48` is therefore `152.8 · 3.48 · 0.04 / 6.7 ≈` **3.2 px**, in opposite directions either side
+of centre. Orthography has no `Z` in the denominator, so `Δ ≡ 0` at every `x` and every `dz` — which is
+why nine preview scenes never showed it and why the same cards looked perfect on a different camera.
+
+The fix is to make the face flat, and four offsets went:
+
+* `CardFaceView.PixelPosition` z **-0.04 → 0** (the name rail and its labels),
+* `ArtImage` **0.02 → 0**,
+* `ArtMask` **0.01 → 0**,
+* `HandController.ComputeSlot`'s per-card stair **-0.002f · i → 0**, in the riveted *and* the flat layout.
+
+Draw order was never actually these offsets' job. Every tier shader is `Cull Off ZWrite Off ZTest Always`,
+so nothing depth-tests and `sortingOrder` is the only thing that has ever decided which layer is on top —
+which is precisely why the `dz` values were free to go and why they bought nothing but this bug.
+
+One layer did need them. The old `-0.04` existed to keep the type in front of `LegacyBody`'s front face, the
+placeholder cube. Only the legacy path carries that cube, so `CardView.PlaceLegacyBody(size, body)` now
+holds it behind the face plane at `z = size.z * 0.5 + 0.01`, and the face stays flat whether or not a cube
+is standing behind it. Moving the cube rather than the type is the right direction of the fix: the cube is
+temporary scaffolding and the face is the deliverable.
+
+Not worth flattening: the board tile labels at `LabelZ = 0.02`. The same maths at `x = ±5.5` and
+`Z ≈ 16` (64.0 px per unit) gives **0.44 px**. Only the hand is both close enough and wide enough to be
+measurable, which is why a whole class of cards looked fine on the table and broken in the fan.
+
+So there are now two surfaces for reading a card and they are not interchangeable. The preview family is
+orthographic at roughly **585 px per card** and is for *content* — it cannot exhibit this defect class at
+all. The live Gameplay lens is perspective at roughly **228 px per card** and is for *alignment*. Flipping
+the previews to perspective was considered and refused: it would trade away the only thing they are for in
+order to duplicate a check the game scene already gives. Documented in place instead.
+
+`Overlink.Cards.Tests` gained three PlayMode tests: `FaceLayers_AreCoPlanar_SoTheLensCannotPullThemApart`,
+`FanSlots_AllRideOnePlane_BothLayouts`, and `DeletedDepthOffsets_ReallyDidSeparateTextFromFrame`. The last
+is the one that earns its keep — it gauges the shift against a real bound name plate and asserts three
+things: zero shift at `dz = 0`, opposite signs either side of centre, **and the sign reversal itself**. A
+test that only measured magnitude would pass for a shear, a bad pivot or a mis-set rect. Full runs at this
+point: **200/200 PlayMode** (20 `CardHandTests` + 179 `Overlink.*` + 1 UnitySkills).
+
+### Addendum: the fan is camera-parented, so the board is what has to move — measured 2026-10-27
+
+A different fault from the one above, found on the same lens. At the framing Stage 1 shipped with, the resting
+fan covered **29.2 px of the player's own four Core Bench sockets** at 1280×720. Nothing was mis-rendered; the
+composition simply had two occupants in one rectangle. It matters because retreat makes that rank a
+destination, and a socket the resting fan sits on is a socket the player cannot click — the hand canvas has a
+raycaster, unlike the status layer, which is the whole difference between this and the side-panel overlap at
+the end of this section.
+
+Why the rig cannot zoom or pitch its way out: the fan hangs in the **camera's own plane** at depth 6.7, so its
+screen footprint is `f_px/6.7` times its geometry — a constant of the lens. Pitch and distance move the board
+and the fan together. Measured, both levers make it worse or trade it for a bigger problem:
+
+| lever | worst socket under the fan |
+|---|---|
+| pitch 52 → 56 | Core Bench, **−36.0 px** — worse than the 52 it replaced |
+| pitch 52 → 60 | Core Bench, **−41.7 px** |
+| distance 15 → 17 | Core Bench −6.8 px at the old bias, and at any deeper bias `N1PlayBench0` — a *node* bench — goes **72.8 px** behind a card |
+| distance 15 → 18 | `N0PlayBench1` at **−35.3 px** even with the bias applied; 34 sockets now share the fan's x-span |
+
+Raising pitch pushes the near rows *down* the screen — it does not tuck them under the fan. And a shallower
+pitch shrinks on-screen card height by `sin(p)`, which is the legibility the frame was built for. Pulling back
+is worse for a subtler reason: shrinking the board toward the centre of the frame drags the **outer** near
+corners horizontally *into* the fan's span, so a socket that was merely low becomes one that is behind a card.
+
+**The one thing that can move is the board, and the dial for that is the aim point.** Ground projection at
+the shipped yaw is closed-form, with `Δ = worldZ − focusZ` (the board root is rotated +90° about X, so
+board-local *y* is world *z*):
+
+```
+depth     = d + Δ·cos p
+camera Y  = Δ·sin p
+screen    = 0.5 + (cameraY / depth) / (2·tan(fov/2))        fraction of frame height, 0 = bottom
+```
+
+The fan uses the same expression, and here the geometry bites. `ComputeSlot`'s pivoted form **ignores
+`arcHeight`**: the rise is a consequence of the rivet radius `r = halfRow / sin(|yaw|) = 1.48 / sin 14° =
+6.1177`, so a card at roll `phi` sits at `−r(1 − cos phi)`. The centre card is lowest on that arc but unrolled,
+and the two cards beside it sit only `0.0456` lower while rolling `7°`, which lifts their outer corners by
+`0.5·sin 7°` more than an unrolled corner gains. Net: **the row is topped by the mid cards at camera-space
+`−0.90936`, not by the centre card at `−0.91925`** — 1.5 px higher on screen. The outer pair roll to
+`−1.00167`. Depth 6.7 puts the fan's top at **0.30292 of the frame = 218.1 px of 720**. (A tuner who reaches
+for `arcHeight` to lower the fan will find the Inspector accepts it and nothing moves; that is what
+`CardHandTests.FanSlots_NeighbourPairsAreCongruent` exists to say out loud.) The bench's near edge is
+`Δ = (−2.5 − 0.462) − focusZ`. Seam:
+
+| focus.z | seam |
+|---|---|
+| −0.2 (the table's own centre) | **−29.2 px**, four sockets behind cards |
+| −0.6 | −1.8 px, still touching |
+| **−1.0** | **+24.7 px**, nothing behind anything |
+| −1.4 | +50.2 px, but the tabletop's far edge climbs to 637 and passes *under* the legend's glyph floor at 629 |
+
+**A false alarm worth recording, because it is the easy mistake to repeat.** An earlier pass over this
+concluded *no* focus.z is feasible — that the socket band, the fan and the HUD's top band sum to more than
+720 px, so the composition was over-subscribed and something had to be cut. It was wrong, and the error was
+method: it took a **global minimum over all sockets of one axis**, demanding the outer node benches (screen
+`x 117..234`) clear the fan's top edge — when the fan spans `x 305.8..974.2` and those sockets are nowhere
+near a card. Judging rectangles by their shadows on one axis invents a conflict that does not exist. The
+correct test is 2-D: project every tile's four corners, take its screen AABB, and intersect that against the
+fan's and against each HUD box. Run that way, the top band is clean at every focus.z in the table and
+`−1.0` has always been available.
+
+What `−1.0` buys, measured per tile at 1280×720:
+
+* **no socket under the fan.** The nearest socket clears the fan's top edge by 24.7 px. Only the two near node
+  plates' outer corners (59 px wide) sit behind cards, and a plate is a marker whose corner under a card costs
+  nothing — the sockets on it are clear.
+* **no socket in the banner or the legend.** The tallest socket anywhere on the table — a far node bench — tops
+  out at 603.4 against the legend's glyph floor at 629, 25.6 px of air. The tallest one *inside* the legend's
+  x-span, the opponent's Core Bench, has 81.8 px.
+* the tabletop spans **y 69..623 of 720**, so the fan owns the bottom 218 px, the status layer owns the top 97,
+  and the board is the band between them instead of bleeding under all three.
+
+What it does **not** fix, stated so it is not rediscovered as a surprise: ten sockets still sit behind the two
+side slabs — `NodeList` (470×236 reference, left middle) and the log panel (320×240, right middle) — about
+**12.7k px² at 720p**, worst case ~60% of a tile. That is visual only. The status canvas carries no
+`GraphicRaycaster` and every `Graphic` on it sets `raycastTarget = false`, which is precisely the asymmetry
+that makes the fan a hard constraint and the slabs a soft one: a socket behind a slab is dim, a socket behind
+a card is dead. It is left to Stage 3, because Stage 3 is what reflows those two columns to seat the button
+rail, and tuning the panels twice is waste.
+
+**The two pile tiles are dead at every bias, and the live check is what found it.** `DeckPile` and
+`DiscardPile` are not decoration — `BattlefieldInput.cs:409-414` turns a click on them into the deck browser
+and the discard viewer. They sit at `|x| = 3`, board `y = −4.35`, and at the opening framing that puts them
+*entirely* behind the resting fan: 73.1 × 80.5 px of overlap for a 73 × 81 px tile at the old bias, 69.9 ×
+74.5 for a 70 × 74 px tile at the authored one. The bias lifts them 65 px up the screen and changes nothing
+about the occlusion, which is why the socket-only sweep never flagged it — the piles are `TileRole.Pile`, not
+sockets, and the seam contract was written about the ranks a player has to click to place a unit.
+
+There is no board-space answer this time, so it must not be "fixed" by nudging a constant. Clearing the fan's
+x-span at the piles' depth needs `|x| ≥ 4.5`, and the node plates own `x −6.9..−4.1` at exactly that depth —
+the pile would land on NODE 1. Either the piles leave the tabletop for the HUD (which contradicts the brief
+that kept them, on the grounds that they help the player place a card, which is not true of either of them)
+or Stage 3's bottom band, which is being built anyway to seat the button rail, gives them a home outside the
+fan. That is a product decision, so it is carried forward rather than taken here.
+
+The pan origin moves with the bias **on purpose**. `boardCenter` is captured from the authored focus, so the
+clamp is now `[−1.55, −0.45]` at the opening framing (slack 0.55, because the table already fits the frame).
+Four camera tests asserted `TableCenterY ± panSlackZ` and were only ever green because the two numbers
+coincided; they now assert against the rig's own `BoardCenter`, newly exposed for exactly that reason. A test
+that cannot see the thing a clamp is built around will guess it, and a guessed constant is how `0.35 / 16`
+survived in `DropTargetTests` long after the game stopped rendering it.
+
+Two tests pin the result: `RestFraming_LeavesThePlayersOwnBenchClearOfTheRestingFan` derives the fan's top edge
+from `HandController.ComputeSlot` and the shipped fan dials, projects both, and asserts the seam in
+**fractions of frame height** — so it reads identically at 720p and 4K — plus a companion bound that the same
+bias must not push the tabletop's far edge past 0.95 of the frame. `RestFraming_PanOriginIsTheAuthoredRestBias`
+locks the origin and says out loud that it is not the table centre.
+
+Three places have to agree, and one of them is the file nobody regenerates: the controller's serialized
+default, `BuildGameplayScene.CreateCamera`, and the hand-authored `focus:` at `Gameplay.unity:882`. The scene
+is the tuning surface and the builder is bootstrap only. While there: the scene's saved camera transform was
+stale too — `y 12.608` against the pose the rig derives, `11.820` — a leftover from an editor drag. Harmless
+at runtime, since `LateUpdate` rewrites the pose every frame, but it means the Scene and Game views had been
+showing a shot the game never renders. Corrected to the derived pose.
+
+### Two traps this section walked into first
+
+**The contract test was wrong before it was right, and only asserted loudly enough to notice.** Its first
+form took the face's *height* as a lateral offset — `new Vector2(CardFaceHalfHeight * 2f, CardFaceHalfHeight)`
+— which is invisible on the centre card (roll 0) and inflates the wing cards, so the computed row top sat
+1.55 px too high and the seam came out at 0.004 of the frame against a 0.02 bound. Had that arithmetic been a
+comment instead of an assertion it would have gone into this document and stayed there, correct-looking,
+forever. The contract paid for itself on its first run by failing on itself, and the failure message quoted
+the seam back at me, which is what made the diagnosis take a minute instead of a session.
+
+**A verdict is only worth the compile state it was produced in.** `Overlink.Match.Tests` did not reference
+`Overlink.Cards`, so the `using` this test needs was `CS0234` and the assembly kept the DLL from its last
+successful compile. A full-suite run launched in that window reported 1086 tests with the new `RestFraming`
+cases *Passed* — impossible, since the code behind those names had never compiled — and a class run in the
+same window reported 22 tests for a file that contains 16. Both numbers were stale. The rule this buys:
+
+* `debug_get_errors` immediately before a run, not after. It is the only reliable compile check there is, and
+  a live error freezes the domain reload, which freezes discovery, which is how a phantom-green suite and a
+  "Unity did not enter Play Mode" timeout end up looking like two unrelated problems.
+* Count the tests against the file. Sixteen `[Test]` methods is sixteen; anything else means the manifest and
+  the binary disagree.
+* When the bridge's dispatcher stalls (requests queued, `mainThreadIdleMs` climbing, `Responding` still
+  true), a forced recompile plus a focus on the Editor window clears it. Do not queue more work behind the
+  stall — three of the play-mode timeouts above were requests waiting on a queue that had stopped draining,
+  and each one that eventually landed flipped the Editor in or out of play mode underneath me.
+
 ## 14. Verifying the build
 
 ### Use the REST bridge - do not invoke csc yourself

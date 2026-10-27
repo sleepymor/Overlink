@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Overlink.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -70,10 +71,67 @@ namespace Overlink.Match
         public Color readerTitleColor = new Color(0.95f, 0.97f, 1f);
         public Color readerFootColor = new Color(0.58f, 0.66f, 0.80f);
 
+        [Header("Status panels")]
+        [Tooltip("Everything that used to be painted onto the tabletop: the turn banner, the two player chips, " +
+                 "the node list, the notice line and the result overlay. They are world-space text on a 52 " +
+                 "degree pitch today, which foreshortens a 32 point header into a smear and shrinks it every " +
+                 "time the camera pulls back; as UI they are pinned, crisp at any zoom, and they hand the board " +
+                 "back the two bands of table they were standing on.")]
+        public Vector2 bannerSize = new Vector2(900f, 62f);
+        public Vector2 bannerOffset = new Vector2(0f, -16f);
+        public float bannerFontSize = 38f;
+
+        [Tooltip("The per-player readout (CORE, NP, NODES, HAND, DECK). Anchored into the near corners, which " +
+                 "is the one region the hand fan cannot reach: the fan spans x 299..954 of 1280, so both bottom " +
+                 "corners stay clear at any hand size.")]
+        public Vector2 chipSize = new Vector2(470f, 96f);
+        public Vector2 chipMargin = new Vector2(22f, 18f);
+        public float chipTitleSize = 18f;
+        public float chipBodySize = 26f;
+
+        [Tooltip("Node bonuses, which moved here from the four plate captions. The plates keep a bare NODE n " +
+                 "tag so the list still reads against the board, but the wording is what was eating the plate " +
+                 "corners and squinting at 52 degrees.")]
+        public Vector2 nodeListSize = new Vector2(470f, 236f);
+        public float nodeListFontSize = 21f;
+
+        public Color chipColor = new Color(0.10f, 0.12f, 0.18f, 0.84f);
+        public Color playerAccent = new Color(0.45f, 0.78f, 1.00f);
+        public Color opponentAccent = new Color(1.00f, 0.62f, 0.55f);
+        public Color noticeColor = new Color(1f, 0.82f, 0.45f);
+        public Color resultColor = new Color(0.45f, 1f, 0.55f);
+        public float noticeFontSize = 26f;
+        public float resultFontSize = 84f;
+        [Tooltip("How far above the vertical centre the notice line sits. It has to clear the resting fan, " +
+                 "whose top edge is at about 0.31 of the viewport height from the bottom.")]
+        public float noticeRise = 150f;
+
+        [Tooltip("The key legend, which was a two-line 11pt caption on the table at 52 degrees — small enough " +
+                 "to be unreadable and wide enough to run past the table edge. As UI it is crisp, and Stage 3 " +
+                 "grows on-screen buttons next to it that this line annotates.")]
+        public Vector2 hintSize = new Vector2(900f, 74f);
+        public float hintFontSize = 17f;
+        public Color hintColor = new Color(0.60f, 0.68f, 0.80f);
+
         Canvas canvas;
         Button endPhaseButton;
         TextMeshProUGUI endPhaseLabel;
         Coroutine readerMotion;
+
+        [SerializeField] RectTransform banner;
+        [SerializeField] TextMeshProUGUI bannerText;
+        [SerializeField] RectTransform hint;
+        [SerializeField] TextMeshProUGUI hintText;
+        [SerializeField] RectTransform opponentChip;
+        [SerializeField] TextMeshProUGUI opponentTitle, opponentBody;
+        [SerializeField] RectTransform playerChip;
+        [SerializeField] TextMeshProUGUI playerTitle, playerBody;
+        [SerializeField] RectTransform nodeList;
+        [SerializeField] TextMeshProUGUI[] nodeRows;
+        [SerializeField] RectTransform notice;
+        [SerializeField] TextMeshProUGUI noticeText;
+        [SerializeField] RectTransform result;
+        [SerializeField] TextMeshProUGUI resultText;
 
         public event Action EndPhaseRequested;
 
@@ -115,6 +173,15 @@ namespace Overlink.Match
         public bool IsReaderBuilt => reader != null && readerTitle != null && readerBody != null;
 
         /// <summary>
+        /// True once the panels that moved off the tabletop exist. Separated from <see cref="IsBuilt"/> for
+        /// the same reason the reader is: the shipped scene file has a log panel serialized but predates the
+        /// status layer, so <see cref="Ensure"/> has to be able to tell the two apart and upgrade in place.
+        /// </summary>
+        public bool IsStatusBuilt => banner != null && bannerText != null && playerBody != null
+            && hint != null && hintText != null
+            && nodeRows != null && nodeRows.Length > 0;
+
+        /// <summary>
         /// What the panel currently shows. Exposed for tests and for anything that wants to copy the log out;
         /// the panel is the view, so this is derived state and never a source of truth.
         /// </summary>
@@ -137,7 +204,7 @@ namespace Overlink.Match
                 // are not serialized, and only Awake wires them - which never runs in the editor. An EditMode
                 // test (or an editor script) asking for the HUD would get an object with no panel and no way
                 // to show anything, so Ensure completes it instead of assuming play mode.
-                if (!existing.IsBuilt || !existing.IsReaderBuilt)
+                if (!existing.IsBuilt || !existing.IsReaderBuilt || !existing.IsStatusBuilt)
                 {
                     existing.Build();
                 }
@@ -212,6 +279,7 @@ namespace Overlink.Match
 
             EnsurePanel();
             EnsureReader();
+            EnsureStatus();
             if (Application.isPlaying)
             {
                 EnsurePhaseControls();
@@ -281,6 +349,285 @@ namespace Overlink.Match
                 && RectTransformUtility.RectangleContainsScreenPoint(
                     endPhaseButton.GetComponent<RectTransform>(), screenPosition);
         }
+
+        /// <summary>
+        /// The panels that moved off the tabletop. Built on the same overlay canvas as the log and the reader,
+        /// which is the point: that canvas has no <c>GraphicRaycaster</c> and every graphic here sets
+        /// <c>raycastTarget = false</c>, so not one of these slabs can swallow a mouse-down aimed at a socket
+        /// or a card. The only interactable thing on the HUD is the nested <c>PhaseControls</c> canvas.
+        /// </summary>
+        void EnsureStatus()
+        {
+            // ---- Turn banner, top centre. Was a 32pt bold label at table y 5.35, which is the furthest
+            // thing from a 52 degree camera and therefore the most foreshortened text on the board.
+            banner = EnsureBox("Banner", bannerSize, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                bannerOffset, Color.clear, out bannerText);
+            bannerText.fontSize = bannerFontSize;
+            bannerText.fontStyle = FontStyles.Bold;
+            bannerText.alignment = TextAlignmentOptions.Center;
+            bannerText.color = new Color(0.95f, 0.97f, 1f);
+
+            // ---- Key legend, directly under the banner, in the same top band the opponent chip now hangs
+            // below. It is centred rather than left-pinned so it reads as part of the banner it explains.
+            hint = EnsureBox("ControlsHint", hintSize, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(bannerOffset.x, bannerOffset.y - bannerSize.y), Color.clear, out hintText);
+            hintText.fontSize = hintFontSize;
+            hintText.alignment = TextAlignmentOptions.Top;
+            hintText.color = hintColor;
+            hintText.enableWordWrapping = true;
+
+            // ---- Player chips, near corners: clear of the fan's span at any hand size.
+            // The opponent chip hangs below the banner *and* the legend rather than below the banner alone.
+            // Both of those are centred fixed-width boxes, so at 16:9 the chip clears them by 18 pixels of
+            // horizontal gap - and a 4:3 viewport narrows the reference width to 1646, which eats that gap and
+            // lands the legend straight on top of the chip. Stacking the whole top-left band vertically leaves a
+            // 2 pixel seam that no aspect can close, because all three boxes are top-anchored with fixed
+            // heights.
+            opponentChip = EnsureBox("OpponentChip", chipSize, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(chipMargin.x, -chipMargin.y - bannerSize.y - hintSize.y), chipColor, out opponentTitle);
+            opponentBody = EnsureChipBody(opponentChip, opponentTitle, opponentAccent);
+            opponentTitle.text = "OPPONENT";
+            opponentTitle.color = opponentAccent;
+
+            playerChip = EnsureBox("PlayerChip", chipSize, new Vector2(0f, 0f), new Vector2(0f, 0f),
+                new Vector2(chipMargin.x, chipMargin.y), chipColor, out playerTitle);
+            playerBody = EnsureChipBody(playerChip, playerTitle, playerAccent);
+            playerTitle.text = "YOU";
+            playerTitle.color = playerAccent;
+
+            // ---- Node list, left edge, mirrored against the log on the right.
+            nodeList = EnsureBox("NodeList", nodeListSize, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(chipMargin.x, 0f), chipColor, out TextMeshProUGUI nodeHeader);
+            nodeHeader.text = "BATTLEFIELDS";
+            nodeHeader.fontSize = chipTitleSize;
+            nodeHeader.fontStyle = FontStyles.Bold;
+            nodeHeader.color = headerColor;
+            nodeHeader.alignment = TextAlignmentOptions.TopLeft;
+            nodeHeader.raycastTarget = false;
+            SetRect(nodeHeader.rectTransform, panelPadding, panelPadding, panelPadding, panelPadding);
+
+            // One row per Node, in board order, so the list reads top-to-bottom against the four plates. The
+            // Core's numbers are not repeated here — both chips already carry CORE x/y.
+            nodeRows = new TextMeshProUGUI[Board.NodeCount];
+            for (int n = 0; n < Board.NodeCount; n++)
+            {
+                float rowTop = panelPadding + chipTitleSize * 2.1f + n * (nodeListFontSize * 2.05f);
+                nodeRows[n] = EnsureText($"NodeRow{n}", nodeList, nodeListFontSize, FontStyles.Normal,
+                    textColor, TextAlignmentOptions.MidlineLeft, out RectTransform rowRect);
+                rowRect.anchorMin = new Vector2(0f, 1f);
+                rowRect.anchorMax = new Vector2(1f, 1f);
+                rowRect.pivot = new Vector2(0f, 1f);
+                rowRect.sizeDelta = new Vector2(-panelPadding * 2f, nodeListFontSize * 2.05f);
+                rowRect.anchoredPosition = new Vector2(panelPadding, -rowTop);
+                nodeRows[n].text = string.Empty;
+            }
+
+            // ---- Notice line, centred above the resting fan.
+            notice = EnsureBox("Notice", new Vector2(1100f, noticeFontSize * 2.2f),
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, noticeRise),
+                Color.clear, out noticeText);
+            noticeText.fontSize = noticeFontSize;
+            noticeText.fontStyle = FontStyles.Bold;
+            noticeText.alignment = TextAlignmentOptions.Center;
+            noticeText.color = noticeColor;
+
+            // ---- Result overlay, dead centre, hidden until the match is over.
+            // Authored in reference pixels, and the CanvasScaler turns those into whatever the window is, so
+            // the bound this box has to respect is the narrowest viewport the scaler can produce - 1646
+            // reference pixels, at 4:3. 1500 leaves 73 pixels of margin there and wraps nothing; going
+            // narrower to chase a portrait window would risk wrapping the victory line for a configuration the
+            // game does not support in the first place. BattlefieldHudTests sweeps the aspects.
+            result = EnsureBox("Result", new Vector2(1500f, resultFontSize * 2.6f),
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 120f),
+                Color.clear, out resultText);
+            resultText.fontSize = resultFontSize;
+            resultText.fontStyle = FontStyles.Bold;
+            resultText.alignment = TextAlignmentOptions.Center;
+            resultText.color = resultColor;
+            result.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// A named full-colour slab on the overlay canvas with a single text child filling it, found rather
+        /// than rebuilt so a scene-authored HUD keeps its objects (and its Inspector tweaks to anything not
+        /// set here) across a reload.
+        /// </summary>
+        RectTransform EnsureBox(string name, Vector2 size, Vector2 anchor, Vector2 pivot,
+            Vector2 anchoredPosition, Color color, out TextMeshProUGUI text)
+        {
+            Transform existing = transform.Find(name);
+            RectTransform rect = existing as RectTransform;
+            if (rect == null)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(transform, false);
+                rect = go.GetComponent<RectTransform>();
+            }
+
+            var image = rect.GetComponent<Image>();
+            if (image == null) image = rect.gameObject.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+
+            rect.anchorMin = anchor;
+            rect.anchorMax = anchor;
+            rect.pivot = pivot;
+            rect.sizeDelta = size;
+            rect.anchoredPosition = anchoredPosition;
+
+            text = EnsureText(name + "Text", rect, 20f, FontStyles.Normal, textColor,
+                TextAlignmentOptions.TopLeft, out RectTransform textRect);
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+            text.raycastTarget = false;
+            return rect;
+        }
+
+        /// <summary>
+        /// Lays out a chip's interior: the title band across the top, a four-pixel accent rule at the foot,
+        /// and the stat line filling what is left. The <paramref name="title"/> is the text <see cref="EnsureBox"/>
+        /// made for the chip, styled here rather than rebuilt, so a scene-authored chip survives a reload.
+        /// </summary>
+        TextMeshProUGUI EnsureChipBody(RectTransform chip, TextMeshProUGUI title, Color accent)
+        {
+            title.fontSize = chipTitleSize;
+            title.fontStyle = FontStyles.Bold;
+            title.alignment = TextAlignmentOptions.TopLeft;
+            title.raycastTarget = false;
+            title.rectTransform.anchorMin = new Vector2(0f, 1f);
+            title.rectTransform.anchorMax = new Vector2(1f, 1f);
+            title.rectTransform.pivot = new Vector2(0f, 1f);
+            title.rectTransform.sizeDelta = new Vector2(-panelPadding * 2f, chipTitleSize * 1.9f);
+            title.rectTransform.anchoredPosition = new Vector2(panelPadding, -panelPadding * 0.6f);
+
+            // The chip is a slab with an accent rule, not a bordered box: a border is what made this read
+            // as a button on a panel that cannot be clicked.
+            Transform rule = chip.Find("Accent");
+            if (rule == null)
+            {
+                var ruleGo = new GameObject("Accent", typeof(RectTransform), typeof(Image));
+                ruleGo.transform.SetParent(chip, false);
+                rule = ruleGo.transform;
+            }
+            var ruleImage = rule.GetComponent<Image>();
+            ruleImage.color = accent;
+            ruleImage.raycastTarget = false;
+            var ruleRect = rule.GetComponent<RectTransform>();
+            ruleRect.anchorMin = new Vector2(0f, 0f);
+            ruleRect.anchorMax = new Vector2(1f, 0f);
+            ruleRect.pivot = new Vector2(0.5f, 0f);
+            ruleRect.sizeDelta = new Vector2(0f, 4f);
+            ruleRect.anchoredPosition = Vector2.zero;
+
+            TextMeshProUGUI body = EnsureText("Body", chip, chipBodySize, FontStyles.Bold,
+                new Color(0.93f, 0.96f, 1f), TextAlignmentOptions.BottomLeft, out RectTransform bodyRect);
+            bodyRect.anchorMin = new Vector2(0f, 0f);
+            bodyRect.anchorMax = new Vector2(1f, 1f);
+            bodyRect.pivot = new Vector2(0f, 0f);
+            bodyRect.anchoredPosition = Vector2.zero;
+            bodyRect.offsetMin = new Vector2(panelPadding, panelPadding * 0.7f);
+            bodyRect.offsetMax = new Vector2(-panelPadding, -chipTitleSize * 1.9f);
+            body.raycastTarget = false;
+            return body;
+        }
+
+        // ---- Status writes. The presenter is the view of match state and this is the view of that view:
+        // every one of these takes a finished string and never a MatchState.
+
+        /// <summary>The turn banner: turn number, phase, and whose turn it is.</summary>
+        public void SetBanner(string text)
+        {
+            if (bannerText != null) bannerText.text = text ?? string.Empty;
+        }
+
+        /// <summary>The key legend under the banner.</summary>
+        public void SetHint(string text)
+        {
+            if (hintText != null) hintText.text = text ?? string.Empty;
+        }
+
+        /// <summary>The CORE / NP / NODES / HAND / DECK readout for one side.</summary>
+        public void SetStatus(PlayerIndex who, string text)
+        {
+            TextMeshProUGUI target = who == PlayerIndex.Player ? playerBody : opponentBody;
+            if (target != null) target.text = text ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Marks a chip as carrying a pointer target. The opponent's Core counter is the click target for an
+        /// unblocked direct attack, and on the table that was a colour change on world text; here it is the
+        /// same idea on a panel, so the accent rule and the body both light up.
+        /// </summary>
+        public void SetStatusMarked(PlayerIndex who, bool marked)
+        {
+            TextMeshProUGUI target = who == PlayerIndex.Player ? playerBody : opponentBody;
+            RectTransform chip = who == PlayerIndex.Player ? playerChip : opponentChip;
+            if (target == null || chip == null) return;
+
+            Color accent = who == PlayerIndex.Player ? playerAccent : opponentAccent;
+            target.color = marked ? new Color(1f, 0.55f, 0.35f) : new Color(0.93f, 0.96f, 1f);
+            Transform rule = chip.Find("Accent");
+            if (rule != null)
+            {
+                var image = rule.GetComponent<Image>();
+                if (image != null) image.color = marked ? new Color(1f, 0.55f, 0.35f) : accent;
+            }
+        }
+
+        /// <summary>One row of the node list, tinted by who holds it. Null or empty hides the row.</summary>
+        public void SetNodeRow(int index, string text, Color tint)
+        {
+            if (nodeRows == null || index < 0 || index >= nodeRows.Length) return;
+            if (nodeRows[index] == null) return;
+            nodeRows[index].text = text ?? string.Empty;
+            nodeRows[index].color = tint;
+        }
+
+        /// <summary>The transient instruction line ("Ready to block? Click one of your ...").</summary>
+        public void SetNotice(string message)
+        {
+            if (noticeText != null) noticeText.text = message ?? string.Empty;
+        }
+
+        /// <summary>The win/loss overlay. Empty clears it.</summary>
+        public void SetResult(string text, Color tint)
+        {
+            if (resultText == null || result == null) return;
+            bool show = !string.IsNullOrEmpty(text);
+            result.gameObject.SetActive(show);
+            if (!show) return;
+            resultText.text = text;
+            resultText.color = tint;
+        }
+
+        /// <summary>Read-only view of the banner, for tests.</summary>
+        public string BannerText => bannerText != null ? bannerText.text : string.Empty;
+
+        /// <summary>Read-only view of the key legend, for tests.</summary>
+        public string HintText => hintText != null ? hintText.text : string.Empty;
+
+        /// <summary>Read-only view of one side's status readout, for tests.</summary>
+        public string StatusText(PlayerIndex who)
+        {
+            TextMeshProUGUI target = who == PlayerIndex.Player ? playerBody : opponentBody;
+            return target != null ? target.text : string.Empty;
+        }
+
+        /// <summary>Read-only view of one node row, for tests.</summary>
+        public string NodeRowText(int index)
+        {
+            return nodeRows != null && index >= 0 && index < nodeRows.Length && nodeRows[index] != null
+                ? nodeRows[index].text
+                : string.Empty;
+        }
+
+        /// <summary>Read-only view of the notice line, for tests.</summary>
+        public string NoticeText => noticeText != null ? noticeText.text : string.Empty;
+
+        /// <summary>Read-only view of the result overlay, for tests.</summary>
+        public string ResultText => resultText != null ? resultText.text : string.Empty;
 
         RectTransform EnsurePanel()
         {

@@ -122,8 +122,23 @@ namespace Overlink.EditorTools
             // pitched angle from behind the player's edge, with mild perspective so the opponent's side
             // recedes. Tune pitch/fov/distance here in one place.
             const float pitch = 52f;
-            const float distance = 16f;
-            Vector3 focus = new Vector3(0f, 0f, 0.35f);
+            const float opening = 15f;
+
+            // The zoom ladder the rig runs with. The opening deliberately sits INSIDE the range rather than on
+            // the ceiling. This used to seed maxDistance from the opening constant, which made the two the same
+            // number and left no zoom-out at all: the first scroll notch out of a fresh match went straight into
+            // the crane toward bird's-eye, so an accidental scroll lifted the camera off the board.
+            const float minDistance = 7f;
+            const float maxDistance = 17f;
+            const float zoomStep = 1.5f;
+            const float birdDistance = 18f;
+
+            // The resting aim point, taken from the rig rather than restated here. It is NOT the tabletop's own
+            // centre (TableCenterY): the hand fan is parented to the camera, so its top edge cannot be moved out
+            // of the way by the rig, and aiming at the table's centre left the player's Core Bench sockets
+            // behind the fan. BattlefieldCameraController.RestFocusZ carries the derivation; this line only has
+            // to agree with the scene file, which is the surface anybody actually tunes.
+            Vector3 focus = new Vector3(0f, 0f, Overlink.Match.BattlefieldCameraController.RestFocusZ);
 
             var cam = go.AddComponent<Camera>();
             cam.orthographic = false;
@@ -142,17 +157,17 @@ namespace Overlink.EditorTools
             rigSo.FindProperty("focus").vector3Value = focus;
             rigSo.FindProperty("pitch").floatValue = pitch;
             rigSo.FindProperty("yaw").floatValue = 0f;
-            rigSo.FindProperty("distance").floatValue = distance;
+            rigSo.FindProperty("distance").floatValue = opening;
             rigSo.FindProperty("fieldOfView").floatValue = CameraFov;
-            // The opening framing IS the deepest tabletop zoom-out, so the first scroll out past it lifts
-            // into the bird's-eye view instead of pulling back further. Seeded from the same constant here
-            // rather than typed twice, so retuning the opening shot retunes the ceiling with it.
-            rigSo.FindProperty("maxDistance").floatValue = distance;
+            rigSo.FindProperty("minDistance").floatValue = minDistance;
+            rigSo.FindProperty("maxDistance").floatValue = maxDistance;
+            rigSo.FindProperty("zoomStep").floatValue = zoomStep;
+            rigSo.FindProperty("birdDistance").floatValue = birdDistance;
             rigSo.ApplyModifiedPropertiesWithoutUndo();
 
             Quaternion rot = Quaternion.Euler(pitch, 0f, 0f);
             go.transform.rotation = rot;
-            go.transform.position = focus - rot * Vector3.forward * distance;
+            go.transform.position = focus - rot * Vector3.forward * opening;
 
             EnsureUniversalCameraData(cam);
         }

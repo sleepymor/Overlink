@@ -82,6 +82,7 @@ namespace Overlink.Cards
                 body.transform.localScale = size;
                 var bodyCollider = body.GetComponent<BoxCollider>();
                 if (bodyCollider != null) Object.Destroy(bodyCollider);
+                PlaceLegacyBody(size, body.transform);
             }
 
             var col = root.AddComponent<BoxCollider>();
@@ -133,10 +134,27 @@ namespace Overlink.Cards
         public void SetSize(Vector3 size)
         {
             var body = transform.Find(LegacyBodyName);
-            if (body != null) body.localScale = size;
+            if (body != null) PlaceLegacyBody(size, body);
             var col = GetComponent<BoxCollider>();
             if (col != null) col.size = size;
             if (Face != null) Face.SetSize(size);
+        }
+
+        /// <summary>
+        /// Sizes the legacy placeholder cube and holds it behind the card's face plane.
+        /// <para>
+        /// Every layer of a real card face is co-planar at local z = 0, which is what stops perspective from
+        /// pulling a wing card's text out of its plate (see <c>CardFaceView.PixelPosition</c>). This cube is
+        /// the one opaque thing a card can carry, and it is opaque on the <em>legacy</em> path only - a
+        /// presentation card disables it - so it has to be the thing that moves. Its near face therefore
+        /// rests just behind the plane the text sits on, and reads as a backing slab under the placeholder
+        /// frame instead of swallowing the label the way it would from in front of it.
+        /// </para>
+        /// </summary>
+        static void PlaceLegacyBody(Vector3 size, Transform body)
+        {
+            body.localScale = size;
+            body.localPosition = new Vector3(0f, 0f, size.z * 0.5f + 0.01f);
         }
 
         public void SetHovered(bool hovered) => IsHovered = hovered;

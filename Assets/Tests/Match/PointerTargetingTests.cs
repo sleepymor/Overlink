@@ -49,6 +49,11 @@ namespace Overlink.Match.Tests
                 yield return $"NodePlate{n}";
             }
 
+            // One plate per Core, mirroring what a Node plate does for a Node. This one carries a rule rather
+            // than being mere scenery: hitting the opponent's is an unblocked direct Core strike.
+            yield return "PlayCorePlate";
+            yield return "OppCorePlate";
+
             yield return "DeckPile";
             yield return "DiscardPile";
         }
@@ -81,6 +86,13 @@ namespace Overlink.Match.Tests
                         Assert.AreEqual(TrailingNode(name), nodeIndex, "A plate must know which Node it is.");
                         break;
 
+                    case BattlefieldPresenter.TileRole.Core:
+                        // The Core is shared, like the piles: it belongs to nobody's node.
+                        Assert.AreEqual(name == "PlayCorePlate"
+                            ? PlayerIndex.Player : PlayerIndex.Opponent, owner, $"{name}'s owner.");
+                        Assert.AreEqual(-1, nodeIndex, $"{name} is in no node battlefield.");
+                        break;
+
                     case BattlefieldPresenter.TileRole.Pile:
                         Assert.AreEqual(-1, nodeIndex, "A pile is in no battlefield.");
                         break;
@@ -95,13 +107,21 @@ namespace Overlink.Match.Tests
         [Test]
         public void TileOwnership_BoardFurnitureIsNotClickable()
         {
-            // The tabletop, the header and the two status strips are decoration as far as picking goes - the
-            // Core counters are handled separately, by rect, because they have no cube to tint.
+            // The tabletop and the whole retired status layer are scenery as far as picking goes. The names that
+            // used to be the header, the key legend and the two Core counters stay on this list after the objects
+            // themselves moved to BattlefieldHud, because the parser is name-based and a stale authored board
+            // must still refuse to make scenery clickable — and because a name that no longer owns a tile has
+            // no business resolving to a rule.
+            //
+            // The Core plates are the exception and they are deliberately NOT here: unlike the counters they
+            // replaced, they have a cube to tint, so an unblocked direct Core strike is aimed at board geometry
+            // rather than at an invisible rect or a screen-space hit into the UI.
             foreach (string name in new[]
                      {
                          "Table", "Tabletop", "Header", "ControlsHint", "PStatus", "OStatus", "Status",
                          "Core", "Nodes", "Bench", "Player", "Opponent", "Piles", "Body", "Label",
-                         "VictoryBanner", null, "", "   ", "SomethingElse"
+                         "VictoryBanner", "Victory", "Notice", "NodeHeader0", "NodeHeader3", "CoreCaption",
+                         null, "", "   ", "SomethingElse"
                      })
             {
                 Assert.IsFalse(BattlefieldPresenter.TryParseTileOwnership(name, out _, out _, out _),
@@ -201,6 +221,25 @@ namespace Overlink.Match.Tests
             return board.InverseTransformPoint(body.position);
         }
 
+        /// <summary>
+        /// The two Core plates are the only tiles whose own centre is deliberately covered by a more specific
+        /// tile: a plate backs two ranks, so its centre lands inside the Active socket it sits behind, and
+        /// role precedence hands that point to the unit. They get their own reachability test below.
+        /// </summary>
+        static readonly string[] CentreIsCoveredByItsRanks = { "PlayCorePlate", "OppCorePlate" };
+
+        /// <summary>
+        /// A point on a Core plate that no rank covers. The plate is 3.7 wide against the Active's 1.10, so its
+        /// flanks are its own; probing the centre instead asks about a square metre of Active socket and tells
+        /// you nothing about the plate.
+        /// </summary>
+        static Vector3 PlateFlank(Transform board, string plateName)
+        {
+            Vector3 flank = CentreOf(board, plateName);
+            flank.x -= BattlefieldPresenter.CorePlateSize.x * 0.5f - 0.4f;
+            return flank;
+        }
+
         [Test]
         public void FindHit_AtEachTileCentreResolvesThatTile()
         {
@@ -209,6 +248,11 @@ namespace Overlink.Match.Tests
             {
                 foreach (string name in AllTileNames())
                 {
+                    if (System.Array.IndexOf(CentreIsCoveredByItsRanks, name) >= 0)
+                    {
+                        continue;
+                    }
+
                     BoardHit hit = presenter.FindHitInBoardSpace(CentreOf(board, name));
 
                     Assert.IsNotNull(hit, $"The centre of {name} must be clickable.");
@@ -224,12 +268,46 @@ namespace Overlink.Match.Tests
             }
         }
 
+        [Test]
+        public void FindHit_EveryCorePlateIsReachableInItsOwnMargin()
+        {
+            // Precedence must cost the plates nothing: a slab you can never click is not an attack target. Each
+            // plate is wider than the ranks it backs, so the flanks belong to it alone — probe one of those.
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+            try
+            {
+                foreach (string name in CentreIsCoveredByItsRanks)
+                {
+                    Vector3 centre = CentreOf(board, name);
+                    BoardHit hit = presenter.FindHitInBoardSpace(centre);
+
+                    Assert.IsNotNull(hit, $"{name}'s centre is inside its own Active rank, so it hits that.");
+                    Assert.AreEqual(BoardHitKind.Socket, hit.Kind,
+                        $"{name}'s centre belongs to the unit standing on it, not to the scenery.");
+
+                    Vector3 flank = PlateFlank(board, name);
+                    BoardHit atFlank = presenter.FindHitInBoardSpace(flank);
+
+                    Assert.IsNotNull(atFlank, $"{name} must be clickable somewhere.");
+                    Assert.AreEqual(name, atFlank.Tile.Name,
+                        $"{name}'s flank is tabletop nothing more specific covers.");
+                    Assert.AreEqual(ExpectedKind(name, BattlefieldPresenter.TileRole.Core), atFlank.Kind);
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(presenter.gameObject);
+            }
+        }
+
         static BoardHitKind ExpectedKind(string name, BattlefieldPresenter.TileRole role)
         {
             switch (role)
             {
                 case BattlefieldPresenter.TileRole.Plate: return BoardHitKind.Plate;
                 case BattlefieldPresenter.TileRole.Protocol: return BoardHitKind.Protocol;
+                case BattlefieldPresenter.TileRole.Core:
+                    return name == "OppCorePlate" ? BoardHitKind.OpponentCore : BoardHitKind.PlayerCore;
                 case BattlefieldPresenter.TileRole.Pile:
                     return name == "DeckPile" ? BoardHitKind.DeckPile : BoardHitKind.DiscardPile;
                 default: return BoardHitKind.Socket;
@@ -237,24 +315,69 @@ namespace Overlink.Match.Tests
         }
 
         [Test]
-        public void FindHit_OnTheCoreCountersResolvesThemAsCores()
+        public void FindHit_OnTheCorePlatesResolvesThemAsCores()
         {
-            // The opponent's counter is the click target for an unblocked direct attack (GDD 2.1.6 Step 4), so
-            // it has to be reachable even though it is a text strip rather than a socket.
+            // The opponent's plate is the click target for an unblocked direct attack (GDD 2.1.6 Step 4). It
+            // used to be an invisible rectangle where the status strip had stood; being a real object now, it
+            // also has to survive the opponent putting a unit down, which a rectangle could not.
+            //
+            // Probed on the flank, not the centre: the centre is inside the Active rank it backs, and the
+            // margin test above owns that case. What this one guards is the ownership split, which is easy to
+            // get backwards when the plate is parsed from a name that reads "Play"/"Opp" rather than from the
+            // side of the board it sits on.
             BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
             try
             {
-                Vector3 ours = board.InverseTransformPoint(FindDeep(board, "PStatus").position);
-                Vector3 theirs = board.InverseTransformPoint(FindDeep(board, "OStatus").position);
-
-                BoardHit player = presenter.FindHitInBoardSpace(ours);
-                Assert.IsNotNull(player, "The player's Core counter must be clickable, if only to read it.");
+                BoardHit player = presenter.FindHitInBoardSpace(PlateFlank(board, "PlayCorePlate"));
+                Assert.IsNotNull(player, "The player's Core plate must be clickable, if only to read it.");
+                Assert.AreEqual("PlayCorePlate", player.Tile.Name);
                 Assert.AreEqual(BoardHitKind.PlayerCore, player.Kind);
+                Assert.AreEqual(PlayerIndex.Player, player.Owner);
 
-                BoardHit opponent = presenter.FindHitInBoardSpace(theirs);
-                Assert.IsNotNull(opponent, "The opponent's Core counter must be clickable: it is an attack target.");
+                BoardHit opponent = presenter.FindHitInBoardSpace(PlateFlank(board, "OppCorePlate"));
+                Assert.IsNotNull(opponent,
+                    "The opponent's Core plate must be clickable: it is an attack target.");
+                Assert.AreEqual("OppCorePlate", opponent.Tile.Name);
                 Assert.AreEqual(BoardHitKind.OpponentCore, opponent.Kind);
-                Assert.AreEqual(PlayerIndex.Opponent, opponent.Owner);
+                Assert.AreEqual(PlayerIndex.Opponent, opponent.Owner,
+                    "Backwards here and every direct strike aims at the attacker's own Core.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(presenter.gameObject);
+            }
+        }
+
+        [Test]
+        public void FindHit_APointNearerThePlateThanTheRankStillResolvesTheRank()
+        {
+            // The load-bearing case for role precedence over distance. This point is inside the opponent's
+            // Active tile and strictly closer to the plate's centre than to the Active's, so a nearest-centre
+            // winner hands it to the Core and clicking the bottom of an enemy unit strikes their Core instead.
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+            try
+            {
+                Vector3 active = CentreOf(board, "OppCoreActive0");
+                Vector3 plate = CentreOf(board, "OppCorePlate");
+                Assert.Greater(Mathf.Abs(plate.y - active.y), 0f,
+                    "Precondition: the plate must not be concentric with the rank it backs.");
+
+                // Three fifths of the way from the rank's centre toward the plate's: still well inside the
+                // Active's footprint, but past the midpoint, so the plate is the nearer centre.
+                Vector3 overlap = active;
+                overlap.y += (plate.y - active.y) * 0.6f;
+
+                Assert.Less(Mathf.Abs(overlap.y - plate.y), Mathf.Abs(overlap.y - active.y),
+                    "Precondition: this point really must be nearer the plate's centre, or the test is " +
+                    "measuring the case distance alone already gets right.");
+                Assert.Less(Mathf.Abs(overlap.y - active.y), 0.77f,
+                    "Precondition: and it must still be inside the Active tile's footprint.");
+
+                BoardHit hit = presenter.FindHitInBoardSpace(overlap);
+                Assert.IsNotNull(hit, "The point is inside the Active tile, so it hits something.");
+                Assert.AreEqual("OppCoreActive0", hit.Tile.Name,
+                    "A click inside a unit's socket belongs to the unit, not to the scenery under it.");
+                Assert.AreEqual(BoardHitKind.Socket, hit.Kind);
             }
             finally
             {
@@ -383,12 +506,31 @@ namespace Overlink.Match.Tests
             {
                 foreach (string name in AllTileNames())
                 {
+                    // Same exclusion as the procedural pass above: the plates back their own ranks, so a
+                    // centre click resolving to the socket on top of them is the design working, not two
+                    // sockets fighting.
+                    if (System.Array.IndexOf(CentreIsCoveredByItsRanks, name) >= 0)
+                    {
+                        continue;
+                    }
+
                     BoardHit hit = presenter.FindHitInBoardSpace(CentreOf(board, name));
 
                     Assert.IsNotNull(hit, $"The centre of {name} is not clickable in the shipped prefab.");
                     Assert.AreEqual(name, hit.Tile.Name,
                         $"A click at {name}'s centre resolved to {hit.Tile.Name} - the two sockets overlap, so " +
                         "one of them is unreachable.");
+                }
+
+                // And the two tiles just excluded, on the ground that is genuinely theirs. Skipping them above
+                // without probing them here would leave the shipped board's Core plates untested, which is
+                // precisely the board the game runs on.
+                foreach (string plate in CentreIsCoveredByItsRanks)
+                {
+                    BoardHit hit = presenter.FindHitInBoardSpace(PlateFlank(board, plate));
+
+                    Assert.IsNotNull(hit, $"{plate}'s flank is not clickable in the shipped prefab.");
+                    Assert.AreEqual(plate, hit.Tile.Name, $"{plate}'s flank resolved to {hit.Tile.Name}.");
                 }
             }
             finally
