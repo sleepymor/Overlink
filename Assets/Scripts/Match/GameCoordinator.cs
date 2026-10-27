@@ -455,6 +455,7 @@ namespace Overlink.Match
                 def.Cost,
                 def.AbilityText,
                 AccentFor(def.Type));
+            made.AttachSource(def, card);
 
             dataByInstance[card.InstanceId] = made;
             instanceByData[made] = card.InstanceId;
@@ -1000,7 +1001,7 @@ namespace Overlink.Match
                 return null;
             }
 
-            BoardSlot hit = presenter.FindDropTarget(worldPos);
+            BoardSlot hit = presenter.FindDropTargetAtScreenByWorld(worldPos);
             if (hit == null)
             {
                 return null;

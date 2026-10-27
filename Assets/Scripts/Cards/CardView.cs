@@ -1,4 +1,4 @@
-using TMPro;
+using Overlink.Core;
 using UnityEngine;
 
 namespace Overlink.Cards
@@ -7,112 +7,139 @@ namespace Overlink.Cards
     [RequireComponent(typeof(BoxCollider))]
     public class CardView : MonoBehaviour
     {
-        // Card face is a 5:7 portrait (width:height), the standard trading-card look. Keep the X:Y ratio at
-        // 5:7 when retuning the size so the Title/Cost/Desc layout below stays aligned.
-        public static readonly Vector3 CardSize = new Vector3(1.0f, 1.4f, 0.06f);
+        // All supplied frame textures use the same 832x1216 portrait canvas, so every tier keeps
+        // that aspect. CardFaceView selects the per-tier inner art window instead of resizing the
+        // card; the old 5:7 Legendary size silently squashed the frame canvas by ~4.6%.
+        public static readonly Vector3 CardSize = new Vector3(1.0f, 1.4615f, 0.06f);
+
+        /// <summary>
+        /// Name of the compatibility cube that <see cref="Create"/> parents under a non-presentation
+        /// card. Presentation cards have no such child at all. It is a public const because the
+        /// hierarchy is built by <see cref="Create"/> but read back by <see cref="Setup"/> and
+        /// <see cref="SetSize"/>: spelling it out at each site is how the two halves lost track of
+        /// one another, so every reference goes through this one name.
+        /// </summary>
+        public const string LegacyBodyName = "LegacyBody";
+
+        // No per-tier size override lives here any more. Legendary used to resolve to its own
+        // constant, which was harmless while every caller drew at CardSize but meant that in a
+        // gallery laid out at any smaller cardSize the Legendary card alone ignored it and grew
+        // back to full size, overlapping its neighbours. Every tier now honours the caller's
+        // footprint, which is what the gallery's cell spacing assumes.
 
         public CardData Data { get; private set; }
         public int SlotIndex { get; set; }
         public bool IsDragging { get; private set; }
         public bool IsHovered { get; private set; }
+        public Vector3 BaseScale { get; private set; } = Vector3.one;
+        public CardTween Tween => tween;
+        public CardFaceView Face { get; private set; }
 
         /// <summary>
-        /// Resting scale of this card's root transform. The root is only an animation container: the card's
-        /// real footprint lives on the <c>Body</c> child (see <see cref="SetSize"/>), so the root rests at
-        /// <see cref="Vector3.one"/> and every tween scales it uniformly. Keeping the root uniform is also
-        /// what stops the Title/Cost/Desc labels (children of the root) from being stretched.
+        /// Assigns this card its own slice of the global sorting space. See
+        /// <see cref="CardFaceView.SetSortBaseline"/>; the hand owns the policy.
         /// </summary>
-        public Vector3 BaseScale { get; private set; } = Vector3.one;
+        public void SetSortBaseline(int baseline)
+        {
+            if (Face != null) Face.SetSortBaseline(baseline);
+        }
 
         CardTween tween;
         Renderer bodyRenderer;
 
-        public CardTween Tween => tween;
-
         public static CardView Create(CardData data, Transform parent)
         {
-            return Create(data, parent, CardSize);
+            return Create(data, parent, CardSize, null, null, null, null);
         }
 
         public static CardView Create(CardData data, Transform parent, Vector3 size)
         {
-            var root = new GameObject($"Card_{data.id}");
+            return Create(data, parent, size, null, null, null, null);
+        }
+
+        public static CardView Create(CardData data, Transform parent, Vector3 size,
+            CardFrameCatalog frameCatalog, CardTemplateCatalog templateCatalog,
+            CardPresentationFixture fixture)
+        {
+            return Create(data, parent, size, frameCatalog, templateCatalog, fixture, null);
+        }
+
+        public static CardView Create(CardData data, Transform parent, Vector3 size,
+            CardFrameCatalog frameCatalog, CardTemplateCatalog templateCatalog,
+            CardPresentationFixture fixture, CardTierMaterialSet tierMaterials)
+        {
+            var root = new GameObject($"Card_{(data != null ? data.id : "placeholder")}");
             root.transform.SetParent(parent, false);
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            body.name = "Body";
-            body.transform.SetParent(root.transform, false);
-            body.transform.localScale = size;
-            var bodyCollider = body.GetComponent<BoxCollider>();
-            if (bodyCollider != null) Destroy(bodyCollider);
+            bool presentationMode = frameCatalog != null || templateCatalog != null || fixture != null;
+            if (!presentationMode)
+            {
+                // Legacy compatibility path only. Presentation cards have no cube body at all;
+                // the root collider below remains the interaction surface.
+                var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                body.name = LegacyBodyName;
+                body.transform.SetParent(root.transform, false);
+                body.transform.localScale = size;
+                var bodyCollider = body.GetComponent<BoxCollider>();
+                if (bodyCollider != null) Object.Destroy(bodyCollider);
+            }
 
             var col = root.AddComponent<BoxCollider>();
             col.size = size;
 
             var view = root.AddComponent<CardView>();
             view.BaseScale = Vector3.one;
-            view.Setup(data);
+            view.Setup(data, size, frameCatalog, templateCatalog, fixture, tierMaterials);
             return view;
         }
 
-        /// <summary>
-        /// Resizes the card face. The visible size lives on the <c>Body</c> child and the root collider, not
-        /// on the root transform's scale, so <see cref="BaseScale"/> (the animation scale) is left alone.
-        /// </summary>
-        public void SetSize(Vector3 size)
-        {
-            var body = transform.Find("Body");
-            if (body != null) body.localScale = size;
-            var col = GetComponent<BoxCollider>();
-            if (col != null) col.size = size;
-        }
-
-        void Setup(CardData data)
+        void Setup(CardData data, Vector3 size, CardFrameCatalog frameCatalog,
+            CardTemplateCatalog templateCatalog, CardPresentationFixture fixture,
+            CardTierMaterialSet tierMaterials)
         {
             Data = data;
             tween = GetComponent<CardTween>();
+            var body = transform.Find(LegacyBodyName);
+            bodyRenderer = body != null ? body.GetComponent<Renderer>() : null;
+            if (bodyRenderer != null)
+            {
+                bodyRenderer.material.color = data != null ? data.accent : Color.gray;
+            }
 
-            var body = transform.Find("Body");
-            bodyRenderer = body.GetComponent<Renderer>();
-            bodyRenderer.material.color = data.accent;
+            CardFaceData faceData = CardFacePresenter.Build(data, fixture);
+            CardFaceView template = templateCatalog != null && faceData != null
+                ? templateCatalog.Get(faceData.Type, faceData.Rarity)
+                : null;
+            if (template != null)
+            {
+                Face = Object.Instantiate(template, transform, false);
+                Face.name = "CardFace";
+            }
+            else
+            {
+                var faceObject = new GameObject("CardFace");
+                faceObject.transform.SetParent(transform, false);
+                Face = faceObject.AddComponent<CardFaceView>();
+            }
 
-            MakeLabel("Title", new Vector3(0f, 0.36f, -0.045f), new Vector2(40f, 13f), 10, data.title, false);
-            MakeLabel("Cost", new Vector3(-0.30f, 0.52f, -0.045f), new Vector2(11f, 11f), 14, data.cost.ToString(), false);
-            MakeLabel("Desc", new Vector3(0f, -0.16f, -0.045f), new Vector2(40f, 26f), 20, data.description, true);
+            Face.Bind(faceData, frameCatalog, tierMaterials);
+            Face.SetSize(size);
+            if (bodyRenderer != null && (frameCatalog != null || templateCatalog != null || fixture != null))
+            {
+                bodyRenderer.enabled = false;
+            }
         }
 
-        TextMeshPro MakeLabel(string labelName, Vector3 localPos, Vector2 rect,
-            int baseSize, string text, bool autoFit)
+        public void SetSize(Vector3 size)
         {
-            var go = new GameObject(labelName);
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = localPos;
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one * 0.02f;
-
-            var tmp = go.AddComponent<TextMeshPro>();
-            tmp.text = text;
-            tmp.fontSize = baseSize;
-            tmp.enableAutoSizing = autoFit;
-            tmp.fontSizeMin = 8;
-            tmp.fontSizeMax = 36;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.enableWordWrapping = autoFit;
-            tmp.overflowMode = autoFit ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
-            tmp.isOrthographic = true;
-            tmp.rectTransform.sizeDelta = rect;
-            tmp.color = Color.white;
-            return tmp;
+            var body = transform.Find(LegacyBodyName);
+            if (body != null) body.localScale = size;
+            var col = GetComponent<BoxCollider>();
+            if (col != null) col.size = size;
+            if (Face != null) Face.SetSize(size);
         }
 
-        public void SetHovered(bool hovered)
-        {
-            IsHovered = hovered;
-        }
-
-        public void SetDragging(bool dragging)
-        {
-            IsDragging = dragging;
-        }
+        public void SetHovered(bool hovered) => IsHovered = hovered;
+        public void SetDragging(bool dragging) => IsDragging = dragging;
     }
 }

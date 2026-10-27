@@ -370,6 +370,9 @@ namespace Overlink.EditorTools
             }
 
             EditorGUILayout.Space();
+            DrawPresentationTemplateSection(definition);
+
+            EditorGUILayout.Space();
             DrawValidation(results[selected]);
 
             EditorGUILayout.EndScrollView();
@@ -379,6 +382,28 @@ namespace Overlink.EditorTools
             showInfo = EditorGUILayout.ToggleLeft("Info", showInfo, GUILayout.Width(70f));
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
+        }
+
+        private void DrawPresentationTemplateSection(CardDefinition definition)
+        {
+            EditorGUILayout.LabelField("Presentation Template", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox("PLACEHOLDER FIXTURE — presentation values are temporary and are not written to CardAsset gameplay data or export.", MessageType.Info);
+            EditorGUILayout.LabelField("Type / Rarity / Faction", definition.Type + " / " + definition.Rarity + " / " + definition.Faction);
+            EditorGUILayout.LabelField("Template", "Card_" + definition.Type + "_" + definition.Rarity);
+            EditorGUILayout.LabelField("Frame key", definition.Type + " / " + definition.Faction + " / " + definition.Rarity);
+            EditorGUILayout.LabelField("Tier material", definition.Rarity == Rarity.Common ? "Basic/Common plain" : definition.Rarity + " custom + static fallback");
+            if (definition.Type == CardType.Unit)
+            {
+                EditorGUILayout.HelpBox("Unit template requires ATK, HP, and Shield zones.", MessageType.None);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Non-Unit template must not contain combat-stat zones.", MessageType.None);
+            }
+            if (definition.Rarity == Rarity.Common)
+            {
+                EditorGUILayout.LabelField("Shader rule", "No custom tier shader");
+            }
         }
 
         private void DrawKeywordsEditor(SerializedProperty keywords)

@@ -59,6 +59,34 @@ namespace Overlink.Net
         const string AuthSceneName = "Auth";
         const string MainMenuSceneName = "MainMenu";
 
+        /// <summary>
+        /// Standalone presentation scenes. They are opened straight from the Editor to review card
+        /// art, so they must never start the authentication flow or the boot hook would bounce them
+        /// back to the Main Menu.
+        /// <para>
+        /// Matched by prefix rather than exact name because <c>BuildCardPresentationPreviewScene</c>
+        /// generates a family of these (one per card type, one per faction collection), and an exact
+        /// list silently redirects every scene nobody remembered to add. Keep a prefix here if a new
+        /// preview family is named outside these three.
+        /// </para>
+        /// </summary>
+        static readonly string[] CardPreviewScenePrefixes =
+        {
+            "CardPresentation",
+            "CardCollectionPreview",
+            "CardFrameMatrixPreview",
+        };
+
+        static bool IsCardPreviewScene(string sceneName)
+        {
+            if (string.IsNullOrEmpty(sceneName)) return false;
+            for (int i = 0; i < CardPreviewScenePrefixes.Length; i++)
+            {
+                if (sceneName.StartsWith(CardPreviewScenePrefixes[i], System.StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
         bool isProcessing;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -89,10 +117,30 @@ namespace Overlink.Net
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        void OnDestroy()
+        {
+            if (Instance == this) SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (!IsCardPreviewScene(scene.name)) return;
+            Debug.Log("[AuthFlow] Card presentation preview loaded; authentication routing disabled.");
+            ChangeState(AuthState.Ready, "Card presentation preview bypass");
         }
 
         void Start()
         {
+            if (IsCardPreviewScene(SceneManager.GetActiveScene().name))
+            {
+                Debug.Log("[AuthFlow] Card presentation preview detected; authentication flow bypassed.");
+                ChangeState(AuthState.Ready, "Card presentation preview bypass");
+                return;
+            }
+
             _ = StartAuthenticationFlowAsync();
         }
 
@@ -184,6 +232,7 @@ namespace Overlink.Net
 
         void ShowAuthScene()
         {
+            if (IsCardPreviewScene(SceneManager.GetActiveScene().name)) return;
             if (SceneManager.GetActiveScene().name != AuthSceneName)
             {
                 SceneManager.LoadScene(AuthSceneName);
@@ -192,6 +241,7 @@ namespace Overlink.Net
 
         void LoadMainMenu()
         {
+            if (IsCardPreviewScene(SceneManager.GetActiveScene().name)) return;
             if (SceneManager.GetActiveScene().name != MainMenuSceneName)
             {
                 SceneManager.LoadScene(MainMenuSceneName);

@@ -4,7 +4,8 @@
     "references": [
         "Overlink.Cards",
         "Overlink.Core",
-        "Overlink.Match"
+        "Overlink.Match",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"

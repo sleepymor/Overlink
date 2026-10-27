@@ -1,0 +1,208 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4763e7e063e16394896413ae434d19c0, type: 3}
+  m_Name: CardFrameCatalog
+  m_EditorClassIdentifier: 
+  entries:
+  - type: 1
+    faction: 2
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 31c5e9b50bdb6f54bad013351f1e273d, type: 3}
+  - type: 1
+    faction: 2
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 69e974874db40724cb28a8c6b9b4f287, type: 3}
+  - type: 1
+    faction: 2
+    rarity: 3
+    sprite: {fileID: 21300000, guid: a91f6e91c59c0c346b866b909c8745fe, type: 3}
+  - type: 1
+    faction: 2
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 1e899bb7061214945b38e876f559cb82, type: 3}
+  - type: 1
+    faction: 1
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 43c0fa15c28fd044488a062d9a47cf0c, type: 3}
+  - type: 1
+    faction: 1
+    rarity: 2
+    sprite: {fileID: 21300000, guid: aadf9a0e8f6eab04eafd3dbdbf9d3fbe, type: 3}
+  - type: 1
+    faction: 1
+    rarity: 3
+    sprite: {fileID: 21300000, guid: 1cd37b2c14d65094d98df1d3457d0525, type: 3}
+  - type: 1
+    faction: 1
+    rarity: 1
+    sprite: {fileID: 21300000, guid: b739f36371d33e34795d0351cdb16525, type: 3}
+  - type: 1
+    faction: 0
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 209a4efe31d5db24d94f5530e1bd2b1f, type: 3}
+  - type: 1
+    faction: 0
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 04bc9435d3497dd4380b8a5cf88449d7, type: 3}
+  - type: 1
+    faction: 0
+    rarity: 3
+    sprite: {fileID: 21300000, guid: fda14c690f2ff3341b06e2ed7f49943b, type: 3}
+  - type: 1
+    faction: 0
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 6d85210ed75a66d418c1e39d0e3f303c, type: 3}
+  - type: 3
+    faction: 2
+    rarity: 0
+    sprite: {fileID: 21300000, guid: f452f1a1abd3c9a4fba9a7d62eaa85a3, type: 3}
+  - type: 3
+    faction: 2
+    rarity: 2
+    sprite: {fileID: 21300000, guid: c962d62b27ab0bb44a37ef725166d7ac, type: 3}
+  - type: 3
+    faction: 2
+    rarity: 3
+    sprite: {fileID: 21300000, guid: ef2a7a41ebf7cc540af073b8dbb27a31, type: 3}
+  - type: 3
+    faction: 2
+    rarity: 1
+    sprite: {fileID: 21300000, guid: dad635a5c67da8e43bd256dba0e2563d, type: 3}
+  - type: 3
+    faction: 1
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 093eb3a49a048ef48b45b1a93cabdbe4, type: 3}
+  - type: 3
+    faction: 1
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 9b2ec032b1ecf2a458ac0e0ad0c4b95c, type: 3}
+  - type: 3
+    faction: 1
+    rarity: 3
+    sprite: {fileID: 21300000, guid: d77662dfc5f36154da1ce26bf28aea48, type: 3}
+  - type: 3
+    faction: 1
+    rarity: 1
+    sprite: {fileID: 21300000, guid: d5dad9d3967c6d947889c2da265fbfbd, type: 3}
+  - type: 3
+    faction: 0
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 8e843cd8a4b04fc44b64f0420c185a96, type: 3}
+  - type: 3
+    faction: 0
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 171ed4f1700e53b41ba930c287b32f58, type: 3}
+  - type: 3
+    faction: 0
+    rarity: 3
+    sprite: {fileID: 21300000, guid: bbd3b91c3740c64448ed8c3240f93b81, type: 3}
+  - type: 3
+    faction: 0
+    rarity: 1
+    sprite: {fileID: 21300000, guid: dad17b9134ae82c418b2626fd2f6cf04, type: 3}
+  - type: 2
+    faction: 2
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 91d6fb106527d9346af3e72b12eba8c4, type: 3}
+  - type: 2
+    faction: 2
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 36dce3385a4002a4ca848d425922db09, type: 3}
+  - type: 2
+    faction: 2
+    rarity: 3
+    sprite: {fileID: 21300000, guid: 1a5afb13a795d7a4b80eaeb8122a4d60, type: 3}
+  - type: 2
+    faction: 2
+    rarity: 1
+    sprite: {fileID: 21300000, guid: eba1a28ecd532664484be32bde6c784c, type: 3}
+  - type: 2
+    faction: 1
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 3a43caa7bf742c14bb7ec93cf8769680, type: 3}
+  - type: 2
+    faction: 1
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 0664d716c4498404988530cf4e60b25a, type: 3}
+  - type: 2
+    faction: 1
+    rarity: 3
+    sprite: {fileID: 21300000, guid: 5361e27b1fe0f3a49ba3915f4f71e075, type: 3}
+  - type: 2
+    faction: 1
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 483d58c237892d841950986570430028, type: 3}
+  - type: 2
+    faction: 0
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 36b6f56fa1d8c4a4d8e72fb4a1c7cf0d, type: 3}
+  - type: 2
+    faction: 0
+    rarity: 2
+    sprite: {fileID: 21300000, guid: af465e3a25abb264794c8267bf4001e4, type: 3}
+  - type: 2
+    faction: 0
+    rarity: 3
+    sprite: {fileID: 21300000, guid: 6885fd569ac146f4d9767e2bc4d2683f, type: 3}
+  - type: 2
+    faction: 0
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 313a0e41a78d4684ebf263ca9c108cbd, type: 3}
+  - type: 0
+    faction: 2
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 8f58145915dd7a946af98dae436f9394, type: 3}
+  - type: 0
+    faction: 2
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 521a806d19ad7fb4999375885efd3719, type: 3}
+  - type: 0
+    faction: 2
+    rarity: 3
+    sprite: {fileID: 21300000, guid: b3857a7f0551d8641ad130121a5c8492, type: 3}
+  - type: 0
+    faction: 2
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 8bfac871ad41fd44a98d8405c049225b, type: 3}
+  - type: 0
+    faction: 1
+    rarity: 0
+    sprite: {fileID: 21300000, guid: b3d445e15f552884ea69ffc7d92f92b5, type: 3}
+  - type: 0
+    faction: 1
+    rarity: 2
+    sprite: {fileID: 21300000, guid: b163c159dd812084daa7c05784aa7dc7, type: 3}
+  - type: 0
+    faction: 1
+    rarity: 3
+    sprite: {fileID: 21300000, guid: 05c921cb749166f42821208cc0134494, type: 3}
+  - type: 0
+    faction: 1
+    rarity: 1
+    sprite: {fileID: 21300000, guid: 98cae108ff733e74aa9311665de8b48b, type: 3}
+  - type: 0
+    faction: 0
+    rarity: 0
+    sprite: {fileID: 21300000, guid: 6ae8789806eedee4bbad51c618f76b12, type: 3}
+  - type: 0
+    faction: 0
+    rarity: 2
+    sprite: {fileID: 21300000, guid: 5cd1cf971f0bc284e94670a6b3a07c1d, type: 3}
+  - type: 0
+    faction: 0
+    rarity: 3
+    sprite: {fileID: 21300000, guid: b50b0ec1098253a4eab9d6e7001a1c5e, type: 3}
+  - type: 0
+    faction: 0
+    rarity: 1
+    sprite: {fileID: 21300000, guid: c83edaa33298e3d43914288fbc0eda36, type: 3}
+  neutralFallback: {fileID: 21300000, guid: 31c5e9b50bdb6f54bad013351f1e273d, type: 3}

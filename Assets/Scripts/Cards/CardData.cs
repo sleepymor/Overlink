@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Overlink.Core;
 using UnityEngine;
 
 namespace Overlink.Cards
@@ -23,6 +24,16 @@ namespace Overlink.Cards
         public int cost;
         [TextArea] public string description;
         public Color accent = Color.white;
+
+        // These references are a presentation bridge only. CardData remains the reference-identity adapter.
+        public CardDefinition Definition { get; private set; }
+        public CardInstance Instance { get; private set; }
+
+        public void AttachSource(CardDefinition definition, CardInstance instance)
+        {
+            Definition = definition;
+            Instance = instance;
+        }
 
         public CardData(string id, string title, int cost, string description, Color accent)
         {

@@ -3,7 +3,8 @@
     "rootNamespace": "Overlink.Cards.Tests",
     "references": [
         "Overlink.Cards",
-        "Overlink.Core"
+        "Overlink.Core",
+        "Unity.TextMeshPro"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

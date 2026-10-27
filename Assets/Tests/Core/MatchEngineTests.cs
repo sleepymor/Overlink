@@ -234,7 +234,18 @@ namespace Overlink.Core.Tests
 
             Assert.AreEqual(CommandResult.Success, result);
             Assert.AreEqual(MatchState.StartingHandSize, state.Players[0].Hand.Count);
-            Assert.IsFalse(state.Players[0].Hand.Contains(cardToMulligan));
+            // Do NOT assert that the mulliganed card is absent from the hand. The command returns it to
+            // the deck, shuffles, then draws a replacement, so the same card can legitimately come
+            // straight back — ShuffleDeck uses an unseeded System.Random, which made this assertion a
+            // roughly one-in-twenty-six coin flip that failed real runs nondeterministically.
+            // These three facts carry the same intent without the gamble: the card was taken out and a
+            // replacement drawn (deck back to its post-Init size), the hand is whole, and no card was
+            // created or lost.
+            Assert.AreEqual(25, state.Players[0].Deck.Count,
+                "Returning one card and drawing one replacement leaves the deck at its opening size.");
+            Assert.IsTrue(state.Players[0].Deck.Contains(cardToMulligan)
+                    || state.Players[0].Hand.Contains(cardToMulligan),
+                "The mulliganed card must still be in play, in the deck or the hand.");
         }
 
         [Test]

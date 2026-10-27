@@ -10,5 +10,6 @@ namespace Overlink.UI
         public const string Collection  = "Collection";
         public const string Settings    = "Settings";
         public const string NetDemo     = "NetPresenceDemo";
+        public const string CardPreview = "CardPresentationPreview";
     }
 }

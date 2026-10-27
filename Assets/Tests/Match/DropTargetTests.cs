@@ -1,7 +1,9 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Overlink.Core;
 
 namespace Overlink.Match.Tests
@@ -374,6 +376,77 @@ namespace Overlink.Match.Tests
             finally
             {
                 Object.DestroyImmediate(presenter.gameObject);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator FindDropTargetByWorld_ACardHeldAtTheLensResolvesTheSocketItCovers()
+        {
+            // The hand no longer lies on the table: it hangs in the camera's plane, so a dragged card's world
+            // position is several units above the board and back past its near edge. The straight-down
+            // footprint test cannot answer "what socket is under this card" from there, which - because a
+            // targeted play is the ONLY way the coordinator accepts a drop - would have made the game
+            // unplayable. The view ray is the fix, and this pins it against the shipped framing.
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+            presenter.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+            var rig = new GameObject("DropRayRig");
+            rig.tag = "MainCamera";
+            Camera cam = rig.AddComponent<Camera>();
+            cam.fieldOfView = 38f;
+            Quaternion rot = Quaternion.Euler(52f, 0f, 0f);
+            rig.transform.rotation = rot;
+            rig.transform.position = new Vector3(0f, 0f, 0.35f) - rot * Vector3.forward * 16f;
+            // The view ray only matters because the hand hangs where the lens sees it, so the depth used
+            // below is the shipped HandRoot placement rather than an arbitrary one. Change Gameplay.unity
+            // and this has to be admitted here too, or the test passes against a framing the game never
+            // renders. 6.7 = the closest placement that loses less than a quarter of a card to the bottom
+            // edge (2.662 - 0.3443 * z < 0.365); see CardHandTests.ShippedHandDepth for the derivation.
+            const float shippedHandDepth = 6.7f;
+
+            // WorldToScreenPoint reads the camera's matrices, which are not refreshed until it renders.
+            yield return null;
+
+            try
+            {
+                foreach (string name in PlayerSocketTileNames())
+                {
+                    Transform body = SocketBody(board, name);
+                    Assert.IsNotNull(body, $"{name} must have a Body child.");
+
+                    // Where a card of the shipped hand would hang while covering this socket: the same
+                    // pixel, at the depth the hand hangs at, so several units off the table.
+                    Vector3 screen = cam.WorldToScreenPoint(body.position);
+                    Vector3 held = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, shippedHandDepth));
+
+                    BoardSlot slot = presenter.FindDropTargetAtScreenByWorld(held);
+                    Assert.IsNotNull(slot, $"{name} must resolve under a card held over it.");
+                    Assert.IsTrue(BattlefieldPresenter.TryParseSlotIdentity(name,
+                        out SlotType type, out int index, out int nodeIndex));
+                    Assert.AreEqual(type, slot.Type, $"{name} resolved to the wrong slot type.");
+                    Assert.AreEqual(index, slot.Index, $"{name} resolved to the wrong slot index.");
+                    Assert.AreEqual(nodeIndex, slot.NodeIndex, $"{name} resolved to the wrong Node.");
+
+                    // The card is nowhere near the socket in world terms; only the pixel it covers ties
+                    // them together. If this ever stops holding, the two points have converged and the
+                    // test is no longer exercising the view ray at all.
+                    Assert.Greater(Vector3.Distance(held, body.position), 3f,
+                        $"{name}: the held point should be well off the table, or this proves nothing.");
+                }
+
+                // Aimed past the far edge of the table there is nothing under the card, and the highlight
+                // has to go out rather than linger on the last socket the drag touched - a lit socket is a
+                // promise the release relies on.
+                Vector3 sky = cam.ViewportToWorldPoint(new Vector3(0.5f, 1.4f, shippedHandDepth));
+                Assert.IsNull(presenter.FindDropTargetAtScreenByWorld(sky),
+                    "A card held above the board is over nothing.");
+                Assert.IsNull(presenter.FindDropTargetAtScreenByWorld(sky),
+                    "and it stays over nothing on the following frame instead of keeping a stale target.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(presenter.gameObject);
+                Object.DestroyImmediate(rig);
             }
         }
 

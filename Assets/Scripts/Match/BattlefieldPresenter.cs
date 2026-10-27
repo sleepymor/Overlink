@@ -894,21 +894,129 @@ namespace Overlink.Match
         /// <para>
         /// Only the player's half is probed: you cannot deploy onto the opponent's ranks. The Protocol socket
         /// is excluded because nothing is targeted there (Abilities take no slot and a Protocol has exactly
-        /// one home, which the engine already enforces). Depth is ignored on purpose, since a dragged card
-        /// floats above the table on the board's local Z.
+        /// one home, which the engine already enforces). Depth is ignored on purpose, since a card dragged
+        /// along the table floats only a little above it on the board's local Z.
         /// </para>
+        /// That last clause is the limit of this method: it is the right test for a point that lies near the
+        /// table, and the wrong one for anything held up at the lens, where "under" stops meaning anything a
+        /// player can see. Use <see cref="FindDropTargetAtScreenByWorld"/> for a card.
+        /// <para>
         /// Returns the slot under the point, or null when there is none. Legality (card type, occupancy) is
         /// <b>not</b> judged here: this view has no rules, so <see cref="GameCoordinator"/> validates the
         /// candidate and clears the highlight when the drop would be illegal.
         /// </summary>
         public BoardSlot FindDropTarget(Vector3 worldPos)
         {
-            if (boardRoot == null || playerCoreActive == null)
+            if (boardRoot == null)
             {
                 return null;
             }
 
-            Vector3 point = boardRoot.InverseTransformPoint(worldPos);
+            return FindDropTargetInBoardSpace(boardRoot.InverseTransformPoint(worldPos));
+        }
+
+        /// <summary>
+        /// The same test against a point on screen, which is the one a card held in front of the lens needs.
+        /// <para>
+        /// A card lying a hand's width above the table can be asked "what is under you" by dropping straight
+        /// down along the table normal, and <see cref="FindDropTarget"/> does exactly that. A card parented to
+        /// the camera cannot: it hangs several units above the board and back past its near edge, so the point
+        /// beneath it is behind the table rather than on it, and every drop resolves to nothing. The only
+        /// meaning a floating card has is the one the player sees, so the question has to be asked along the
+        /// view ray: through the pixel the card covers, onto the table plane, and probe there.
+        /// </para>
+        /// </summary>
+        public BoardSlot FindDropTargetAtScreen(Camera cam, Vector2 screenPos)
+        {
+            if (boardRoot == null)
+            {
+                return null;
+            }
+
+            if (cam == null)
+            {
+                cam = Camera.main;
+            }
+
+            if (cam == null)
+            {
+                return ClearDropTarget();
+            }
+
+            Ray ray = cam.ScreenPointToRay(screenPos);
+            // The board's local Z is the table normal, taken from the hierarchy for the same reason
+            // FindHitAt takes it: the Match root is tilted, so the plane cannot be assumed.
+            var table = new Plane(boardRoot.forward, boardRoot.position);
+            if (!table.Raycast(ray, out float enter))
+            {
+                // Parallel to the table, or aimed away from it: nothing is under the card, and the
+                // highlight has to go out rather than linger on whatever it last named.
+                return ClearDropTarget();
+            }
+
+            return FindDropTargetInBoardSpace(boardRoot.InverseTransformPoint(ray.GetPoint(enter)));
+        }
+
+        /// <summary>
+        /// Extinguishes the drop highlight and reports no target. The miss paths have to do this rather
+        /// than return a bare null, or a socket lit by the previous frame stays lit after the card has
+        /// been moved off it - and a lit socket is a promise the release relies on.
+        /// </summary>
+        BoardSlot ClearDropTarget()
+        {
+            highlightedTile = null;
+            return null;
+        }
+
+        /// <summary>
+        /// The view-ray drop test, expressed the way the hand reports a drag: as the card's world position.
+        /// <para>
+        /// This is the one the drop path should call. Asking "what socket is under this card" only has an
+        /// answer once the card may not lie on the table at all, and the answer is whatever the card
+        /// <em>covers</em> - so the world point is folded back to the pixel it projects to and handed to
+        /// <see cref="FindDropTargetAtScreen"/>. For a card resting just above the board the two tests agree
+        /// to within the card's hover height, which is well inside a socket, so nothing that worked before
+        /// changes; for a card held in front of the lens the straight-down test lands behind the board and
+        /// finds nothing, which is why it cannot be the only route.
+        /// </para>
+        /// </summary>
+        public BoardSlot FindDropTargetAtScreenByWorld(Vector3 worldPos)
+        {
+            if (boardRoot == null)
+            {
+                return null;
+            }
+
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                // No lens means no view ray, and the straight-down footprint is all there is.
+                return FindDropTarget(worldPos);
+            }
+
+            Vector3 screen = cam.WorldToScreenPoint(worldPos);
+            if (screen.z <= 0f)
+            {
+                // Behind the camera: WorldToScreenPoint mirrors the point through the lens and the
+                // resulting ray is nonsense, so this is a miss rather than a hit on whatever happens to
+                // sit opposite.
+                return ClearDropTarget();
+            }
+
+            return FindDropTargetAtScreen(cam, screen);
+        }
+
+        /// <summary>
+        /// The footprint probe both entry points share, in board-root coordinates.
+        /// </summary>
+        BoardSlot FindDropTargetInBoardSpace(Vector3 point)
+        {
+            if (playerCoreActive == null)
+            {
+                // The board has not been built yet, so there is nothing to probe and nothing to light.
+                return null;
+            }
+
             Tile best = null;
             float bestDistance = float.MaxValue;
 
