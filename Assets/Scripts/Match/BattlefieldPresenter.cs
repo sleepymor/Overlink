@@ -158,11 +158,16 @@ namespace Overlink.Match
         // The control legend is code-owned, not authored: a key binding added to GameCoordinator has to reach
         // the screen without anybody rebuilding a scene file or a prefab. It is written onto the HUD by
         // ResolveHud, which is the one place that knows the canvas exists.
+        //
+        // It does not list the rail's buttons, and it does not list the keys they replaced either: END TURN,
+        // CONCEDE, MATCH STATE and the five swings say what they are on their own faces, so repeating them here
+        // would spend two lines of the frame on a list the player can read off the screen faster than they can
+        // read this one. What is left is what no button advertises - the drag, the pick, the read, and the two
+        // camera gestures.
         const string ControlsHintText =
-            "Click a card to read it   \u2022   Click a Ready unit, then a red socket, to attack   \u2022   " +
-            "Drag onto a lit socket to deploy\n" +
-            "\u2190/\u2192 browse   \u2022   ESC cancel   \u2022   P phase (plays need MAIN)   \u2022   E end turn   \u2022   " +
-            "Q concede   \u2022   1-5 attack   \u2022   Wheel zoom   \u2022   RMB pan";
+            "Drag onto a lit socket to deploy (MAIN)   \u2022   Click a Ready unit, then a red socket to attack " +
+            "or a blue one to retreat\n" +
+            "Click any card to read it   \u2022   ESC cancel   \u2022   \u2190/\u2192 browse   \u2022   Wheel zoom   \u2022   RMB pan";
 
         // The legend setup needs, which is a different job from the one above: nothing on the table is a
         // command during the opening, the only drag that means anything is a nomination, and the two buttons
@@ -211,6 +216,12 @@ namespace Overlink.Match
         static readonly Color AttackMark = new Color(1.00f, 0.42f, 0.32f);
         static readonly Color BlockerMark = new Color(0.42f, 0.95f, 0.55f);
         static readonly Color BlockTargetMark = new Color(1.00f, 0.72f, 0.30f);
+
+        // The second thing a picked-up Active unit may do, on the player's own half, in the same cool family as
+        // the selection it hangs off: red sockets are things to hit and blue sockets are things of yours you may
+        // trade places with. Cool-versus-warm is the distinction the whole board is drawn on, and a retreat mark
+        // in any of the enemy hues would put two legal clicks on the same table reading as the same verb.
+        static readonly Color RetreatMark = new Color(0.42f, 0.62f, 1.00f);
 
         // A nominated Unit standing on a socket during the lineup setup. Washed toward white and away from the
         // owner tint it will become, because it is a promise rather than a body: the socket is still empty as
@@ -1508,12 +1519,20 @@ namespace Overlink.Match
         /// Rebuilds the marks for the current selection. Called by <see cref="BattlefieldInput"/> whenever the
         /// player picks or un-picks a unit, and given the legal targets rather than computing them: the view
         /// has no rules, so it cannot decide what a unit may hit.
+        /// <para>
+        /// The retreat list is the second of the two things a picked-up Active may do in Combat, and it arrives
+        /// here rather than behind its own call because both halves of the choice are lit at the same instant:
+        /// the player reads "attack or retreat" off one unit, not off two gestures. Null is the block mode's
+        /// answer, and means no blue sockets rather than an error.
+        /// </para>
         /// </summary>
-        public void ShowAttack(CardInstance attacker, IReadOnlyList<CardInstance> targets, bool coreTargetable)
+        public void ShowAttack(CardInstance attacker, IReadOnlyList<CardInstance> targets, bool coreTargetable,
+            IReadOnlyList<CardInstance> retreats = null)
         {
             ClearMarks();
             MarkCards(attacker == null ? null : new[] { attacker }, PickMark.Selected);
             MarkCards(targets, PickMark.AttackTarget);
+            MarkCards(retreats, PickMark.RetreatTarget);
             MarkCoreTarget(coreTargetable);
         }
 
@@ -2243,6 +2262,7 @@ namespace Overlink.Match
                 case PickMark.AttackTarget: return Color.Lerp(baseTint, AttackMark, 0.52f);
                 case PickMark.Blocker: return Color.Lerp(baseTint, BlockerMark, 0.52f);
                 case PickMark.BlockTarget: return Color.Lerp(baseTint, BlockTargetMark, 0.52f);
+                case PickMark.RetreatTarget: return Color.Lerp(baseTint, RetreatMark, 0.52f);
                 default: return baseTint;
             }
         }
@@ -2640,6 +2660,14 @@ namespace Overlink.Match
 
             /// <summary>The opponent's Core, when the selected attacker may hit it.</summary>
             CoreTarget,
+
+            /// <summary>
+            /// One of the player's own Bench units the selected Active may be traded for. Still disjoint from
+            /// <see cref="AttackTarget"/> by construction rather than by care: a retreat target is a card this
+            /// player owns and an attack target is one they do not, so no card can be both and the single
+            /// <c>Tile.Mark</c> field stays a field.
+            /// </summary>
+            RetreatTarget,
         }
     }
 }

@@ -78,6 +78,17 @@ namespace Overlink.Match
                 presenter = GetComponent<BattlefieldPresenter>();
             }
             WireHand();
+            WireHud();
+        }
+
+        /// <summary>
+        /// Resolves the HUD and subscribes to every button on its rail. Idempotent for the same reason
+        /// <see cref="WireHand"/> is: the events are not serializable, so a domain reload while the game is
+        /// running silently drops them and the rail keeps drawing buttons that fire nothing. Called again from
+        /// <see cref="Update"/>'s recovery branch, which is where a reload is noticed.
+        /// </summary>
+        void WireHud()
+        {
             battlefieldHud = BattlefieldHud.Ensure();
             if (battlefieldHud != null)
             {
@@ -87,6 +98,8 @@ namespace Overlink.Match
                 battlefieldHud.RerollLineupRequested += RerollLineup;
                 battlefieldHud.ConfirmLineupRequested -= SubmitLineup;
                 battlefieldHud.ConfirmLineupRequested += SubmitLineup;
+                battlefieldHud.RailPressed -= OnRailPressed;
+                battlefieldHud.RailPressed += OnRailPressed;
             }
         }
 
@@ -138,6 +151,7 @@ namespace Overlink.Match
                 battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
                 battlefieldHud.RerollLineupRequested -= RerollLineup;
                 battlefieldHud.ConfirmLineupRequested -= SubmitLineup;
+                battlefieldHud.RailPressed -= OnRailPressed;
             }
             if (handController != null)
             {
@@ -650,16 +664,30 @@ namespace Overlink.Match
                 Debug.LogWarning("[GameCoordinator] Match state was lost (domain reload); restarting the match.");
                 matchStarted = false;
                 WireHand();
+                WireHud();
                 StartCoroutine(InitializeMatch());
                 return;
             }
 
-            if (!matchStarted || matchState == null || matchState.IsMatchOver())
+            if (!matchStarted || matchState == null)
             {
                 return;
             }
 
+            // A finished match has no verb left to press. Without this the rail freezes on whatever the last
+            // live frame published, which reads as live buttons with no match behind them, and the result line
+            // is the only thing the player should be able to act on or read at that point.
+            if (matchState.IsMatchOver())
+            {
+                if (battlefieldHud != null)
+                {
+                    battlefieldHud.HideRail();
+                }
+                return;
+            }
+
             AdvanceAutomaticPhases();
+            RefreshActionRail();
 
             bool inCombat = matchState.CurrentPhase == TurnPhase.Combat;
 
@@ -680,23 +708,14 @@ namespace Overlink.Match
                 StartCoroutine(ExecuteAITurn());
             }
 
-            // Handle phase advancement (for testing).
-            //
-            // Gated on the player's own turn, which the old unconditional form was not: P and E fired
-            // whatever ActivePlayer happened to be, so during the opponent's turn - now four seconds long
-            // while the block window is open - they drove the opponent's phases for it. Concede stays
-            // ungated, because conceding is legal on either player's turn (GDD 2.1.8).
-            if (Input.GetKeyDown(passPhaseKey) && matchState.ActivePlayer == PlayerIndex.Player)
-            {
-                EndPlayerPhase();
-            }
-
-            if (Input.GetKeyDown(endTurnKey) && matchState.ActivePlayer == PlayerIndex.Player)
-            {
-                matchEngine.ExecuteCommand(new EndTurnCommand(PlayerIndex.Player));
-                SyncHand();
-                LogMatchState();
-            }
+            // P and E both end up in methods that guard on the player's own turn, which the old unconditional
+            // form of these two lines did not: they fired whatever ActivePlayer happened to be, so during the
+            // opponent's turn - now four seconds long while the block window is open - they drove the
+            // opponent's phases for it. The guard moved inside because the rail's buttons call the same methods
+            // and do not pass through this block at all. Concede stays ungated, because conceding is legal on
+            // either player's turn (GDD 2.1.8).
+            if (Input.GetKeyDown(passPhaseKey)) EndPlayerPhase();
+            if (Input.GetKeyDown(endTurnKey)) EndPlayerTurn();
 
             if (Input.GetKeyDown(attackCoreKey)) TryPlayerAttack(-1);
             if (Input.GetKeyDown(attackNode1Key)) TryPlayerAttack(0);
@@ -704,22 +723,86 @@ namespace Overlink.Match
             if (Input.GetKeyDown(attackNode3Key)) TryPlayerAttack(2);
             if (Input.GetKeyDown(attackNode4Key)) TryPlayerAttack(3);
 
-            // Log match state
-            if (Input.GetKeyDown(logStateKey))
+            if (Input.GetKeyDown(logStateKey)) LogMatchState();
+
+            // Concession (GDD 2.1.8) is legal on either player's turn, so unlike the two above it is not gated
+            // on the active player at all.
+            if (Input.GetKeyDown(concedeKey)) ConcedeMatch();
+        }
+
+        /// <summary>
+        /// Ends the player's turn. The body of the E key, and what the rail's END TURN button presses; both
+        /// guards are inside rather than at the call sites because the button path does not pass through
+        /// <see cref="Update"/>.
+        /// </summary>
+        void EndPlayerTurn()
+        {
+            if (!matchStarted || matchState == null || matchEngine == null
+                || matchState.ActivePlayer != PlayerIndex.Player || matchState.IsMatchOver())
             {
-                LogMatchState();
+                return;
             }
 
-            // Concession (GDD 2.1.8) is legal on either player's turn, so it is not gated on the active
-            // player above. The match-over guard already lives in Update's early return.
-            if (Input.GetKeyDown(concedeKey))
+            matchEngine.ExecuteCommand(new EndTurnCommand(PlayerIndex.Player));
+            SyncHand();
+            LogMatchState();
+        }
+
+        /// <summary>
+        /// Concedes the match. The body of the Q key, and what the rail's CONCEDE button presses. Legal on
+        /// either player's turn (GDD 2.1.8), so it checks the match rather than the active player, and a
+        /// refusal from the engine is silent here for the same reason the key's was: there is nothing the
+        /// player can do about it except keep playing.
+        /// </summary>
+        void ConcedeMatch()
+        {
+            if (!matchStarted || matchState == null || matchEngine == null || matchState.IsMatchOver())
             {
-                CommandResult conceded = matchEngine.ExecuteCommand(new ConcedeCommand(PlayerIndex.Player));
-                if (conceded == CommandResult.Success)
-                {
-                    SyncHand();
+                return;
+            }
+
+            CommandResult conceded = matchEngine.ExecuteCommand(new ConcedeCommand(PlayerIndex.Player));
+            if (conceded == CommandResult.Success)
+            {
+                SyncHand();
+                LogMatchState();
+            }
+        }
+
+        /// <summary>
+        /// Answers the rail buttons that fire a command on the board. The picked-up unit's skill, the two pile
+        /// steps and letting the opponent's attacks land are answered by <see cref="BattlefieldInput"/>, which
+        /// subscribes to the same event: those four act on dialogue state this class does not hold, and a button
+        /// does not know or care who answers it.
+        /// </summary>
+        void OnRailPressed(BattlefieldHud.RailKey key)
+        {
+            switch (key)
+            {
+                case BattlefieldHud.RailKey.SwingCore:
+                    TryPlayerAttack(-1);
+                    break;
+                case BattlefieldHud.RailKey.SwingNode1:
+                    TryPlayerAttack(0);
+                    break;
+                case BattlefieldHud.RailKey.SwingNode2:
+                    TryPlayerAttack(1);
+                    break;
+                case BattlefieldHud.RailKey.SwingNode3:
+                    TryPlayerAttack(2);
+                    break;
+                case BattlefieldHud.RailKey.SwingNode4:
+                    TryPlayerAttack(3);
+                    break;
+                case BattlefieldHud.RailKey.EndTurn:
+                    EndPlayerTurn();
+                    break;
+                case BattlefieldHud.RailKey.State:
                     LogMatchState();
-                }
+                    break;
+                case BattlefieldHud.RailKey.Concede:
+                    ConcedeMatch();
+                    break;
             }
         }
 
@@ -742,12 +825,6 @@ namespace Overlink.Match
                     break;
                 }
             }
-
-            if (battlefieldHud != null)
-            {
-                battlefieldHud.SetEndPhaseAvailable(matchState.ActivePlayer == PlayerIndex.Player
-                    && (matchState.CurrentPhase == TurnPhase.Main || matchState.CurrentPhase == TurnPhase.Combat));
-            }
         }
 
         /// <summary>Callback for the in-game End Phase button.</summary>
@@ -766,6 +843,67 @@ namespace Overlink.Match
                 LogMatchState();
                 AdvanceAutomaticPhases();
             }
+        }
+
+        /// <summary>
+        /// Publishes the rail's board-facing keys. Every one is derived from the match state here rather than
+        /// remembered from whichever event last fired, because a lit button is a promise the player acts on and
+        /// a cached flag that missed a transition is the cheapest way to break it. <see
+        /// cref="BattlefieldHud.SetRail"/> dedupes, so deriving this sixty times a second writes nothing until
+        /// something actually changes.
+        /// <para>
+        /// This is also the only writer of EndPhase now. It used to be published from <see
+        /// cref="AdvanceAutomaticPhases"/>, which returns early on the opponent's turn and so left the button
+        /// standing on screen while its own slot was being handed to DoneBlocking - two buttons in one rect, one
+        /// of them unclickable. One slot needs one writer, and a per-frame derivation is that writer.
+        /// </para>
+        /// </summary>
+        void RefreshActionRail()
+        {
+            if (battlefieldHud == null)
+            {
+                return;
+            }
+
+            bool mine = matchState.ActivePlayer == PlayerIndex.Player;
+            bool combat = mine && matchState.CurrentPhase == TurnPhase.Combat;
+
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.EndPhase, mine
+                && (matchState.CurrentPhase == TurnPhase.Main
+                    || matchState.CurrentPhase == TurnPhase.Combat));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.DoneBlocking, PlayerBlockWindowOpen);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.EndTurn, mine);
+
+            // STATE and CONCEDE outlive the turn: reading the match is always legal, and conceding is legal on
+            // either player's turn (GDD 2.1.8) - the one rule the key handler never gated either.
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.State, true);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.Concede, true);
+
+            // The swings are the number keys, and they are only ever fireable in Combat. Five verbs dimmed for
+            // the rest of the turn would advertise a choice that refuses, so the strip leaves instead.
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingCore, combat, CanSwingBattlefield(-1));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode1, combat, CanSwingBattlefield(0));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode2, combat, CanSwingBattlefield(1));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode3, combat, CanSwingBattlefield(2));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode4, combat, CanSwingBattlefield(3));
+        }
+
+        /// <summary>
+        /// Whether a battlefield's Active socket holds a unit that may declare an attack. It resolves the socket
+        /// exactly as <see cref="TryPlayerAttack"/> does, which is the point: the button dims when the key would
+        /// refuse, and the two cannot drift into disagreeing about what "ready to swing" means. Legality itself
+        /// stays delegated to <see cref="CanPlayerAttackWith"/> - a click layer that recomputes the rule is a
+        /// click layer that can be wrong about it.
+        /// </summary>
+        bool CanSwingBattlefield(int nodeIndex)
+        {
+            Board board = matchState.Players[0].Board;
+            BoardSlot slot = nodeIndex < 0
+                ? (board.CoreActive.Length > 0 ? board.CoreActive[0] : null)
+                : (nodeIndex < Board.NodeCount && board.NodeActive[nodeIndex].Length > 0
+                    ? board.NodeActive[nodeIndex][0] : null);
+
+            return slot != null && slot.IsOccupied() && CanPlayerAttackWith(slot.Card);
         }
 
         IEnumerator ExecuteAITurn()

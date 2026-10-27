@@ -39,6 +39,10 @@ namespace Overlink.Match
                  "footprint, so a click that picks up a card also lands on a socket behind it.")]
         public HandController hand;
 
+        // Not serialized and not [SerializeField]: this is the rail's own four keys, and the HUD is the
+        // coordinator's object to create. Found after it exists and re-found after a domain reload wipes it.
+        BattlefieldHud hud;
+
         [Header("Keys")]
         [Tooltip("Puts the picked-up unit down and takes the details panel off screen. Does NOT end the " +
                  "opponent's block window - a reflexive Escape should not cost a player their only defensive " +
@@ -71,6 +75,12 @@ namespace Overlink.Match
         PickMode mode;
         CardInstance selected;
         readonly List<CardInstance> targets = new List<CardInstance>();
+
+        // The Bench units the picked-up Active may be traded for: the second half of what an Attack pick
+        // offers. Deliberately not a third PickMode - the player does not announce whether they mean to attack
+        // or to retreat, they pick the unit up and both lists light at once, and the click on a red or a blue
+        // socket is what decides it. A mode switch here would be a gesture performed twice for one choice.
+        readonly List<CardInstance> retreats = new List<CardInstance>();
 
         // The discard being read, and how far into it. Kept here rather than in the presenter because "which
         // card am I looking at" is dialogue state, not board state, and it has to survive a repaint.
@@ -107,6 +117,70 @@ namespace Overlink.Match
                     ? coordinator.handController
                     : FindObjectOfType<HandController>();
             }
+
+            WireHud();
+        }
+
+        /// <summary>
+        /// Subscribes to the rail's press event. The coordinator runs at execution order -100 against this
+        /// component's 200, so by the time this Awake fires the HUD it binds to has already been Ensured and its
+        /// rail built - a null here therefore means no HUD in the scene at all rather than a race, and the retry
+        /// in <see cref="Update"/> exists for the case that actually produces one: a domain reload.
+        /// <para>
+        /// Only four of the rail's keys land here. The rest fire commands on the board and belong to the
+        /// coordinator, which subscribes to the same event: a button presses at whoever is listening, and the
+        /// split follows who owns the state the press acts on, not which object drew the button.
+        /// </para>
+        /// </summary>
+        void WireHud()
+        {
+            hud = BattlefieldHud.Find();
+            if (hud == null)
+            {
+                return;
+            }
+
+            hud.RailPressed -= OnRailPressed;
+            hud.RailPressed += OnRailPressed;
+        }
+
+        void OnDestroy()
+        {
+            if (hud != null)
+            {
+                hud.RailPressed -= OnRailPressed;
+            }
+        }
+
+        void OnRailPressed(BattlefieldHud.RailKey key)
+        {
+            switch (key)
+            {
+                case BattlefieldHud.RailKey.DoneBlocking:
+                    DoneBlocking();
+                    break;
+
+                // The same gesture the card itself offers: pick a unit up, then ask for its skill. Clearing the
+                // selection first is not cosmetic - the activation exhausts the unit and repaints its socket, and
+                // a mark left pointing at a card that no longer can act is the thing DropStaleSelection exists
+                // to sweep up one frame later.
+                case BattlefieldHud.RailKey.Activate:
+                    if (selected != null && coordinator.CanPlayerActivateWith(selected))
+                    {
+                        CardInstance activator = selected;
+                        ClearSelection();
+                        coordinator.TryPlayerActivateWith(activator);
+                    }
+                    break;
+
+                case BattlefieldHud.RailKey.PilePrev:
+                    StepBrowse(-1);
+                    break;
+
+                case BattlefieldHud.RailKey.PileNext:
+                    StepBrowse(1);
+                    break;
+            }
         }
 
         void Update()
@@ -123,6 +197,15 @@ namespace Overlink.Match
                 return;
             }
 
+            // A script recompile while the game is running wipes this non-serialized reference and every event
+            // subscription with it, and Awake is not called again. Without the retry the rail's dialogue keys
+            // would go on being drawn and stop answering, so recovery costs one FindObjectsOfType on the frame
+            // after the reload rather than one per frame.
+            if (hud == null)
+            {
+                WireHud();
+            }
+
             DropStaleSelection();
 
             Hover();
@@ -136,13 +219,13 @@ namespace Overlink.Match
                 ClearBrowse();
                 presenter.ClearDetails();
             }
-            else if (Input.GetKeyDown(doneBlockingKey) && coordinator.PlayerBlockWindowOpen)
+            else if (Input.GetKeyDown(doneBlockingKey))
             {
-                ClearSelection();
-                coordinator.CloseBlockWindow();
+                DoneBlocking();
             }
 
             BrowsePile();
+            PublishDialogueRail();
 
             if (Input.GetMouseButtonDown(0) && !IsHandBusy())
             {
@@ -150,10 +233,49 @@ namespace Overlink.Match
             }
         }
 
+        /// <summary>
+        /// Lets the opponent's attacks land instead of waiting out the window. The body of the Enter key and of
+        /// the rail's DONE BLOCKING button, and both share its refusal: outside the window there is nothing to
+        /// be done early, and saying so would be a notice about a thing the player did not do.
+        /// </summary>
+        void DoneBlocking()
+        {
+            if (coordinator == null || !coordinator.PlayerBlockWindowOpen)
+            {
+                return;
+            }
+
+            ClearSelection();
+            coordinator.CloseBlockWindow();
+        }
+
+        /// <summary>
+        /// Publishes the rail keys that act on dialogue state rather than on the board: the picked-up unit's
+        /// skill, and the two steps through a pile the reader is open on. Derived every frame from the same
+        /// queries the click path asks, so a button and the gesture it duplicates disagree only if this file
+        /// stops asking the coordinator.
+        /// </summary>
+        void PublishDialogueRail()
+        {
+            if (hud == null)
+            {
+                return;
+            }
+
+            hud.SetRail(BattlefieldHud.RailKey.Activate,
+                selected != null && coordinator.CanPlayerActivateWith(selected));
+
+            // One card in a pile has nowhere to step to, so the pair leaves rather than sitting dimmed.
+            bool browsing = browsed != null && browsed.Length > 1;
+            hud.SetRail(BattlefieldHud.RailKey.PilePrev, browsing);
+            hud.SetRail(BattlefieldHud.RailKey.PileNext, browsing);
+        }
+
         bool IsHandBusy()
         {
-            BattlefieldHud hud = BattlefieldHud.Find();
-            return (hud != null && hud.IsPointerOverControls(Input.mousePosition))
+            // The field first: Find() is a FindObjectsOfType and this runs on every frame a card is held.
+            BattlefieldHud controls = hud != null ? hud : BattlefieldHud.Find();
+            return (controls != null && controls.IsPointerOverControls(Input.mousePosition))
                 || (hand != null && hand.IsPointerOverHand());
         }
 
@@ -303,21 +425,9 @@ namespace Overlink.Match
 
             if (coordinator.CanPlayerAttackWith(hit.Card))
             {
-                Pick(hit.Card, coordinator.TargetsForPlayerAttack(hit.Card), PickMode.Attack);
-
-                if (targets.Count == 0)
-                {
-                    coordinator.ShowNotice(coordinator.CanPlayerActivateWith(hit.Card)
-                        ? $"{name} selected. Click the same card to use SKILL, or the opponent's Core to attack."
-                        : $"{name} has nothing to attack. Click the opponent's Core instead.");
-                }
-                else
-                {
-                    coordinator.ShowNotice(coordinator.CanPlayerActivateWith(hit.Card)
-                        ? $"{name} selected. Click the same card for SKILL, or a red socket to attack."
-                        : $"{name} is selected. Click a red socket, or the opponent's Core, to attack.");
-                }
-
+                Pick(hit.Card, coordinator.TargetsForPlayerAttack(hit.Card), PickMode.Attack,
+                    coordinator.RetreatChoicesForPlayer(hit.Card));
+                coordinator.ShowNotice(AttackPickNotice(name, hit.Card));
                 return true;
             }
 
@@ -326,9 +436,10 @@ namespace Overlink.Match
 
         /// <summary>
         /// The single place a unit is picked up: state first, marks second, so the lit sockets are always
-        /// derived from the same target list the next click will be judged against.
+        /// derived from the same lists the next click will be judged against.
         /// </summary>
-        void Pick(CardInstance card, List<CardInstance> list, PickMode forMode)
+        void Pick(CardInstance card, List<CardInstance> list, PickMode forMode,
+            List<CardInstance> retreatChoices = null)
         {
             selected = card;
             mode = forMode;
@@ -338,16 +449,53 @@ namespace Overlink.Match
                 targets.AddRange(list);
             }
 
+            retreats.Clear();
+            if (retreatChoices != null)
+            {
+                retreats.AddRange(retreatChoices);
+            }
+
             ClearBrowse();
 
             if (forMode == PickMode.Attack)
             {
-                presenter.ShowAttack(card, targets, true);
+                presenter.ShowAttack(card, targets, true, retreats);
             }
             else
             {
                 presenter.ShowBlockPick(card, targets);
             }
+        }
+
+        /// <summary>
+        /// One line saying what the picked-up unit can still be made to do. Built from clauses rather than
+        /// written out per case, because the three are independent - a unit can have attack targets, a printed
+        /// skill, somewhere to retreat, and any subset of that list, and four hardcoded sentences get one of
+        /// them wrong the first time a card has a skill and nowhere to retreat.
+        /// <para>
+        /// The retreat clause carries its price, because the price is the reason anybody declines it, and it
+        /// appears at all only when the list is non-empty - which <see cref="CombatLegality.RetreatChoices"/>
+        /// already filtered on affordability. A blue socket is therefore never a promise the NP balance cannot
+        /// keep, which is the same reason the rail dims an unaffordable REROLL instead of lying about it.
+        /// </para>
+        /// </summary>
+        string AttackPickNotice(string name, CardInstance card)
+        {
+            string moves = targets.Count > 0
+                ? $"{name} is selected. Click a red socket, or the opponent's Core, to attack."
+                : $"{name} has nothing to attack. Click the opponent's Core instead.";
+
+            if (retreats.Count > 0)
+            {
+                moves += $" Click a blue socket to trade places for {MatchState.RetreatNP} NP.";
+            }
+
+            if (coordinator.CanPlayerActivateWith(card))
+            {
+                moves += " Click the same card to use its SKILL.";
+            }
+
+            return moves;
         }
 
         bool TryCommitAttack(BoardHit hit)
@@ -368,6 +516,19 @@ namespace Overlink.Match
             {
                 ClearSelection();
                 coordinator.TryPlayerAttackWith(attacker, null);
+                return true;
+            }
+
+            // A blue socket is a trade rather than a strike: the picked-up unit goes back to the Bench and the
+            // bench unit takes its place, both of them exhausted. It is the same gesture as an attack and a
+            // different command, which is why it is judged against its own list rather than folded into
+            // targets - the two lists point at opposite halves of the table and only one of them is legal to
+            // hit, so merging them would need a rule to unmerge them again on the way out.
+            if (hit.Card != null && retreats.Contains(hit.Card))
+            {
+                CardInstance outgoing = attacker;
+                ClearSelection();
+                coordinator.TryPlayerRetreatWith(outgoing, hit.Card);
                 return true;
             }
 
@@ -487,15 +648,20 @@ namespace Overlink.Match
 
         void BrowsePile()
         {
-            if (browsed == null || browsed.Length <= 1)
-            {
-                return;
-            }
-
             int step = 0;
             if (Input.GetKeyDown(pilePrevKey)) step = -1;
             if (Input.GetKeyDown(pileNextKey)) step = 1;
-            if (step == 0)
+            StepBrowse(step);
+        }
+
+        /// <summary>
+        /// Steps the reader through the pile it is open on. The body of the arrow keys and of the rail's two
+        /// steps alike. It clamps rather than wrapping, because the ends of a pile are real ends: the oldest
+        /// card spent is as far back in this match as anybody knows anything.
+        /// </summary>
+        void StepBrowse(int step)
+        {
+            if (browsed == null || browsed.Length <= 1 || step == 0)
             {
                 return;
             }
@@ -586,6 +752,7 @@ namespace Overlink.Match
             selected = null;
             mode = PickMode.None;
             targets.Clear();
+            retreats.Clear();
             if (presenter != null)
             {
                 presenter.ClearMarks();

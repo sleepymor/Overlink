@@ -113,14 +113,105 @@ namespace Overlink.Match
         public float hintFontSize = 17f;
         public Color hintColor = new Color(0.60f, 0.68f, 0.80f);
 
-        Canvas canvas;
-        Button endPhaseButton;
-        TextMeshProUGUI endPhaseLabel;
+        [Header("Button rail")]
+        [Tooltip("The rail stands in the two corridors between a near Node plate and the Core Bench rank - the " +
+                 "only places in the frame that hold no socket, no pile, no resting fan and no reader card at " +
+                 "once. Measured at 1280x720 against the shipped layout rather than nudged by eye: the fan owns " +
+                 "y 0..218, the near plates end at y 405, the Core Bench row starts at x 513 and the reader card " +
+                 "at x 473, which leaves x 365..473 and its mirror. x is the offset from the centre line, " +
+                 "mirrored onto the two bands; y is the bottom of slot 0 above the screen's bottom edge.")]
+        public Vector2 railBandOffset = new Vector2(331f, 340f);
+        public Vector2 railButtonSize = new Vector2(162f, 36f);
 
-        // The two opening-lineup buttons. They share the rail with EndPhaseButton and are never on screen
-        // alongside it: setup owns the screen until it closes, and after that the offer is gone.
-        Button setupRerollButton, setupConfirmButton;
-        TextMeshProUGUI setupRerollLabel, setupConfirmLabel;
+        [Tooltip("Slot pitch, so a strip of six buttons spans 246 of the 280 reference pixels the corridor has.")]
+        public float railPitch = 42f;
+
+        Canvas canvas;
+
+        /// <summary>
+        /// Every button on the rail, keyed by what it asks of the match rather than by where it sits.
+        /// <para>
+        /// The keys are the contract the two publishers write against: <see cref="GameCoordinator"/> owns the
+        /// ones that fire a command on the board (the swings, the turn flow) and <see cref="BattlefieldInput"/>
+        /// owns the ones that act on dialogue state (the picked-up unit's skill, the pile being read, letting
+        /// the opponent's attacks land). Neither publisher remembers anything: both derive each key from the
+        /// state every frame, so a button that disagrees with the rules needs a stale frame, not a missed event.
+        /// </para>
+        /// </summary>
+        public enum RailKey
+        {
+            /// <summary>P: pass the phase. Shares its slot with DoneBlocking and Confirm, and the three are
+            /// never wanted at once - setup has no phase to pass, and the block window only opens on the
+            /// opponent's turn, when there is nothing to pass.</summary>
+            EndPhase,
+
+            /// <summary>Enter, during the opponent's Combat step: let their attacks land rather than wait out
+            /// the window. The one button that is loud on purpose, because blocking is the only answer a player
+            /// can give and the window is the only moment they can give it.</summary>
+            DoneBlocking,
+
+            /// <summary>1: swing with whoever stands in the Core Active.</summary>
+            SwingCore,
+            SwingNode1,
+            SwingNode2,
+            SwingNode3,
+            SwingNode4,
+
+            /// <summary>The picked-up unit's printed Activate skill.</summary>
+            Activate,
+
+            /// <summary>E: end the turn.</summary>
+            EndTurn,
+
+            /// <summary>Q: concede (GDD 2.1.8). Legal on either turn, so it is the one key the coordinator
+            /// never gates on the active player.</summary>
+            Concede,
+
+            /// <summary>L: write the whole match state into the log.</summary>
+            State,
+
+            /// <summary>Left arrow: the older card in the pile the reader is showing.</summary>
+            PilePrev,
+
+            /// <summary>Right arrow: the newer card back.</summary>
+            PileNext,
+
+            /// <summary>Setup: pay NP for a whole new offer.</summary>
+            Reroll,
+
+            /// <summary>Setup: field the nomination and open the match.</summary>
+            Confirm,
+
+            Count
+        }
+
+        /// <summary>Which of the two rail corridors a button stands in.</summary>
+        enum RailBand
+        {
+            /// <summary>The tactical strip, left of the Core battlefield: what the five battlefields may do.</summary>
+            Left,
+
+            /// <summary>The flow strip, right of it: what the turn itself may do.</summary>
+            Right
+        }
+
+        /// <summary>
+        /// One rail button and the last state published to it. Publishing runs every frame and the board
+        /// repaints sixty times a second, so every write is guarded by a comparison here rather than by the
+        /// caller remembering: SetActive rebuilds the canvas batch, a label write dirties a text mesh, and
+        /// neither is free.
+        /// </summary>
+        sealed class RailSlot
+        {
+            public GameObject Object;
+            public Button Button;
+            public TextMeshProUGUI Label;
+            public bool Visible = true;
+            public bool Enabled = true;
+            public string Text;
+        }
+
+        readonly RailSlot[] rail = new RailSlot[(int)RailKey.Count];
 
         // Every button on the rail, cached because the pointer test walks it on every frame a card is held and
         // a GetComponentsInChildren there would allocate. Toggling a button's availability does not invalidate
@@ -150,6 +241,14 @@ namespace Overlink.Match
 
         /// <summary>Raised by the setup rail's CONFIRM button, whether the lineup is full or partly fielded.</summary>
         public event Action ConfirmLineupRequested;
+
+        /// <summary>
+        /// Raised by every other rail button, naming which. The three above predate it and keep their own
+        /// signatures because they read as rules at the call site rather than as coordinates on a strip; this is
+        /// the one the two consumers of the rail share, and each of them switches on the keys it owns and ignores
+        /// the rest. A button that fires this does not know or care who answers it.
+        /// </summary>
+        public event Action<RailKey> RailPressed;
 
         // Serialized rather than plain private: the scene ships this object already built, and a reference
         // that is not serialized arrives null from disk. That would make every Ensure() call rewrite the
@@ -304,7 +403,7 @@ namespace Overlink.Match
 
         void EnsurePhaseControls()
         {
-            if (endPhaseButton != null) return;
+            if (rail[(int)RailKey.EndPhase] != null) return;
 
             Transform existing = transform.Find("PhaseControls");
             GameObject root = existing != null ? existing.gameObject
@@ -315,24 +414,75 @@ namespace Overlink.Match
             nestedCanvas.overrideSorting = true;
             nestedCanvas.sortingOrder = 11;
 
-            endPhaseButton = EnsureRailButton(root.transform, "EndPhaseButton",
-                new Vector2(0f, 175f), new Vector2(210f, 54f),
-                new Color(0.18f, 0.40f, 0.60f, 0.96f), 25f, "END PHASE",
-                out endPhaseLabel, () => EndPhaseRequested?.Invoke());
+            // Stretched to the parent, and the one line in the rail that nothing on screen would have revealed
+            // as missing. A root overlay canvas is resized to the viewport by Unity and ignores the size it was
+            // serialized with - which is why the HUD root and every slab hanging off it land where their anchors
+            // say. A NESTED canvas is not: it keeps its own rect, and a freshly constructed RectTransform is a
+            // 100x100 box at the centre. Every button below is anchored to (0.5, 0), the bottom of its parent,
+            // so without this the whole rail stands 490 reference pixels higher than its slot numbers mean - off
+            // the top of a 1080 frame, invisible in a build and invisible to a screenshot tool that cannot
+            // capture an overlay canvas in the first place.
+            var rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
 
-            // Confirm takes the same slot EndPhase lives in, because the two are never wanted at once: while
-            // setup is open there is no phase to pass, and once it closes there is no lineup left to confirm.
-            setupConfirmButton = EnsureRailButton(root.transform, "ConfirmLineupButton",
-                new Vector2(0f, 175f), new Vector2(300f, 54f),
-                new Color(0.20f, 0.52f, 0.34f, 0.97f), 25f, "CONFIRM LINEUP",
-                out setupConfirmLabel, () => ConfirmLineupRequested?.Invoke());
+            // ---- Right band: the turn's own flow. Slot 0 has three tenants and never more than one at a time -
+            // CONFIRM and REROLL while setup is open, END PHASE on the player's own turn, DONE BLOCKING while
+            // answering the opponent's - because each is the loudest available action at its moment.
+            EnsureRail(RailKey.EndPhase, "EndPhaseButton", RailBand.Right, 0,
+                new Color(0.18f, 0.40f, 0.60f, 0.96f), 18f, "END PHASE", () => EndPhaseRequested?.Invoke());
+            EnsureRail(RailKey.DoneBlocking, "DoneBlockingButton", RailBand.Right, 0,
+                new Color(0.70f, 0.36f, 0.10f, 0.98f), 17f, "DONE BLOCKING",
+                () => RailPressed?.Invoke(RailKey.DoneBlocking));
+            EnsureRail(RailKey.Confirm, "ConfirmLineupButton", RailBand.Right, 0,
+                new Color(0.20f, 0.52f, 0.34f, 0.97f), 17f, "CONFIRM LINEUP",
+                () => ConfirmLineupRequested?.Invoke());
+            EnsureRail(RailKey.Reroll, "RerollLineupButton", RailBand.Right, 1,
+                new Color(0.34f, 0.30f, 0.52f, 0.96f), 16f, "REROLL - 2 NP",
+                () => RerollLineupRequested?.Invoke());
+            EnsureRail(RailKey.EndTurn, "EndTurnButton", RailBand.Right, 2,
+                new Color(0.24f, 0.29f, 0.38f, 0.95f), 17f, "END TURN",
+                () => RailPressed?.Invoke(RailKey.EndTurn));
+            EnsureRail(RailKey.State, "StateButton", RailBand.Right, 3,
+                new Color(0.19f, 0.21f, 0.27f, 0.92f), 16f, "MATCH STATE",
+                () => RailPressed?.Invoke(RailKey.State));
 
-            // Reroll sits above it and lower-profile: it is the paid alternative to the primary action, and the
-            // price belongs on the button that charges it because the price escalates with every use.
-            setupRerollButton = EnsureRailButton(root.transform, "RerollLineupButton",
-                new Vector2(0f, 243f), new Vector2(300f, 46f),
-                new Color(0.34f, 0.30f, 0.52f, 0.96f), 22f, "REROLL - 2 NP",
-                out setupRerollLabel, () => RerollLineupRequested?.Invoke());
+            // Concede sits highest in the strip, furthest from every other button and from the board, because it
+            // is the only one here that ends the match instead of advancing it.
+            EnsureRail(RailKey.Concede, "ConcedeButton", RailBand.Right, 4,
+                new Color(0.33f, 0.15f, 0.17f, 0.92f), 16f, "CONCEDE",
+                () => RailPressed?.Invoke(RailKey.Concede));
+
+            // ---- The two pile steps share slot 5 as a pair of half-width keys, because they are one control
+            // (leafing through a pile) and the reader they serve is the tallest thing on screen.
+            Vector2 arrowSize = new Vector2((railButtonSize.x - 6f) * 0.5f, railButtonSize.y);
+            EnsureRail(RailKey.PilePrev, "PilePrevButton", RailBand.Right, 5,
+                new Color(0.21f, 0.25f, 0.33f, 0.94f), 16f, "\u25c4",
+                () => RailPressed?.Invoke(RailKey.PilePrev), arrowSize, -(arrowSize.x + 6f) * 0.5f);
+            EnsureRail(RailKey.PileNext, "PileNextButton", RailBand.Right, 5,
+                new Color(0.21f, 0.25f, 0.33f, 0.94f), 16f, "\u25ba",
+                () => RailPressed?.Invoke(RailKey.PileNext), arrowSize, (arrowSize.x + 6f) * 0.5f);
+
+            // ---- Left band: the five battlefields in key order, so the strip reads as the same list the number
+            // keys fire. A swing button declares the attack the coordinator would choose for that socket, which
+            // is the coarse version of clicking a unit and then a socket - it is here because 1-5 are here, not
+            // because it is a better way to fight.
+            Color swing = new Color(0.46f, 0.19f, 0.22f, 0.95f);
+            EnsureRail(RailKey.SwingCore, "SwingCoreButton", RailBand.Left, 0,
+                swing, 17f, "SWING CORE", () => RailPressed?.Invoke(RailKey.SwingCore));
+            EnsureRail(RailKey.SwingNode1, "SwingNode1Button", RailBand.Left, 1,
+                swing, 17f, "SWING NODE 1", () => RailPressed?.Invoke(RailKey.SwingNode1));
+            EnsureRail(RailKey.SwingNode2, "SwingNode2Button", RailBand.Left, 2,
+                swing, 17f, "SWING NODE 2", () => RailPressed?.Invoke(RailKey.SwingNode2));
+            EnsureRail(RailKey.SwingNode3, "SwingNode3Button", RailBand.Left, 3,
+                swing, 17f, "SWING NODE 3", () => RailPressed?.Invoke(RailKey.SwingNode3));
+            EnsureRail(RailKey.SwingNode4, "SwingNode4Button", RailBand.Left, 4,
+                swing, 17f, "SWING NODE 4", () => RailPressed?.Invoke(RailKey.SwingNode4));
+            EnsureRail(RailKey.Activate, "ActivateButton", RailBand.Left, 5,
+                new Color(0.50f, 0.38f, 0.15f, 0.96f), 16f, "ACTIVATE SKILL",
+                () => RailPressed?.Invoke(RailKey.Activate));
 
             railButtons = root.transform.GetComponentsInChildren<Button>(true);
 
@@ -340,34 +490,45 @@ namespace Overlink.Match
             {
                 new GameObject("Battlefield EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             }
-            SetEndPhaseAvailable(false);
-            SetSetupBar(false, "REROLL - 2 NP", false, "CONFIRM LINEUP");
+
+            // Nothing is on screen until a publisher puts it there, so a rail with no match behind it is blank
+            // rather than a wall of dim buttons. Both publishers run every frame and SetRail dedupes, so this
+            // also self-heals after a domain reload wipes the store.
+            HideRail();
         }
 
         /// <summary>
-        /// Finds or creates one rail button with its centred label and wires it to <paramref name="onClick"/>.
+        /// Finds or creates one rail button in its corridor slot and registers it under its key.
         /// <para>
         /// The find-by-name half is what keeps this scene the tuning surface: a button somebody added to the
         /// <c>PhaseControls</c> canvas in the editor gets bound rather than duplicated. Layout, fill and text
-        /// stay code-owned, exactly as they were for the single button this replaced — the scene authors *that
-        /// an object exists and is called this*, not where it sits, so a hand-nudged transform is rewritten on
-        /// the next build the same way EndPhaseButton's always was.
+        /// stay code-owned — the scene authors <em>that an object exists and is called this</em>, not where it
+        /// sits, so a hand-nudged transform is rewritten on the next build the same way EndPhaseButton's
+        /// always was.
+        /// </para>
+        /// <para>
+        /// Position is derived from the band and the slot rather than written per button, because the corridors
+        /// are 280 reference pixels tall and twelve buttons have to share two of them without covering a socket:
+        /// reorder the rail by changing a slot number and the strip re-stacks itself inside the gap.
         /// </para>
         /// </summary>
-        Button EnsureRailButton(Transform parent, string name, Vector2 position, Vector2 size,
-            Color fill, float fontSize, string text, out TextMeshProUGUI label, Action onClick)
+        void EnsureRail(RailKey key, string objectName, RailBand band, int slot, Color fill, float fontSize,
+            string text, Action onClick, Vector2? size = null, float xNudge = 0f)
         {
-            Transform found = parent.Find(name);
+            Transform parent = transform.Find("PhaseControls");
+            Transform found = parent.Find(objectName);
             GameObject buttonObject = found != null ? found.gameObject
-                : new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+                : new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button));
             if (found == null) buttonObject.transform.SetParent(parent, false);
 
             var rect = buttonObject.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0f);
             rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = position;
-            rect.sizeDelta = size;
+            rect.sizeDelta = size ?? railButtonSize;
+            rect.anchoredPosition = new Vector2(
+                (band == RailBand.Left ? -railBandOffset.x : railBandOffset.x) + xNudge,
+                railBandOffset.y + slot * railPitch);
             buttonObject.GetComponent<Image>().color = fill;
 
             Button button = buttonObject.GetComponent<Button>();
@@ -383,19 +544,73 @@ namespace Overlink.Match
             labelRect.offsetMin = Vector2.zero;
             labelRect.offsetMax = Vector2.zero;
 
-            label = labelObject.GetComponent<TextMeshProUGUI>();
+            TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
             label.alignment = TextAlignmentOptions.Center;
             label.fontSize = fontSize;
             label.fontStyle = FontStyles.Bold;
             label.raycastTarget = false;
             label.text = text;
-            return button;
+
+            // Seeded from what the objects actually are, not from what we hope they are. The store is a cache of
+            // the last state written, and SetRail writes only on a difference - so seeding a freshly constructed
+            // (therefore active, therefore interactable) button as hidden/disabled plants a permanent "already
+            // off" lie, and the HideRail() that closes the build becomes a no-op comparing cache to cache. That
+            // is how a fifteen-button wall survived a build whose whole point was to show none of them.
+            rail[(int)key] = new RailSlot
+            {
+                Object = buttonObject,
+                Button = button,
+                Label = label,
+                Visible = buttonObject.activeSelf,
+                Enabled = button.interactable,
+                Text = text
+            };
         }
 
-        public void SetEndPhaseAvailable(bool available)
+        /// <summary>
+        /// Publishes one rail button's state, writing only what actually changed. Both publishers derive their
+        /// keys from the match state every frame, so this is the guard that keeps a sixty-hertz derivation from
+        /// becoming a sixty-hertz canvas rebuild.
+        /// </summary>
+        /// <param name="text">Null means leave the words alone, which is how a publisher hides a button it has
+        /// nothing new to say about — writing into a TMP text would blank one that is still, for this frame, on
+        /// screen.</param>
+        public void SetRail(RailKey key, bool visible, bool enabled = true, string text = null)
         {
-            if (endPhaseButton == null) return;
-            endPhaseButton.gameObject.SetActive(available);
+            RailSlot slot = rail[(int)key];
+            if (slot == null) return;
+
+            if (slot.Visible != visible)
+            {
+                slot.Visible = visible;
+                slot.Object.SetActive(visible);
+            }
+
+            if (slot.Enabled != enabled)
+            {
+                slot.Enabled = enabled;
+                slot.Button.interactable = enabled;
+            }
+
+            if (text != null && slot.Text != text)
+            {
+                slot.Text = text;
+                slot.Label.text = text;
+            }
+        }
+
+        /// <summary>
+        /// Takes every rail button off screen at once. Used when the rail is first built, so a HUD with no match
+        /// behind it is blank rather than a wall of dim buttons, and again the moment a match ends, because the
+        /// publishers derive their keys from a state that has stopped changing and would otherwise leave the last
+        /// live frame standing there as an offer.
+        /// </summary>
+        public void HideRail()
+        {
+            for (int i = 0; i < rail.Length; i++)
+            {
+                SetRail((RailKey)i, false, false);
+            }
         }
 
         /// <summary>
@@ -407,15 +622,8 @@ namespace Overlink.Match
         /// </summary>
         public void SetSetupBar(bool visible, string rerollText, bool rerollAffordable, string confirmText)
         {
-            if (setupRerollButton == null || setupConfirmButton == null) return;
-            setupRerollButton.gameObject.SetActive(visible);
-            setupConfirmButton.gameObject.SetActive(visible);
-            setupRerollButton.interactable = rerollAffordable;
-
-            // A null label means "leave the words alone, I am only hiding the rail", and writing one into a TMP
-            // text would blank a button that is still, for one frame, on screen.
-            if (setupRerollLabel != null && rerollText != null) setupRerollLabel.text = rerollText;
-            if (setupConfirmLabel != null && confirmText != null) setupConfirmLabel.text = confirmText;
+            SetRail(RailKey.Reroll, visible, rerollAffordable, rerollText);
+            SetRail(RailKey.Confirm, visible, true, confirmText);
         }
 
         /// <summary>

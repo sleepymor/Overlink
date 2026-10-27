@@ -482,8 +482,11 @@ the board is pointer-driven (§3.8).
 
 The board is clickable. A player who has never read the key list can click a card to read it, click the discard
 to leaf through it, click a Ready unit and then a socket to attack, and answer the opponent's attacks with
-blocks. The keyboard bindings all still work; the mouse is an addition, and the legend printed on the board
-advertises the mouse first because that is what a new player reaches for.
+blocks. The keyboard bindings all still work; the mouse is an addition. What is not an addition is the *strip of
+buttons* either side of the Core: every key that fires a command now has a clickable equivalent that reads the
+same derived state, so the legend no longer spends its two lines reciting keys the player can see the faces of -
+it prints the gestures no button advertises (the drag, the pick, the read) and the two camera verbs, and says
+nothing about `1`-`5` or `E` because those words are on the buttons.
 
 The responsibility split is the one drop targeting already used, and each part is testable on its own:
 
@@ -510,11 +513,24 @@ is therefore resolution-independent, needs no physics layer setup, and cannot be
 between a tile and its gold rim. `BoardHit.Describe()` turns the result into the words the reader panel shows.
 
 **Marks are derived, never authoritative.** One `PickMark` per tile (None / Selected / AttackTarget / Blocker /
-BlockTarget / CoreTarget), rebuilt from scratch through `ClearMarks()` whenever the selection changes, from the
-same `CombatLegality` queries the click is judged against. Hover is a separate transient sheen applied after
-the marks. Because a mark is a *picture of* a rule and not a rule, the command entry points re-ask the query
-before issuing anything: `TryPlayerAttackWith` and `TryPlayerBlockWith` refuse a stale highlight rather than
-trusting it, which matters because `MatchEngine.ExecuteDeclareAttack` does not check *whose* turn it is.
+BlockTarget / CoreTarget / RetreatTarget), rebuilt from scratch through `ClearMarks()` whenever the selection
+changes, from the same `CombatLegality` queries the click is judged against. Hover is a separate transient sheen applied after
+the marks. Because a mark is a *picture of* a rule and not a rule, the command entry points re-ask the query before issuing anything: `TryPlayerAttackWith`
+and `TryPlayerBlockWith` refuse a stale highlight rather than trusting it, which matters because
+`MatchEngine.ExecuteDeclareAttack` does not check *whose* turn it is. The seven marks stay one field per tile
+because they are disjoint by construction rather than by care: attack and block targets are cards the player
+does not own, retreat targets are Bench cards they do, and no card is in both halves of the table at once.
+
+**An attack pick offers two verbs.** Picking up an Active Unit in Combat is one gesture with two answers, so both
+are lit at once: the enemy sockets it may hit go red, and its own Bench units it may trade places with go blue.
+Retreat is therefore *not* a third `PickMode` - the player does not announce which of the two they mean, they
+pick the unit up and the colour of the socket they click next decides it, which is why `ShowAttack` takes the
+retreat list as its fourth argument rather than a second paint call. Two calls would have allowed a frame that
+lit one and not the other. `CombatLegality.RetreatChoices` filters on affordability itself, so a blue socket is
+never a promise the NP balance cannot keep, and the notice spells the price out (`MatchState.RetreatNP`, one NP)
+because the price is the reason anybody declines. The commit goes through `TryPlayerRetreatWith`, which re-asks
+`CanPlayerRetreatWith` before issuing the command exactly as the attack path does - the mark is a picture, and
+the engine's `RetreatCommand` is the thing that moves the two bodies and exhausts both halves of the exchange.
 
 **The block window.** Blocking is the one move a player gets on the opponent's turn, and `SimpleAI.TakeTurn()`
 used to resolve the whole turn in a single frame, so there was nowhere to ask. The turn is now two calls -
@@ -569,15 +585,52 @@ what makes click-to-un-nominate nearly free. And it must suppress the state suff
 `CompleteSetup` readies everything it fields and waives the delay outright - printing it would advertise a delay
 the lineup explicitly refuses to give.
 
-**The rail is one builder now.** `BattlefieldHud.EnsureRailButton` finds-or-creates a rail button by name and
-wires it, which is the pattern the HUD already used for `EndPhaseButton` and the reason the scene stays the tuning
-surface: an object somebody adds to `PhaseControls` in the editor gets bound rather than duplicated. CONFIRM
-LINEUP shares EndPhase's slot, because the two are never wanted at once, and REROLL sits above it carrying its own
-price - the price escalates by 1 NP per use, and a player who memorised "2 NP" would be wrong on the second click.
-An unaffordable REROLL stays visible and dimmed rather than vanishing, since hiding it reads as a rule that does
-not exist instead of a cost not yet met. `IsPointerOverControls` walks every rail button in one pass over a cached
-array and ignores `interactable`: a dimmed button is still screen space the player is aiming at, and letting a
-card slip through to the socket behind it would nominate something nobody chose.
+**The rail is one builder, and every key has a button on it.** `BattlefieldHud.EnsureRail` finds-or-creates a rail
+button by name and registers it under a `RailKey`, which is the pattern the HUD already used for `EndPhaseButton`
+and the reason the scene stays the tuning surface: an object somebody adds to `PhaseControls` in the editor gets
+bound rather than duplicated. Layout, fill and text stay code-owned - the scene authors *that an object exists and
+is called this*, not where it sits. Position derives from a band and a slot, so reordering the strip is a slot
+number change that re-stacks inside the gap rather than a hunt through a scene file.
+
+The buttons live in the two corridors left by everything else on screen, and the corridors were **measured**
+rather than guessed: an analytic projection of the presenter's own layout constants at 1280×720 (validated by
+reproducing Stage 1's pile numbers) gives the only regions holding no socket, no pile, no fan and no reader card -
+real x 365..473 and x 807..915, y 227..391 - which is 162×36 reference pixels per button, six per band, pitch 42.
+The left band is the tactical strip (the five battlefields in key order, then the picked-up unit's skill); the
+right is the flow strip. Right-band slot 0 has three tenants that are never concurrent - CONFIRM while setup is
+open, END PHASE on the player's own turn, DONE BLOCKING while answering the opponent - because each is the loudest
+available action at its moment, and one slot needs one writer, which is why EndPhase's publication moved out of
+`AdvanceAutomaticPhases` (that method returns early on the opponent's turn, so it used to leave the button standing
+on screen while its own slot was being handed over).
+
+Publishing is **derived, not remembered**: `GameCoordinator.RefreshActionRail` and `BattlefieldInput.
+PublishDialogueRail` both run every frame and `SetRail` writes only on a difference, so a sixty-hertz derivation
+costs nothing until something changes, and a rail with no match behind it self-heals. The split follows the state
+the press acts on, not the object that drew the button: the coordinator answers the keys that fire board commands,
+the input layer answers the four that act on its own dialogue state (blocking done, the picked unit's skill, and
+the two pile steps). `SetSetupBar` is now a thin call over the same store, so the setup pair and the action strip
+cannot drift into disagreeing about who is on screen. `IsPointerOverControls` walks every rail button in one pass
+over a cached array and ignores `interactable`: a dimmed button is still screen space the player is aiming at, and
+letting a card slip through to the socket behind it would nominate something nobody chose. An unaffordable REROLL
+stays visible and dimmed rather than vanishing, since hiding it reads as a rule that does not exist instead of a
+cost not yet met. `HideRail()` takes the whole strip off at build time, so a HUD with no match behind it is blank
+rather than a wall of dim buttons, and again the moment a match ends - `Update` early-returns on `IsMatchOver`, so
+without that the last live frame would stand there as an offer with nothing left to press.
+
+Two defects died in that paragraph, and both were invisible from the desk:
+
+* **A nested canvas is not a root canvas.** `PhaseControls` carries its own `Canvas` for the higher sorting order,
+  and Unity resizes only *root* overlay canvases to the viewport - a nested one keeps its rect, and a freshly
+  constructed `RectTransform` is a 100×100 box at the centre. Every button anchors to `(0.5, 0)`, the bottom of its
+  parent, so the whole rail stood 490 reference pixels higher than its slot numbers meant: off the top of a 1080
+  frame. It is stretched to the parent now. The reason nobody saw it is the reason it had to be checked with the
+  bridge rather than by eye - `camera_screenshot` cannot capture a `ScreenSpaceOverlay` canvas, so the layout was
+  reasoned numerically and the arithmetic was right while the anchor it resolved against was not.
+* **A cache seeded with a wish.** `EnsureRail` registered each new button as `Visible = false`, but a newly
+  constructed `GameObject` is active, so the `HideRail()` that closes the build compared cache to cache and never
+  called `SetActive` - fifteen lit buttons survived a build whose entire purpose was to show none of them. The
+  store is seeded from `activeSelf` and `interactable` now. The two bugs had been masking each other: the rail was
+  lit, and off screen.
 
 While setup is open the legend says so (`SetupHintText`) and the banner drops the turn header, because there is
 no turn to number and the toss is still under the cup. Both are written on the transition rather than every frame:
@@ -591,9 +644,9 @@ illegal move, and `ExecuteDeclareBlock`'s companion hole (it records a block fro
 `MisplacedBlock_IsOfferedByNowhereYetStillRecordedByTheEngine` instead of papered over. Fixing the engine is a
 rules decision for the Core owner, not something the click layer should quietly compensate for.
 
-**Status:** Implemented. `CombatLegalityTests` (20, PlayMode - see §2.1), `PointerTargetingTests` (19),
+**Status:** Implemented. `CombatLegalityTests` (20, PlayMode - see §2.1), `PointerTargetingTests` (21),
 `LineupPickerTests` (9) and the reader half of `BattlefieldHudTests` cover the queries, the hit-test, the marks,
-the panel text and the opening picker. Three of those nineteen run against the **shipped prefab** rather than a
+the panel text and the opening picker. Three of those twenty-one run against the **shipped prefab** rather than a
 procedural board
 (`ShippedPrefab_HoldsEveryTileTheClickLayerNames`, `_EveryTileCentreResolvesThatTile`,
 `_CarriesNoCollidersAnywhere`): they bind `Assets/Prefabs/Battlefield.prefab` under a throwaway presenter and
@@ -617,6 +670,22 @@ checked through the path that *is* invokable: the rail buttons are real `Button`
 clicked for real in play mode, the offer appeared in the fan (five views named after the offered cards), the
 reroll charged 2 NP and rewrote its own label to 3, the unaffordable third reroll was refused with the arithmetic
 on the notice line, and confirming closed setup into a real match.
+
+**What the rail was checked against, live.** The strip is the one part of this stage that the bridge *can* drive
+end to end, because its buttons are real `UnityEngine.UI.Button`s and `event_invoke` fires their `onClick` (it
+bypasses `interactable`, which is a feature here: a dimmed button can be pressed to prove who answers it). One
+play-mode run through `MainMenu` → `Btn_Play` established, in order: the geometry (fifteen buttons at x 629 and
+x 1291 reference, slots y 340/382/424/466/508/550, the pile pair straddling 1291 at 1249/1333 - the two corridors
+to the pixel); setup showing *only* CONFIRM and REROLL; CONFIRM closing setup into a live match with the economics
+the rules predict in the log (Player 6/10 NP on the take, Opponent 4/14 holding all four Nodes); MATCH STATE
+writing a second `=== MATCH STATE ===` block whose phase line had advanced `Upkeep → Main` on its own; END PHASE
+walking Main → Combat; the five swings appearing *only* in Combat and correctly **dimmed** because the seat had
+been confirmed empty; pressing a dimmed swing and getting the `1` key's own refusal back ("Core Active has no
+ready unit to attack with"); END TURN handing the table over; and the whole rail vanishing the moment the AI's
+three unblocked swings ended the match - the `HideRail()`-on-match-over path, with zero console errors throughout.
+What no bridge call can reach is the same list as always: the drag, the retreat click, and the four keys that act
+on dialogue state (blocking done, the picked unit's skill, the two pile steps), all of which need a pointer or a
+populated board. Those are pinned at their seams and verified by inspection.
 
 
 ## 4. Build and scene integrity issues
@@ -678,7 +747,7 @@ intention.
 
 ## 5. Current status by milestone
 
-Measured against the suites in §2.1: EditMode 1326 discovered, 1321 passed.
+Measured against the suites in §2.1: EditMode 1328 discovered, 1323 passed.
 
 | Area | Status |
 |---|---|
@@ -694,14 +763,15 @@ Measured against the suites in §2.1: EditMode 1326 discovered, 1321 passed.
 | Opponent presentation | Implemented, mirrored |
 | Core/Node UI | Implemented, incl. status strips, piles and Node plates |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
-| Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks |
+| Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks; an attack pick offers both red (attack) and blue (retreat) sockets |
+| On-screen control rail | Implemented (§3.8); every keyboard verb has a button, derived per frame, and the strip was driven end to end in play mode through `event_invoke` |
 | Opening lineup picker | Implemented (§3.8); the drag cannot be simulated, so its seams are pinned by tests and the rail was clicked for real in play mode |
 | Net account panel in Gameplay | Suppressed by `NetAccountPanelGuard` (§2) |
 | ScriptableObject card pipeline | Deferred |
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 1326 leaves / 1321 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
+| NUnit execution | Verified: EditMode 1328 leaves / 1323 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

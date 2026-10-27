@@ -605,6 +605,68 @@ namespace Overlink.Match.Tests
         }
 
         [Test]
+        public void ShowAttack_LightsRetreatTargetsApartFromAttackTargets()
+        {
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+            try
+            {
+                MatchState state = NewMatch();
+                CardInstance outgoing = Place(state, PlayerIndex.Player, SlotType.CoreActive, 0, -1, "Outgoing");
+                CardInstance incoming = Place(state, PlayerIndex.Player, SlotType.CoreBench, 1, -1, "Incoming");
+                CardInstance enemy = Place(state, PlayerIndex.Opponent, SlotType.CoreActive, 0, -1, "Mirror");
+                presenter.Repaint(state);
+
+                presenter.ShowAttack(outgoing, new List<CardInstance> { enemy }, true,
+                    new List<CardInstance> { incoming });
+
+                // Retreat is the second thing the same pick offers, so it is lit by the same call: a Bench unit
+                // that cannot be traded for must not glow, and one that can must glow in a colour the red list
+                // does not share. Two separate paint calls would have let a frame light one and not the other.
+                Assert.AreEqual(BattlefieldPresenter.PickMark.RetreatTarget, presenter.TileOf(incoming).Mark,
+                    "The Bench unit a picked-up Active may trade for needs its own light, or the only way to "
+                        + "find out it exists is the keyboard.");
+                Assert.AreEqual(BattlefieldPresenter.PickMark.AttackTarget, presenter.TileOf(enemy).Mark,
+                    "A retreat list must not cool the red sockets it arrives beside.");
+                Assert.AreEqual(BattlefieldPresenter.PickMark.Selected, presenter.TileOf(outgoing).Mark);
+
+                presenter.ClearMarks();
+                Assert.AreEqual(BattlefieldPresenter.PickMark.None, presenter.TileOf(incoming).Mark,
+                    "Blue is cleared with red, or a socket keeps offering a trade nobody picked a unit for.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(presenter.gameObject);
+            }
+        }
+
+        [Test]
+        public void ShowAttack_WithoutARetreatListLightsNoBenchUnit()
+        {
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+            try
+            {
+                MatchState state = NewMatch();
+                CardInstance attacker = Place(state, PlayerIndex.Player, SlotType.CoreActive, 0, -1, "Attacker");
+                CardInstance bench = Place(state, PlayerIndex.Player, SlotType.CoreBench, 0, -1, "Resting");
+                CardInstance enemy = Place(state, PlayerIndex.Opponent, SlotType.CoreActive, 0, -1, "Mirror");
+                presenter.Repaint(state);
+
+                // The omitted argument is the block path and every pre-retreat caller: null has to mean "no blue
+                // sockets", not "every Bench unit". A default that lit the whole back rank would advertise a
+                // trade for each of them and refuse all four on the click.
+                presenter.ShowAttack(attacker, new List<CardInstance> { enemy }, true);
+
+                Assert.AreEqual(BattlefieldPresenter.PickMark.None, presenter.TileOf(bench).Mark);
+                Assert.AreEqual(BattlefieldPresenter.PickMark.AttackTarget, presenter.TileOf(enemy).Mark,
+                    "Omitting the retreat list must not cost the attack list its lights.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(presenter.gameObject);
+            }
+        }
+
+        [Test]
         public void ShowBlocks_LightsTheBlockersAndTheAttacksTheyAnswer()
         {
             BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);

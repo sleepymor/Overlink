@@ -73,9 +73,9 @@ loaded AppDomain's, so it reports a brand-new file as present regardless of what
 domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
 is how "the runner's cache must be stale" gets mistaken for a fact.
 
-## Known state after the opening lineup picker (2026-10-28)
+## Known state after the on-screen control rail (2026-10-28)
 
-EditMode: **1326 leaves, 1321 passed, 4 skipped, 1 failed.** The failure is
+EditMode: **1328 leaves, 1323 passed, 4 skipped, 1 failed.** The failure is
 `UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
 UnitySkills package that counts objects in whichever scene happens to be open. It was red before the Node
 rule landed, it is not ours, and it is the only expected red.
