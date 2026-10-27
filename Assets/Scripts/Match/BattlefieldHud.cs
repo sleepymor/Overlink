@@ -116,6 +116,16 @@ namespace Overlink.Match
         Canvas canvas;
         Button endPhaseButton;
         TextMeshProUGUI endPhaseLabel;
+
+        // The two opening-lineup buttons. They share the rail with EndPhaseButton and are never on screen
+        // alongside it: setup owns the screen until it closes, and after that the offer is gone.
+        Button setupRerollButton, setupConfirmButton;
+        TextMeshProUGUI setupRerollLabel, setupConfirmLabel;
+
+        // Every button on the rail, cached because the pointer test walks it on every frame a card is held and
+        // a GetComponentsInChildren there would allocate. Toggling a button's availability does not invalidate
+        // the cache, so it is rebuilt only when the rail is built.
+        Button[] railButtons = new Button[0];
         Coroutine readerMotion;
 
         [SerializeField] RectTransform banner;
@@ -134,6 +144,12 @@ namespace Overlink.Match
         [SerializeField] TextMeshProUGUI resultText;
 
         public event Action EndPhaseRequested;
+
+        /// <summary>Raised by the setup rail's REROLL button. The coordinator owns the price and the NP check.</summary>
+        public event Action RerollLineupRequested;
+
+        /// <summary>Raised by the setup rail's CONFIRM button, whether the lineup is full or partly fielded.</summary>
+        public event Action ConfirmLineupRequested;
 
         // Serialized rather than plain private: the scene ships this object already built, and a reference
         // that is not serialized arrives null from disk. That would make every Ensure() call rewrite the
@@ -299,41 +315,81 @@ namespace Overlink.Match
             nestedCanvas.overrideSorting = true;
             nestedCanvas.sortingOrder = 11;
 
-            Transform buttonTransform = root.transform.Find("EndPhaseButton");
-            GameObject buttonObject = buttonTransform != null ? buttonTransform.gameObject
-                : new GameObject("EndPhaseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            if (buttonTransform == null) buttonObject.transform.SetParent(root.transform, false);
-            var rect = buttonObject.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = new Vector2(0f, 175f);
-            rect.sizeDelta = new Vector2(210f, 54f);
-            buttonObject.GetComponent<Image>().color = new Color(0.18f, 0.40f, 0.60f, 0.96f);
-            endPhaseButton = buttonObject.GetComponent<Button>();
-            endPhaseButton.onClick.AddListener(() => EndPhaseRequested?.Invoke());
+            endPhaseButton = EnsureRailButton(root.transform, "EndPhaseButton",
+                new Vector2(0f, 175f), new Vector2(210f, 54f),
+                new Color(0.18f, 0.40f, 0.60f, 0.96f), 25f, "END PHASE",
+                out endPhaseLabel, () => EndPhaseRequested?.Invoke());
 
-            Transform labelTransform = rect.Find("Label");
-            GameObject label = labelTransform != null ? labelTransform.gameObject
-                : new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-            if (labelTransform == null) label.transform.SetParent(rect, false);
-            var labelRect = label.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
-            endPhaseLabel = label.GetComponent<TextMeshProUGUI>();
-            endPhaseLabel.alignment = TextAlignmentOptions.Center;
-            endPhaseLabel.fontSize = 25f;
-            endPhaseLabel.fontStyle = FontStyles.Bold;
-            endPhaseLabel.raycastTarget = false;
-            endPhaseLabel.text = "END PHASE";
+            // Confirm takes the same slot EndPhase lives in, because the two are never wanted at once: while
+            // setup is open there is no phase to pass, and once it closes there is no lineup left to confirm.
+            setupConfirmButton = EnsureRailButton(root.transform, "ConfirmLineupButton",
+                new Vector2(0f, 175f), new Vector2(300f, 54f),
+                new Color(0.20f, 0.52f, 0.34f, 0.97f), 25f, "CONFIRM LINEUP",
+                out setupConfirmLabel, () => ConfirmLineupRequested?.Invoke());
+
+            // Reroll sits above it and lower-profile: it is the paid alternative to the primary action, and the
+            // price belongs on the button that charges it because the price escalates with every use.
+            setupRerollButton = EnsureRailButton(root.transform, "RerollLineupButton",
+                new Vector2(0f, 243f), new Vector2(300f, 46f),
+                new Color(0.34f, 0.30f, 0.52f, 0.96f), 22f, "REROLL - 2 NP",
+                out setupRerollLabel, () => RerollLineupRequested?.Invoke());
+
+            railButtons = root.transform.GetComponentsInChildren<Button>(true);
 
             if (EventSystem.current == null)
             {
                 new GameObject("Battlefield EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             }
             SetEndPhaseAvailable(false);
+            SetSetupBar(false, "REROLL - 2 NP", false, "CONFIRM LINEUP");
+        }
+
+        /// <summary>
+        /// Finds or creates one rail button with its centred label and wires it to <paramref name="onClick"/>.
+        /// <para>
+        /// The find-by-name half is what keeps this scene the tuning surface: a button somebody added to the
+        /// <c>PhaseControls</c> canvas in the editor gets bound rather than duplicated. Layout, fill and text
+        /// stay code-owned, exactly as they were for the single button this replaced — the scene authors *that
+        /// an object exists and is called this*, not where it sits, so a hand-nudged transform is rewritten on
+        /// the next build the same way EndPhaseButton's always was.
+        /// </para>
+        /// </summary>
+        Button EnsureRailButton(Transform parent, string name, Vector2 position, Vector2 size,
+            Color fill, float fontSize, string text, out TextMeshProUGUI label, Action onClick)
+        {
+            Transform found = parent.Find(name);
+            GameObject buttonObject = found != null ? found.gameObject
+                : new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            if (found == null) buttonObject.transform.SetParent(parent, false);
+
+            var rect = buttonObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            buttonObject.GetComponent<Image>().color = fill;
+
+            Button button = buttonObject.GetComponent<Button>();
+            button.onClick.AddListener(() => onClick?.Invoke());
+
+            Transform labelTransform = rect.Find("Label");
+            GameObject labelObject = labelTransform != null ? labelTransform.gameObject
+                : new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            if (labelTransform == null) labelObject.transform.SetParent(rect, false);
+            var labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+
+            label = labelObject.GetComponent<TextMeshProUGUI>();
+            label.alignment = TextAlignmentOptions.Center;
+            label.fontSize = fontSize;
+            label.fontStyle = FontStyles.Bold;
+            label.raycastTarget = false;
+            label.text = text;
+            return button;
         }
 
         public void SetEndPhaseAvailable(bool available)
@@ -342,12 +398,51 @@ namespace Overlink.Match
             endPhaseButton.gameObject.SetActive(available);
         }
 
-        /// <summary>Only the small action button, not the log or reader, consumes board/hand pointer input.</summary>
+        /// <summary>
+        /// Shows or hides the setup rail and writes what its two buttons say. Confirm carries the count of
+        /// sockets the player has filled, because a partial lineup is legal and this is the only place that can
+        /// tell them so; Reroll carries its own price, because the price escalates and a player who memorised
+        /// "2 NP" would be wrong on the second click. An unaffordable Reroll stays visible and dimmed rather
+        /// than vanishing: hiding it reads as a rule that does not exist instead of a cost not yet met.
+        /// </summary>
+        public void SetSetupBar(bool visible, string rerollText, bool rerollAffordable, string confirmText)
+        {
+            if (setupRerollButton == null || setupConfirmButton == null) return;
+            setupRerollButton.gameObject.SetActive(visible);
+            setupConfirmButton.gameObject.SetActive(visible);
+            setupRerollButton.interactable = rerollAffordable;
+
+            // A null label means "leave the words alone, I am only hiding the rail", and writing one into a TMP
+            // text would blank a button that is still, for one frame, on screen.
+            if (setupRerollLabel != null && rerollText != null) setupRerollLabel.text = rerollText;
+            if (setupConfirmLabel != null && confirmText != null) setupConfirmLabel.text = confirmText;
+        }
+
+        /// <summary>
+        /// True when the pointer is over any rail button, which is the drag contract's "never start a drag from
+        /// under a button". All of them are walked in one pass, and the walk deliberately ignores whether a
+        /// button is interactable: a dimmed Reroll still occupies screen space the player is aiming at, and
+        /// letting a card slip through to the socket behind it would nominate something nobody chose.
+        /// <para>
+        /// The log, the reader and the status slabs are absent on purpose — that canvas carries no
+        /// <c>GraphicRaycaster</c> and nothing on it is a button, so none of it swallows a mouse-down aimed at
+        /// the board.
+        /// </para>
+        /// </summary>
         public bool IsPointerOverControls(Vector2 screenPosition)
         {
-            return endPhaseButton != null && endPhaseButton.gameObject.activeInHierarchy
-                && RectTransformUtility.RectangleContainsScreenPoint(
-                    endPhaseButton.GetComponent<RectTransform>(), screenPosition);
+            Button[] buttons = railButtons;
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                Button button = buttons[i];
+                if (button == null || !button.gameObject.activeInHierarchy) continue;
+                if (RectTransformUtility.RectangleContainsScreenPoint(
+                        button.GetComponent<RectTransform>(), screenPosition))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>

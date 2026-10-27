@@ -83,6 +83,10 @@ namespace Overlink.Match
             {
                 battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
                 battlefieldHud.EndPhaseRequested += EndPlayerPhase;
+                battlefieldHud.RerollLineupRequested -= RerollLineup;
+                battlefieldHud.RerollLineupRequested += RerollLineup;
+                battlefieldHud.ConfirmLineupRequested -= SubmitLineup;
+                battlefieldHud.ConfirmLineupRequested += SubmitLineup;
             }
         }
 
@@ -117,19 +121,28 @@ namespace Overlink.Match
             handController.playResolver = TryPlayFromUI;
             handController.playResolverWithSlot = TryPlayFromUISlot;
             handController.dropTargetResolver = ResolveDropTarget;
+            handController.nominateResolver = NominateLineupCard;
             handController.dropTargetCleared = ClearDropTarget;
             handController.pointerOverControls = position =>
                 battlefieldHud != null && battlefieldHud.IsPointerOverControls(position);
             handController.CardPlayed -= OnCardPlayedAnimated;
             handController.CardPlayed += OnCardPlayedAnimated;
+            handController.CardNominated -= OnCardNominated;
+            handController.CardNominated += OnCardNominated;
         }
 
         void OnDestroy()
         {
-            if (battlefieldHud != null) battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
+            if (battlefieldHud != null)
+            {
+                battlefieldHud.EndPhaseRequested -= EndPlayerPhase;
+                battlefieldHud.RerollLineupRequested -= RerollLineup;
+                battlefieldHud.ConfirmLineupRequested -= SubmitLineup;
+            }
             if (handController != null)
             {
                 handController.CardPlayed -= OnCardPlayedAnimated;
+                handController.CardNominated -= OnCardNominated;
             }
         }
 
@@ -230,13 +243,13 @@ namespace Overlink.Match
         /// The wait is written against the match state rather than a flag this class owns, because
         /// <c>CompleteSetup</c> is internal and the engine's confirm path is its only caller: if the state says
         /// the lineup is confirmed, whatever confirmed it did the whole job, including the hands and the first
-        /// Upkeep. Stage 3's drag picker is what is meant to confirm it; until that lands the offer is fielded
-        /// mechanically so the new opening is reachable in the live game at all.
+        /// Upkeep. So this coroutine does not need to know that the picker exists - it publishes the offer and
+        /// then waits for the rules to say setup is over.
         /// </para>
         /// </summary>
         IEnumerator WaitForPlayerLineup()
         {
-            FieldOfferMechanically(PlayerIndex.Player);
+            ShowLineupOffer();
 
             while (matchState != null && matchState.SetupInProgress)
             {
@@ -246,8 +259,9 @@ namespace Overlink.Match
 
         /// <summary>
         /// Fields a seat's whole offer, in the order it was dealt, onto the Active sockets in battlefield order.
-        /// This is the seat with nothing to choose on - the opponent when the AI is switched off - and the
-        /// temporary shape of the player's seat until the drag picker confirms it instead.
+        /// This is for the seat with nothing to choose on - the opponent's, when the AI is switched off - and it
+        /// exists because a seat nobody fills is a setup that never closes and therefore a match that never
+        /// opens. The player's seat never comes through here: they drag their own five.
         /// </summary>
         void FieldOfferMechanically(PlayerIndex who)
         {
@@ -278,15 +292,351 @@ namespace Overlink.Match
         /// </summary>
         void RevealCoinFlip()
         {
-            if (presenter == null || matchState == null || !matchState.CoinFlipped)
+            if (matchState == null || !matchState.CoinFlipped)
             {
                 return;
             }
 
-            presenter.ShowNotice(matchState.FirstPlayer == PlayerIndex.Player
+            ShowNotice(matchState.FirstPlayer == PlayerIndex.Player
                 ? "Coin flip - you take the first turn."
                 : "Coin flip - the opponent takes the first turn, and you open with " +
                   $"+{MatchState.SecondPlayerNPBonus} NP.");
+        }
+
+        // ---- Opening lineup picker -----------------------------------------------------
+        // What the player has chosen before the match opens lives here, and none of it is a rule. The engine
+        // holds no partial nomination: a previewed socket is still an empty socket as far as the battle is
+        // concerned, until ConfirmLineupCommand submits the whole array in one go.
+
+        /// <summary>
+        /// The nomination array: one offered card id per Active socket in battlefield order (the Core rank, then
+        /// each Node's Active rank), and 0 for a socket the player has left empty. It is sized and ordered
+        /// exactly as <see cref="ConfirmLineupCommand"/> reads it back, which is the whole reason the order is
+        /// duplicated here rather than derived per call.
+        /// </summary>
+        private readonly int[] lineupNomination = new int[ConfirmLineupCommand.RequiredLength];
+
+        /// <summary>
+        /// Puts the offer in front of the player: the fan shows the Units they have not nominated yet, the board
+        /// previews the ones they have, and the rail recounts. Called once when setup opens and again after
+        /// every nominate, return or reroll, because all three change what is on show.
+        /// </summary>
+        void ShowLineupOffer()
+        {
+            if (matchState == null)
+            {
+                return;
+            }
+
+            PlayerState player = matchState.Players[0];
+            var shown = new List<CardData>(player.LineupOffer.Count);
+            foreach (CardInstance offer in player.LineupOffer)
+            {
+                if (offer != null && !IsNominated(offer.InstanceId))
+                {
+                    shown.Add(GetOrMakeData(offer));
+                }
+            }
+
+            if (handController != null)
+            {
+                handController.SetHand(shown);
+            }
+
+            if (presenter != null)
+            {
+                // A copy, so the board previews a snapshot the coordinator owns rather than a live array it can
+                // mutate underneath a paint.
+                presenter.SetLineupPreview((int[])lineupNomination.Clone());
+            }
+
+            RefreshSetupBar(player);
+        }
+
+        /// <summary>
+        /// Writes the rail's two setup buttons. Confirm carries the count of fielded sockets because a partial
+        /// lineup is a legal decision rather than a mistake, and Reroll carries its own price because it
+        /// escalates by one NP per use - a player who memorised "2 NP" would be wrong on the second click.
+        /// </summary>
+        void RefreshSetupBar(PlayerState player)
+        {
+            if (battlefieldHud == null)
+            {
+                return;
+            }
+
+            int fielded = 0;
+            for (int i = 0; i < lineupNomination.Length; i++)
+            {
+                if (lineupNomination[i] != 0)
+                {
+                    fielded++;
+                }
+            }
+
+            int cost = matchState.LineupRerollCost(PlayerIndex.Player);
+            battlefieldHud.SetSetupBar(
+                matchState.SetupInProgress && !player.LineupConfirmed,
+                $"REROLL - {cost} NP",
+                player.CurrentNP >= cost,
+                $"CONFIRM LINEUP  {fielded}/{lineupNomination.Length}");
+        }
+
+        bool IsNominated(int instanceId)
+        {
+            for (int i = 0; i < lineupNomination.Length; i++)
+            {
+                if (lineupNomination[i] == instanceId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The nomination index an Active socket carries, in battlefield order: the Core rank first, then each
+        /// Node's Active rank, exactly as <c>MatchEngine.ActiveSlotsInBattlefieldOrder</c> walks them. -1 for
+        /// anything else, which is the picker's way of saying that a Bench, a Protocol or an enemy socket is not
+        /// a place an opening Unit can stand.
+        /// <para>
+        /// Public and static for the same reason <see cref="BattlefieldPresenter.TryParseSlotIdentity"/> is:
+        /// this is the one place where the socket a player dropped onto and the slot the engine will read are
+        /// the same number, and a mismatch there silently fields the lineup one socket to the side. The drag
+        /// that reaches it cannot be driven from a test, so the mapping is tested on its own instead.
+        /// </para>
+        /// </summary>
+        public static int NominationIndexFor(BoardSlot slot)
+        {
+            if (slot == null || !slot.IsActive())
+            {
+                return -1;
+            }
+
+            return slot.Type == SlotType.CoreActive
+                ? slot.Index
+                : Board.CoreActiveSlots + slot.NodeIndex * Board.NodeActiveSlots + slot.Index;
+        }
+
+        /// <summary>
+        /// What a nomination index is called to a player, in the board's own words. The node is derived by the
+        /// same division <see cref="NominationIndexFor"/> multiplies, so the label cannot drift from the socket
+        /// it names if the Actives ever grow past one slot each.
+        /// </summary>
+        static string SocketName(int index)
+        {
+            if (index < Board.CoreActiveSlots)
+            {
+                return "CORE";
+            }
+
+            return $"NODE {(index - Board.CoreActiveSlots) / Board.NodeActiveSlots + 1}";
+        }
+
+        /// <summary>
+        /// The drop gate for a nomination, and the setup half of <see cref="ResolveDropTarget"/>. Any of the
+        /// player's Active sockets is a target - including one already carrying a nomination, because replacing
+        /// what stands there is friendlier than refusing the drop and making the player clear it first.
+        /// </summary>
+        BoardSlot ResolveLineupDropTarget(CardData cardData, Vector3 worldPos)
+        {
+            BoardSlot hit = presenter.FindDropTargetAtScreenByWorld(worldPos);
+            if (hit == null)
+            {
+                return null;
+            }
+
+            PlayerState player = matchState.Players[0];
+            BoardSlot real = player.Board.GetSlot(hit.Type, hit.Index, hit.NodeIndex);
+            CardInstance card = FindOfferCard(player, cardData);
+
+            // IsFree is a guard rather than a rule here: nothing occupies a socket while setup is open, and if
+            // that ever stops being true the picker should refuse it rather than stack two previews on one tile.
+            bool legal = real != null && card != null
+                && real.IsActive()
+                && real.IsFree()
+                && real.CanHost(card.Definition.Type)
+                && !matchState.IsMatchOver();
+
+            if (!legal)
+            {
+                presenter.ClearDropHighlight();
+                return null;
+            }
+
+            return real;
+        }
+
+        /// <summary>
+        /// The fan's nomination gate: records which offered Unit the player dropped onto which Active socket, and
+        /// asks the engine nothing at all - no NP, no placement, no card movement - so a nomination stays
+        /// takeable-back for as long as setup is open.
+        /// <para>
+        /// The repaint deliberately does not happen in this call. The dragged view is still in the fan's own list
+        /// while the resolver is being asked - it retires the view only once this returns true - so rebuilding
+        /// the hand from here would destroy that view as an unwanted one and leave the fan about to destroy it a
+        /// second time. <see cref="OnCardNominated"/> runs after the retirement, which is the first moment a
+        /// rebuild is safe.
+        /// </para>
+        /// </summary>
+        bool NominateLineupCard(CardData cardData, BoardSlot slot)
+        {
+            if (matchState == null || !matchState.SetupInProgress || cardData == null || slot == null)
+            {
+                return false;
+            }
+
+            if (NominationIndexFor(slot) < 0)
+            {
+                return false;
+            }
+
+            CardInstance card = FindOfferCard(matchState.Players[0], cardData);
+            if (card == null)
+            {
+                // The fan is showing a Unit that is no longer offered, which means a reroll landed underneath an
+                // in-flight drag. Dropping that drag is honest; naming a card the deck has taken back is not.
+                return false;
+            }
+
+            lineupNomination[NominationIndexFor(slot)] = card.InstanceId;
+            return true;
+        }
+
+        /// <summary>
+        /// After a nomination lands: the fan closes up over the remaining offer, the board previews what was
+        /// fielded, and the rail recounts. The notice says where the Unit went, because the socket it landed on
+        /// can be behind the card the player is still holding.
+        /// </summary>
+        void OnCardNominated(CardData cardData, BoardSlot slot)
+        {
+            ShowLineupOffer();
+
+            int index = NominationIndexFor(slot);
+            if (index >= 0 && cardData != null)
+            {
+                ShowNotice($"{cardData.title} fielded on {SocketName(index)} - click it to send it back.");
+            }
+        }
+
+        /// <summary>
+        /// Sends a nominated Unit back to the offer. The player asked for it by clicking the preview standing on
+        /// its socket, and a choice that cannot be taken back is not a choice.
+        /// <para>
+        /// The card is the argument rather than the socket, because the front end that saw the click knows which
+        /// card the board is showing and does not know how the nomination array is ordered - that ordering
+        /// belongs to <c>ConfirmLineupCommand</c> and to nothing else.
+        /// </para>
+        /// </summary>
+        public void ReturnLineupNomination(CardInstance card)
+        {
+            if (matchState == null || !matchState.SetupInProgress || card == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < lineupNomination.Length; i++)
+            {
+                if (lineupNomination[i] != card.InstanceId)
+                {
+                    continue;
+                }
+
+                lineupNomination[i] = 0;
+                ShowLineupOffer();
+                ShowNotice($"{card.Definition.Name} is back in the offer.");
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Buys a whole new offer for the escalating price. Every nomination is dropped along with it, because
+        /// the Units it named go back into the deck: a nomination pointing at a card the offer no longer holds
+        /// would be refused on confirm and read as a broken picker rather than as a reroll.
+        /// </summary>
+        public void RerollLineup()
+        {
+            if (matchState == null || matchEngine == null || !matchState.SetupInProgress
+                || matchState.Players[0].LineupConfirmed)
+            {
+                return;
+            }
+
+            PlayerState player = matchState.Players[0];
+            int cost = matchState.LineupRerollCost(PlayerIndex.Player);
+            CommandResult result = matchEngine.ExecuteCommand(new RerollLineupCommand(PlayerIndex.Player));
+            if (result == CommandResult.InsufficientNP)
+            {
+                ShowNotice($"A reroll costs {cost} NP and you have {player.CurrentNP}.");
+                return;
+            }
+
+            if (result != CommandResult.Success)
+            {
+                ShowNotice($"The reroll was refused ({result}).");
+                return;
+            }
+
+            System.Array.Clear(lineupNomination, 0, lineupNomination.Length);
+            ShowLineupOffer();
+        }
+
+        /// <summary>
+        /// Submits the nomination, which is the only thing that closes setup. Everything the opening owes the
+        /// player - the unchosen Units back into the deck, both hands, the readiness waiver, the coin winner's
+        /// first Upkeep - runs inside that one command, so this method's whole job is to hand over the array and
+        /// get out of the way. The boot coroutine is waiting on the state, not on this call.
+        /// </summary>
+        public void SubmitLineup()
+        {
+            if (matchState == null || matchEngine == null || !matchState.SetupInProgress
+                || matchState.Players[0].LineupConfirmed)
+            {
+                return;
+            }
+
+            CommandResult result = matchEngine.ExecuteCommand(new ConfirmLineupCommand(
+                PlayerIndex.Player, (int[])lineupNomination.Clone()));
+            if (result != CommandResult.Success)
+            {
+                ShowNotice($"The lineup was refused ({result}).");
+                return;
+            }
+
+            // Setup has closed, so the preview is now a picture of Units that are on the board, in a hand, or
+            // back in the deck. The real paint takes over from here.
+            if (presenter != null)
+            {
+                presenter.SetLineupPreview(null);
+            }
+
+            if (battlefieldHud != null)
+            {
+                battlefieldHud.SetSetupBar(false, null, false, null);
+            }
+        }
+
+        /// <summary>
+        /// The offered <see cref="CardInstance"/> behind a view's <see cref="CardData"/>, pinned to the exact
+        /// instance the way <see cref="FindHandCard"/> pins a hand card: several copies of one definition can be
+        /// on show, and a stale drag must never nominate a different physical card than the one it lifted.
+        /// </summary>
+        private CardInstance FindOfferCard(PlayerState player, CardData cardData)
+        {
+            if (cardData == null)
+            {
+                return null;
+            }
+
+            if (instanceByData.TryGetValue(cardData, out int instanceId))
+            {
+                return player.LineupOffer.Find(c => c.InstanceId == instanceId);
+            }
+
+            return string.IsNullOrEmpty(cardData.id)
+                ? null
+                : player.LineupOffer.Find(c => c.Definition.Id == cardData.id);
         }
 
         void Update()
@@ -614,6 +964,15 @@ namespace Overlink.Match
             if (matchState.IsMatchOver())
             {
                 return Reject("the match is already over.");
+            }
+
+            // A card released above the play line rather than on a lit socket arrives here with no slot, and
+            // during setup that is the only way a drag can reach the play gate at all: the nomination gate has
+            // already taken every drop that landed on a socket. Say what the opening actually wants.
+            if (matchState.SetupInProgress)
+            {
+                return Reject("the opening is a lineup, not a play - drop a Unit onto one of the five lit " +
+                              "Active sockets, then press CONFIRM LINEUP.");
             }
 
             if (matchState.ActivePlayer != PlayerIndex.Player)
@@ -1167,6 +1526,15 @@ namespace Overlink.Match
             if (presenter == null || matchState == null)
             {
                 return null;
+            }
+
+            // While the opening lineup is being chosen, a drag means "field this Unit on that Active socket"
+            // rather than "play this card now". The two want different targets (the five Actives only), different
+            // legality (no cost, no phase, no turn) and a different consequence (a preview the player can take
+            // back, not a placement), so setup gets its own gate instead of a flag threaded through this one.
+            if (matchState.SetupInProgress)
+            {
+                return ResolveLineupDropTarget(cardData, worldPos);
             }
 
             BoardSlot hit = presenter.FindDropTargetAtScreenByWorld(worldPos);

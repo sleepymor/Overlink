@@ -239,7 +239,20 @@ namespace Overlink.Match
                 return;
             }
 
-            // 1. An in-flight selection gets first refusal, so a lit socket is always actionable from the
+            // 1. Setup owns the click while it is open. The only thing on the table a player can act on is a
+            //    Unit they have nominated and changed their mind about; picking a fighter up, committing a
+            //    block and reading a socket all wait until the lineup is confirmed, because none of them have
+            //    anything to act on yet - no body is on the board and no turn has been taken.
+            if (coordinator.IsSetupInProgress)
+            {
+                if (hit.Card != null)
+                {
+                    coordinator.ReturnLineupNomination(hit.Card);
+                }
+                return;
+            }
+
+            // 2. An in-flight selection gets first refusal, so a lit socket is always actionable from the
             //    keyboard-free path and never silently falls through to "show me this card instead".
             if (selected != null && mode == PickMode.Block && TryCommitBlock(hit))
             {
@@ -251,13 +264,13 @@ namespace Overlink.Match
                 return;
             }
 
-            // 2. Picking a unit up.
+            // 3. Picking a unit up.
             if (TrySelect(hit))
             {
                 return;
             }
 
-            // 3. Nothing to do, so read the table instead.
+            // 4. Nothing to do, so read the table instead.
             Inspect(hit);
         }
 

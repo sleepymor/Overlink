@@ -164,6 +164,13 @@ namespace Overlink.Match
             "\u2190/\u2192 browse   \u2022   ESC cancel   \u2022   P phase (plays need MAIN)   \u2022   E end turn   \u2022   " +
             "Q concede   \u2022   1-5 attack   \u2022   Wheel zoom   \u2022   RMB pan";
 
+        // The legend setup needs, which is a different job from the one above: nothing on the table is a
+        // command during the opening, the only drag that means anything is a nomination, and the two buttons
+        // that close setup are the only interactive things on the screen.
+        const string SetupHintText =
+            "Drag a card onto a lit socket to field it   \u2022   Click a fielded card to send it back\n" +
+            "REROLL replaces all five offers for NP   \u2022   CONFIRM opens the match";
+
         static readonly string[] NodeCaption =
         {
             "NODE 1  +1 ATK",
@@ -205,6 +212,11 @@ namespace Overlink.Match
         static readonly Color BlockerMark = new Color(0.42f, 0.95f, 0.55f);
         static readonly Color BlockTargetMark = new Color(1.00f, 0.72f, 0.30f);
 
+        // A nominated Unit standing on a socket during the lineup setup. Washed toward white and away from the
+        // owner tint it will become, because it is a promise rather than a body: the socket is still empty as
+        // far as the rules are concerned, and a preview painted in full owner colour would read as deployed.
+        static readonly Color PendingMark = new Color(0.80f, 0.86f, 0.98f);
+
         Transform boardRoot;
 
         // Core battlefield tiles.
@@ -225,6 +237,14 @@ namespace Overlink.Match
         Tile deckPile, discardPile;
 
         Tile highlightedTile;
+
+        // The player's opening nomination, published by the coordinator while the lineup setup is open: one
+        // offered card id per Active socket in battlefield order (the Core rank, then each Node's Active), and
+        // 0 for a socket the player has not filled. Front-end state rather than rules on purpose - the engine
+        // holds no partial nomination and ConfirmLineupCommand is the only way to submit one - and serialized
+        // like the coordinator's boot flag, because a hot reload mid-setup otherwise loses the board the
+        // preview of what the player has already chosen.
+        [SerializeField] int[] lineupPreview = new int[0];
 
         void Start()
         {
@@ -266,11 +286,9 @@ namespace Overlink.Match
             }
 
             // The legend is code-owned, not authored: a key binding added to GameCoordinator has to reach the
-            // screen without anybody rebuilding a scene file.
-            if (hud != null)
-            {
-                hud.SetHint(ControlsHintText);
-            }
+            // screen without anybody rebuilding a scene file. Refresh swaps it for the setup legend while the
+            // opening lineup is being chosen.
+            SetHint(ControlsHintText);
         }
 
         void LateUpdate()
@@ -1762,6 +1780,7 @@ namespace Overlink.Match
         const float NoticeSeconds = 4f;
 
         float noticeUntil;
+        bool hintShowsSetup;
         int deployPulseCardId = -1;
         float deployPulseUntil;
 
@@ -1774,6 +1793,22 @@ namespace Overlink.Match
         {
             SetNotice(message);
             noticeUntil = Time.unscaledTime + NoticeSeconds;
+        }
+
+        /// <summary>
+        /// Publishes the player's opening-lineup nomination so the board can preview it: an offered card id per
+        /// Active socket in battlefield order, 0 for a socket the player has left empty. Passing null or an empty
+        /// array clears the preview, which is what the coordinator does the moment setup closes - the offered
+        /// cards are in the deck, in a hand or on the board by then, and a preview of them would be a duplicate
+        /// of whatever the real paint puts there.
+        /// <para>
+        /// The board never asks the engine what the player nominated, because no such state exists in the engine:
+        /// a nomination is a front-end promise until <c>ConfirmLineupCommand</c> submits it.
+        /// </para>
+        /// </summary>
+        public void SetLineupPreview(int[] instanceIdsByActiveSocket)
+        {
+            lineupPreview = instanceIdsByActiveSocket ?? new int[0];
         }
 
         /// <summary>
@@ -1835,8 +1870,26 @@ namespace Overlink.Match
             MatchEngine engine = coordinator != null ? coordinator.GetMatchEngine() : null;
             bool over = state.IsMatchOver();
 
-            string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
-            SetBanner($"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}");
+            // The legend is rewritten on the transition only, not every frame: the board repaints sixty times a
+            // second for a line that changes once per match, and a text setter dirties its mesh on a write
+            // whether or not the string changed.
+            if (state.SetupInProgress != hintShowsSetup)
+            {
+                hintShowsSetup = state.SetupInProgress;
+                SetHint(hintShowsSetup ? SetupHintText : ControlsHintText);
+            }
+
+            if (hintShowsSetup)
+            {
+                // There is no turn worth numbering and no active player worth naming while setup is open, and
+                // the toss is still under the cup, so the header says what the player is actually doing instead.
+                SetBanner("LINEUP SETUP   \u2022   FIELD YOUR OPENING FIVE");
+            }
+            else
+            {
+                string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
+                SetBanner($"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}");
+            }
 
             PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench,
                 opponentProtocol, opponentCorePlate);
@@ -1881,6 +1934,11 @@ namespace Overlink.Match
         void SetBanner(string text)
         {
             if (hud != null) hud.SetBanner(text);
+        }
+
+        void SetHint(string text)
+        {
+            if (hud != null) hud.SetHint(text);
         }
 
         void SetNotice(string text)
@@ -1952,7 +2010,9 @@ namespace Overlink.Match
             PlayerState p = state.GetPlayer(who);
             for (int i = 0; i < active.Length; i++)
             {
-                PaintTile(active[i], Occupied(p.Board.CoreActive[i]), engine);
+                CardInstance occupant = Occupied(p.Board.CoreActive[i]);
+                CardInstance shown = PreviewFor(state, who, i, occupant);
+                PaintTile(active[i], shown, engine, !ReferenceEquals(shown, occupant));
             }
             for (int i = 0; i < bench.Length; i++)
             {
@@ -2020,7 +2080,10 @@ namespace Overlink.Match
 
                 for (int i = 0; i < Board.NodeActiveSlots; i++)
                 {
-                    PaintTile(nodePlayerActive[n][i], Occupied(player.Board.NodeActive[n][i]), engine);
+                    CardInstance occupant = Occupied(player.Board.NodeActive[n][i]);
+                    CardInstance shown = PreviewFor(state, PlayerIndex.Player,
+                        NodeActiveSocketIndex(n, i), occupant);
+                    PaintTile(nodePlayerActive[n][i], shown, engine, !ReferenceEquals(shown, occupant));
                     PaintTile(nodeOpponentActive[n][i], Occupied(opp.Board.NodeActive[n][i]), engine);
                 }
 
@@ -2098,7 +2161,14 @@ namespace Overlink.Match
             renderer.SetPropertyBlock(tintBlock);
         }
 
-        void PaintTile(Tile tile, CardInstance card, MatchEngine engine)
+        /// <param name="preview">
+        /// True when <paramref name="card"/> is a lineup nomination rather than a body the rules put on this
+        /// socket. A preview is washed toward <see cref="PendingMark"/> and stripped of every combat marker:
+        /// it cannot be exhausted and cannot be a pending blocker, and it is not summoning either, because
+        /// <c>CompleteSetup</c> readies everything it fields and waives the delay - so printing any of those
+        /// would advertise a state the match explicitly refuses to give it.
+        /// </param>
+        void PaintTile(Tile tile, CardInstance card, MatchEngine engine, bool preview = false)
         {
             if (tile == null)
             {
@@ -2107,7 +2177,8 @@ namespace Overlink.Match
 
             // The pointer layer resolves a unit to the tile under it on every click, so the pairing is
             // refreshed with the rest of the view rather than cached across frames: a card promoted from
-            // Bench to Active moves, and a stale tile would light the wrong socket.
+            // Bench to Active moves, and a stale tile would light the wrong socket. A nomination is paired the
+            // same way on purpose, because that is what lets a click on a preview find the card it previews.
             if (card != null)
             {
                 tileByCard[card.InstanceId] = tile;
@@ -2130,7 +2201,11 @@ namespace Overlink.Match
             }
 
             Color baseTint = card.Owner == PlayerIndex.Player ? PlayerTint : OpponentTint;
-            if (engine != null && engine.GetPendingBlocker(card.InstanceId) != 0)
+            if (preview)
+            {
+                baseTint = Color.Lerp(baseTint, PendingMark, 0.45f);
+            }
+            else if (engine != null && engine.GetPendingBlocker(card.InstanceId) != 0)
             {
                 baseTint = Color.Lerp(baseTint, BlockMark, 0.55f);
             }
@@ -2152,7 +2227,7 @@ namespace Overlink.Match
 
             SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, baseTint)));
             tile.Label.color = Color.white;
-            tile.Label.text = CardText(card);
+            tile.Label.text = CardText(card, preview);
         }
 
         /// <summary>
@@ -2183,7 +2258,7 @@ namespace Overlink.Match
             return tile != null && tile == hoveredTile ? Color.Lerp(tint, Color.white, 0.22f) : tint;
         }
 
-        static string CardText(CardInstance card)
+        static string CardText(CardInstance card, bool preview = false)
         {
             var sb = new StringBuilder();
             string name = card.Definition.Name;
@@ -2207,13 +2282,19 @@ namespace Overlink.Match
                 sb.Append(card.Definition.Type);
             }
             
-            if (card.State == UnitState.Summoned)
+            // A nomination is not a body on the board yet, and the state an offered card carries is an
+            // artefact of its construction (Summoned, until CompleteSetup readies everything it fields), so
+            // printing it here would advertise a summoning delay the lineup explicitly waives.
+            if (!preview)
             {
-                sb.Append(" (S)");
-            }
-            else if (card.State == UnitState.Exhausted)
-            {
-                sb.Append(" (E)");
+                if (card.State == UnitState.Summoned)
+                {
+                    sb.Append(" (S)");
+                }
+                else if (card.State == UnitState.Exhausted)
+                {
+                    sb.Append(" (E)");
+                }
             }
             return sb.ToString();
         }
@@ -2221,6 +2302,51 @@ namespace Overlink.Match
         static CardInstance Occupied(BoardSlot slot)
         {
             return slot != null && slot.IsOccupied() ? slot.Card : null;
+        }
+
+        /// <summary>
+        /// The card that stands on one of the player's Active sockets for the duration of the lineup setup: the
+        /// offered Unit nominated for it, painted as a preview because no rule has been asked to place it, or the
+        /// socket's real occupant when nothing is nominated there. Everything outside setup, and everything on the
+        /// opponent's half, passes straight through to the occupant untouched.
+        /// <para>
+        /// Callers detect the substitution by the returned reference differing from the occupant they passed in,
+        /// which is why a nomination cannot accidentally recolour a real body.
+        /// </para>
+        /// </summary>
+        CardInstance PreviewFor(MatchState state, PlayerIndex who, int activeSocketIndex, CardInstance occupant)
+        {
+            if (who != PlayerIndex.Player || !state.SetupInProgress
+                || activeSocketIndex < 0 || activeSocketIndex >= lineupPreview.Length)
+            {
+                return occupant;
+            }
+
+            int instanceId = lineupPreview[activeSocketIndex];
+            if (instanceId == 0)
+            {
+                return occupant;
+            }
+
+            foreach (CardInstance offer in state.GetPlayer(PlayerIndex.Player).LineupOffer)
+            {
+                if (offer != null && offer.InstanceId == instanceId)
+                {
+                    return offer;
+                }
+            }
+
+            return occupant;
+        }
+
+        /// <summary>
+        /// A Node's Active socket counted in battlefield order, which is exactly how a lineup nomination is
+        /// indexed and how <c>MatchEngine.ActiveSlotsInBattlefieldOrder</c> walks them: the Core rank first,
+        /// then each Node's Active rank in turn.
+        /// </summary>
+        static int NodeActiveSocketIndex(int node, int slot)
+        {
+            return Board.CoreActiveSlots + node * Board.NodeActiveSlots + slot;
         }
 
         // ---- Primitive helpers ------------------------------------------------------

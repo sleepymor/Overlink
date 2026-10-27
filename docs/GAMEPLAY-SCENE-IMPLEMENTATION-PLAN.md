@@ -147,14 +147,16 @@ Still presentation-only or absent:
 
 ### 2.1 Where the test suites live
 
-`Assets/Tests/Core/Overlink.Core.Tests.asmdef` has an empty `includePlatforms` and the legacy
-`optionalUnityReferences: ["TestAssemblies"]`, so Unity registers it as a **PlayMode** module. Its tests are
-therefore absent from the EditMode run entirely - a green EditMode suite says nothing about `CombatLegality`,
-`MatchState`, `Board` or the engine. Both cross-check tests in `CombatLegalityTests` were found broken by the
-PlayMode run and by nothing else; `Overlink.Match.Tests.asmdef` is the reverse (`includePlatforms: ["Editor"]`),
-so it only ever runs in EditMode. **Run both suites, not one.**
+`docs/TESTING.md` is the canonical account; this is the summary that matters when reading the rest of this plan.
+Classification, not cache freshness, decides which run a test appears in - the runner sorts test assemblies by
+their `EditorOnly` flag. `Overlink.Core.Tests` and `Overlink.Match.Tests` are Editor-only, so the whole Core
+cluster (`CombatLegality`, `MatchState`, `Board`, the engine and the lineup rules) is absent from any PlayMode
+run, and `Overlink.Cards.Tests` stays PlayMode on purpose because `CardHandTests` calls
+`DontDestroyOnLoad`/`Object.Destroy`, which EditMode refuses. **Run both suites, not one.**
 
-Current tallies: EditMode 985 discovered, 980 passed, 4 skipped, 1 failed; PlayMode 185 / 185.
+Current tallies: EditMode 1326 discovered, 1321 passed, 4 skipped, 1 failed. The PlayMode figure this document
+used to carry (185 / 185) predates the Core cluster's move to Editor-only and has not been re-measured, so it
+must not be quoted as current; the 22 Cards tests registered there remain the project's unverified remainder.
 
 The one EditMode failure is not ours. `UnitySkills.Tests.Core.PerceptionSkillsTests
 .SceneSummarize_CountsObjectsCorrectly` asserts `stats.totalObjects >= 4` against a scene its own `SetUp` has
@@ -536,6 +538,51 @@ drove the opponent's phases during its turn - harmless while that turn lasted ha
 exploit once it paused for four. Both are now gated on the player's own turn. Concede stays ungated, because
 conceding is legal on either turn (GDD 2.1.8).
 
+**The opening lineup reuses the drag and refuses the play.** Setup is the one moment the board is not yet a
+battlefield, and the player fields their opening five by dragging each offered Unit onto a lit Active socket -
+the same gesture as a deployment, because placement staying on the table is the owner's rule and a picker that
+opened a modal list would have broken it. What differs is what the drop *means*:
+
+| | a play (MAIN) | a nomination (setup) |
+|---|---|---|
+| gate | `GameCoordinator.TryPlayFromUISlot` | `GameCoordinator.NominateLineupCard` |
+| drop targets | any socket the card may host | the five Active sockets only |
+| cost | the card's NP | nothing until the confirm |
+| result | the engine places the card | the board previews it |
+
+The nomination lives in the front end alone - `GameCoordinator.lineupNomination`, one `int` per Active socket in
+battlefield order, `0` meaning "leave that battlefield open" - because the engine holds no partial nomination
+and `ConfirmLineupCommand` is the only way to submit one. Nothing the picker can do puts a body on the board
+before the player presses CONFIRM, which is also why a nomination stays takeable-back: clicking the preview sends
+the Unit back to the fan (`ReturnLineupNomination`).
+
+`HandController` gets its own terminal for it (`nominateResolver` / `CardNominated`, consulted ahead of
+`playResolverWithSlot`) rather than a flag on the play gate, because the play gate's promise is that the engine
+*accepted* the card and the view then flies onward to the pile it entered - flying an offered card to the discard
+pile in order to nominate it would be a lie the player watches happen. The fan retires the view at the drop point
+and the coordinator decides what stands on the socket instead.
+
+So the preview is a substitution inside the normal paint pass (`BattlefieldPresenter.SetLineupPreview` →
+`PreviewFor`), with two consequences worth naming. It registers `cardByTile`/`tileByCard` like any body, which is
+what makes click-to-un-nominate nearly free. And it must suppress the state suffix: `CardText` appends `(S)` for
+`UnitState.Summoned`, an offered card *is* `Summoned` (that is what a fresh `CardInstance` starts life as), and
+`CompleteSetup` readies everything it fields and waives the delay outright - printing it would advertise a delay
+the lineup explicitly refuses to give.
+
+**The rail is one builder now.** `BattlefieldHud.EnsureRailButton` finds-or-creates a rail button by name and
+wires it, which is the pattern the HUD already used for `EndPhaseButton` and the reason the scene stays the tuning
+surface: an object somebody adds to `PhaseControls` in the editor gets bound rather than duplicated. CONFIRM
+LINEUP shares EndPhase's slot, because the two are never wanted at once, and REROLL sits above it carrying its own
+price - the price escalates by 1 NP per use, and a player who memorised "2 NP" would be wrong on the second click.
+An unaffordable REROLL stays visible and dimmed rather than vanishing, since hiding it reads as a rule that does
+not exist instead of a cost not yet met. `IsPointerOverControls` walks every rail button in one pass over a cached
+array and ignores `interactable`: a dimmed button is still screen space the player is aiming at, and letting a
+card slip through to the socket behind it would nominate something nobody chose.
+
+While setup is open the legend says so (`SetupHintText`) and the banner drops the turn header, because there is
+no turn to number and the toss is still under the cup. Both are written on the transition rather than every frame:
+the board repaints sixty times a second for a line that changes once per match.
+
 **Known hole, deliberately not touched.** `MatchEngine.FindCardInstance` resolves a defender through Bench
 slots, so the engine will accept an attack on a benched unit; `Board.cs` and the GDD say benched units are out
 of the fight. `CombatLegality.AttackTargets` offers Active-only targets, so the player is never shown the
@@ -544,9 +591,10 @@ illegal move, and `ExecuteDeclareBlock`'s companion hole (it records a block fro
 `MisplacedBlock_IsOfferedByNowhereYetStillRecordedByTheEngine` instead of papered over. Fixing the engine is a
 rules decision for the Core owner, not something the click layer should quietly compensate for.
 
-**Status:** Implemented. `CombatLegalityTests` (20, PlayMode - see §2.1), `PointerTargetingTests` (19) and the
-reader half of `BattlefieldHudTests` cover the queries, the hit-test, the marks and the panel text. Three of
-those nineteen run against the **shipped prefab** rather than a procedural board
+**Status:** Implemented. `CombatLegalityTests` (20, PlayMode - see §2.1), `PointerTargetingTests` (19),
+`LineupPickerTests` (9) and the reader half of `BattlefieldHudTests` cover the queries, the hit-test, the marks,
+the panel text and the opening picker. Three of those nineteen run against the **shipped prefab** rather than a
+procedural board
 (`ShippedPrefab_HoldsEveryTileTheClickLayerNames`, `_EveryTileCentreResolvesThatTile`,
 `_CarriesNoCollidersAnywhere`): they bind `Assets/Prefabs/Battlefield.prefab` under a throwaway presenter and
 re-assert the contract, because a hand-edit that overlaps two sockets or renames one is invisible to every
@@ -560,6 +608,15 @@ dependency on `Overlink.Match`. That is a structural change and is left for the 
 is therefore verified by inspection plus a play-mode boot capture (`Assets/Screenshots/click_boot_v1.png`:
 board, legend, HUD and reader all live, zero console errors), and the pieces it glues together are the tested
 ones.
+
+The opening lineup drag lives by the same split. Its two seams are pinned instead - `LineupPickerTests` walks
+the socket-to-index mapping against the board's own arrays, and paints a sparse nomination on a throwaway board
+to assert the preview lands on the socket it names, prints no state mark, stays off the enemy half, ignores an id
+the offer no longer holds, clears on demand, and goes inert the moment setup closes. The gesture itself was
+checked through the path that *is* invokable: the rail buttons are real `Button`s, so REROLL and CONFIRM were
+clicked for real in play mode, the offer appeared in the fan (five views named after the offered cards), the
+reroll charged 2 NP and rewrote its own label to 3, the unaffordable third reroll was refused with the arithmetic
+on the notice line, and confirming closed setup into a real match.
 
 
 ## 4. Build and scene integrity issues
@@ -621,7 +678,7 @@ intention.
 
 ## 5. Current status by milestone
 
-Measured against the suites in §2.1: EditMode 985 discovered, PlayMode 185.
+Measured against the suites in §2.1: EditMode 1326 discovered, 1321 passed.
 
 | Area | Status |
 |---|---|
@@ -638,12 +695,13 @@ Measured against the suites in §2.1: EditMode 985 discovered, PlayMode 185.
 | Core/Node UI | Implemented, incl. status strips, piles and Node plates |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
 | Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks |
+| Opening lineup picker | Implemented (§3.8); the drag cannot be simulated, so its seams are pinned by tests and the rail was clicked for real in play mode |
 | Net account panel in Gameplay | Suppressed by `NetAccountPanelGuard` (§2) |
 | ScriptableObject card pipeline | Deferred |
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 985 / PlayMode 185, one pre-existing package failure (§2.1) |
+| NUnit execution | Verified: EditMode 1326 leaves / 1321 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

@@ -5,6 +5,7 @@
     "Overlink.Core",
     "Overlink.Match",
     "Overlink.Cards",
+    "Unity.TextMeshPro",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

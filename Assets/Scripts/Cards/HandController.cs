@@ -197,6 +197,21 @@ namespace Overlink.Cards
         /// </summary>
         public Func<CardData, BoardSlot, bool> playResolverWithSlot;
 
+        /// <summary>
+        /// Consulted ahead of <see cref="playResolverWithSlot"/> when a dragged card is released over a socket,
+        /// and the opening lineup's way of saying that a card is not being <em>played</em>, it is being
+        /// <em>fielded</em>. Returning true consumes the drag: the view is retired where it was dropped,
+        /// <see cref="CardNominated"/> fires, and the play path never runs. No NP is spent, no card reaches the
+        /// discard pile, and the engine is asked nothing at all - because a nomination can still be taken back.
+        /// <para>
+        /// It has to be its own terminal rather than a flag on the play gate, because the play gate's promise is
+        /// that the engine accepted the card and the hand then sends the view onward to the pile it entered.
+        /// Flying an offered card to the discard pile to nominate it would be a lie the player watches happen,
+        /// and asking the engine to place a card while setup is open is refused by design.
+        /// </para>
+        /// </summary>
+        public Func<CardData, BoardSlot, bool> nominateResolver;
+
         /// <summary>Clears the owner's drop highlight when a drag ends for any reason.</summary>
         public Action dropTargetCleared;
 
@@ -208,6 +223,13 @@ namespace Overlink.Cards
 
         /// <summary>Raised after a play was accepted by the resolver and has finished animating to the play slot.</summary>
         public event Action<CardData> CardPlayed;
+
+        /// <summary>
+        /// Raised after <see cref="nominateResolver"/> accepted a drop, carrying the socket it was accepted on.
+        /// The view is already retired by then, so whatever the front end shows in its place - a preview body on
+        /// that socket, say - is entirely its own business.
+        /// </summary>
+        public event Action<CardData, BoardSlot> CardNominated;
 
         public int CardCount => cards.Count;
 
@@ -826,6 +848,19 @@ namespace Overlink.Cards
             // no resolver at all the hand keeps its original standalone behaviour and plays anything.
             BoardSlot slot = pendingDropSlot;
             pendingDropSlot = null;
+
+            // A nomination settles before the play gate is consulted at all: the card was never played, so it
+            // must not be tweened to a play slot, charged for, or sent onward to a discard pile it never entered.
+            // The view goes at the drop point and the front end decides what stands on the socket instead.
+            CardData nominated = card.Data;
+            if (slot != null && nominateResolver != null && nominateResolver(nominated, slot))
+            {
+                RemoveView(card);
+                LayoutAll();
+                CardNominated?.Invoke(nominated, slot);
+                return;
+            }
+
             bool accepted = playResolverWithSlot != null
                 ? playResolverWithSlot(card.Data, slot)
                 : playResolver == null || playResolver(card.Data);
