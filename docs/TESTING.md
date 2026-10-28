@@ -73,15 +73,23 @@ loaded AppDomain's, so it reports a brand-new file as present regardless of what
 domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
 is how "the runner's cache must be stale" gets mistaken for a fact.
 
-## Known state after the on-screen control rail (2026-10-28)
+## Known state after the HUD reflow (2026-10-28)
 
-EditMode: **1328 leaves, 1323 passed, 4 skipped, 1 failed.** The failure is
+EditMode: **1329 leaves, 1324 passed, 4 skipped, 1 failed.** The failure is
 `UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
 UnitySkills package that counts objects in whichever scene happens to be open. It was red before the Node
 rule landed, it is not ours, and it is the only expected red.
 
 The 22 tests in `Overlink.Cards.Tests` are not in that count. They belong to PlayMode and no run of either
 mode has ever executed them.
+
+**A geometry test that projects the board has to anchor its own rig.**
+`StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is a `[UnityTest]` — it needs a camera whose matrices
+have been refreshed, so it yields one frame per aspect — and its first assertion is not about the HUD at all:
+it checks that the tabletop's near and far edges land at y 69 and 623 of 720, the span
+`BattlefieldCameraController.RestFocusZ` documents. Without that, a projection that measures nothing still
+passes an overlap sweep, which is the shape this failure takes: a degenerate or NaN rect intersects nothing,
+so every assertion below it goes green at the exact moment it stops testing anything.
 
 **Adding to this count is where a filter bites.** `test_run {filter}` takes a name fragment, not a regex: a
 `"^Namespace\.Class"` pattern matches nothing, and a run that matches nothing is the one that wedges in

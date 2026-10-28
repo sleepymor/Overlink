@@ -35,16 +35,19 @@ namespace Overlink.Match
         public const string RootName = "Battlefield HUD";
 
         [Header("Log")]
-        [Tooltip("How many of the most recent events the panel keeps. Older lines scroll off the top.")]
-        public int maxLines = 6;
+        [Tooltip("How many of the most recent events the panel keeps. Older lines scroll off the top. " +
+                 "Four, not the six the tabletop column held: the panel now lives in the band above the " +
+                 "board's far rank, which is 170 reference pixels tall at the shortest supported aspect, and " +
+                 "that height buys a socket-clear slab rather than a longer history.")]
+        public int maxLines = 4;
 
         [Header("Panel placement (pixels at the reference resolution)")]
-        [Tooltip("Anchored to the right edge and vertically centred, which is where the tabletop column used " +
-                 "to sit, so the log reads from the same place it always did. Sized for the window above with " +
-                 "its entries wrapped at this width: every pixel of this panel lies over the board, so a slab " +
-                 "taller than its text hides sockets for no reason.")]
-        public Vector2 panelSize = new Vector2(320f, 240f);
-        public Vector2 panelOffset = new Vector2(-14f, 0f);
+        [Tooltip("Top-right corner, inside the band that holds no socket at any aspect (see NodeList). The " +
+                 "width is what a log entry needs to wrap in two lines rather than three; the height is what " +
+                 "four entries need at that width. Centred on the right edge, where the tabletop column used " +
+                 "to sit, put it straight over the two right-hand Node sockets.")]
+        public Vector2 panelSize = new Vector2(320f, 170f);
+        public Vector2 panelOffset = new Vector2(-22f, -18f);
         public float panelPadding = 12f;
         // Distinctly lighter than the camera's clear colour, otherwise the slab is invisible against the void
         // and the log reads as text floating over the board rather than as a panel. Semi-transparent for the
@@ -81,9 +84,16 @@ namespace Overlink.Match
         public Vector2 bannerOffset = new Vector2(0f, -16f);
         public float bannerFontSize = 38f;
 
-        [Tooltip("The per-player readout (CORE, NP, NODES, HAND, DECK). Anchored into the near corners, which " +
-                 "is the one region the hand fan cannot reach: the fan spans x 299..954 of 1280, so both bottom " +
-                 "corners stay clear at any hand size.")]
+        [Tooltip("The per-player readout (CORE, NP, NODES, HAND, DECK). Both chips hang in the near corners, " +
+                 "which is the one region the hand fan does not own: the fan's resting box spans x 489..1431 at " +
+                 "the reference resolution, so a 470 pixel slab at a 22 pixel margin touches it by three pixels " +
+                 "at 16:9 - and that box is the maximum-span envelope, so at a normal hand size there is " +
+                 "daylight. Neither chip is anywhere near a tile: the nearest clickable thing to either is its own pile, 61 " +
+                 "reference pixels away at 16:9, and the board's nearest rank - the near Node Bench, at 0.185 of " +
+                 "the frame height - sits well above a chip whose top edge is at 0.106 even at 4:3. " +
+                 "The opponent's belongs at the bottom rather than the top because the far half of " +
+                 "the frame is the board's, and the top band it used to share with the banner is where the node " +
+                 "list and the log now live.")]
         public Vector2 chipSize = new Vector2(470f, 96f);
         public Vector2 chipMargin = new Vector2(22f, 18f);
         public float chipTitleSize = 18f;
@@ -91,25 +101,51 @@ namespace Overlink.Match
 
         [Tooltip("Node bonuses, which moved here from the four plate captions. The plates keep a bare NODE n " +
                  "tag so the list still reads against the board, but the wording is what was eating the plate " +
-                 "corners and squinting at 52 degrees.")]
-        public Vector2 nodeListSize = new Vector2(470f, 236f);
-        public float nodeListFontSize = 21f;
+                 "corners and squinting at 52 degrees.\n" +
+                 "Top-left corner, and the two numbers are the corners of the one region of the frame that " +
+                 "holds no socket at any supported aspect: the topmost thing on the board is the far Node " +
+                 "Bench rank, whose top edge projects to 0.841 of the frame height, and that fraction does " +
+                 "not depend on the aspect because vertical projection does not. So everything above 0.841 is " +
+                 "void at 1920x1080, 1024x768 and 2560x1080 alike - 172, 196 and 147 reference pixels of it " +
+                 "respectively. A 170 pixel slab with an 18 pixel margin only fits inside that band at 4:3, and " +
+                 "there it leaves an 8.7 pixel seam to the far Node Bench rank - the tightest this panel gets " +
+                 "anywhere in the sweep. At 16:9 and wider it dips below the far rank's top edge and clears the " +
+                 "Node columns sideways instead, by more than fifty pixels and growing as the frame widens, " +
+                 "because those columns walk toward the centre. The 340 pixel width is the narrowest supported " +
+                 "case: at 4:3 the leftmost Node column reaches x 235, so the slab overlaps it sideways by 127 " +
+                 "pixels and has nothing to fall back on but the seam above it.")]
+        public Vector2 nodeListSize = new Vector2(340f, 170f);
+        public float nodeListFontSize = 15f;
 
         public Color chipColor = new Color(0.10f, 0.12f, 0.18f, 0.84f);
         public Color playerAccent = new Color(0.45f, 0.78f, 1.00f);
         public Color opponentAccent = new Color(1.00f, 0.62f, 0.55f);
         public Color noticeColor = new Color(1f, 0.82f, 0.45f);
         public Color resultColor = new Color(0.45f, 1f, 0.55f);
-        public float noticeFontSize = 26f;
+        public float noticeFontSize = 20f;
         public float resultFontSize = 84f;
-        [Tooltip("How far above the vertical centre the notice line sits. It has to clear the resting fan, " +
-                 "whose top edge is at about 0.31 of the viewport height from the bottom.")]
-        public float noticeRise = 150f;
+        [Tooltip("The notice line's height as a fraction of the frame, not a rise in pixels. Every feature it " +
+                 "has to miss - the opponent's Core Bench below it, the far Node Bench ranks beside it, the key " +
+                 "legend above it - is a projection of the board, and a projection lands at the same fraction of " +
+                 "the frame at every aspect while a fixed pixel offset does not.\n" +
+                 "0.80 is as high as the line can sit without climbing into the legend and as low as it can sit " +
+                 "without landing on the opponent's Core Bench, whose top edge projects to 0.762. Its own band " +
+                 "does cross the far Node Bench ranks (0.796..0.841), which is why the line is narrow rather " +
+                 "than wide and clears those two columns sideways.")]
+        [Range(0f, 1f)] public float noticeAnchorY = 0.80f;
 
         [Tooltip("The key legend, which was a two-line 11pt caption on the table at 52 degrees — small enough " +
-                 "to be unreadable and wide enough to run past the table edge. As UI it is crisp, and Stage 3 " +
-                 "grows on-screen buttons next to it that this line annotates.")]
-        public Vector2 hintSize = new Vector2(900f, 74f);
+                 "to be unreadable and wide enough to run past the table edge. As UI it is crisp, and the on-" +
+                 "screen buttons it no longer lists sit in the two side corridors.\n" +
+                 "The height is the ink, not a margin: two authored lines, the first of which wraps once at " +
+                 "this width, so three lines at 17pt is 58.6 reference pixels and 62 is the box that holds " +
+                 "exactly that. It matters because the box is transparent, so a taller one is a lie the layout " +
+                 "test would have to forgive — at 21:9 the frame is 926 reference pixels tall and a 74 pixel " +
+                 "box reached four pixels into the far Node Bench rank. Sized to its ink, box clearance and " +
+                 "ink clearance become the same statement: 62 buys a 6.8 pixel seam to that rank at 3440x1440, " +
+                 "which is the tightest pairing anywhere in the status layer, and BattlefieldHudTests holds " +
+                 "every box but the result overlay four pixels clear of every clickable tile for that reason.")]
+        public Vector2 hintSize = new Vector2(900f, 62f);
         public float hintFontSize = 17f;
         public Color hintColor = new Color(0.60f, 0.68f, 0.80f);
 
@@ -670,8 +706,10 @@ namespace Overlink.Match
             bannerText.alignment = TextAlignmentOptions.Center;
             bannerText.color = new Color(0.95f, 0.97f, 1f);
 
-            // ---- Key legend, directly under the banner, in the same top band the opponent chip now hangs
-            // below. It is centred rather than left-pinned so it reads as part of the banner it explains.
+            // ---- Key legend, directly under the banner. It is centred rather than left-pinned so it reads as
+            // part of the banner it explains, and so its horizontal edges are predictable: the node list and the
+            // log now flank it in the two top corners, and the gap between a centred box and an edge-pinned one
+            // is the only measurement that survives an aspect change.
             hint = EnsureBox("ControlsHint", hintSize, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(bannerOffset.x, bannerOffset.y - bannerSize.y), Color.clear, out hintText);
             hintText.fontSize = hintFontSize;
@@ -679,15 +717,15 @@ namespace Overlink.Match
             hintText.color = hintColor;
             hintText.enableWordWrapping = true;
 
-            // ---- Player chips, near corners: clear of the fan's span at any hand size.
-            // The opponent chip hangs below the banner *and* the legend rather than below the banner alone.
-            // Both of those are centred fixed-width boxes, so at 16:9 the chip clears them by 18 pixels of
-            // horizontal gap - and a 4:3 viewport narrows the reference width to 1646, which eats that gap and
-            // lands the legend straight on top of the chip. Stacking the whole top-left band vertically leaves a
-            // 2 pixel seam that no aspect can close, because all three boxes are top-anchored with fixed
-            // heights.
-            opponentChip = EnsureBox("OpponentChip", chipSize, new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(chipMargin.x, -chipMargin.y - bannerSize.y - hintSize.y), chipColor, out opponentTitle);
+            // ---- Player chips, both in the near corners, mirrored left for right.
+            // The opponent's used to hang in the top-left band under the banner and the legend, which is the
+            // only part of the frame the board cannot reach - and the board reaches it after all. Its three
+            // far Node sockets project to 0.796..0.841 of the frame height, and a 96 pixel slab under a
+            // 62 pixel banner and its legend lands at exactly that band at 16:9, hiding one of them outright.
+            // The near corners are clear of every socket at every aspect, because the nearest thing to them is
+            // the near Node Bench rank at 0.185 of the frame and the chips' top edge is at 0.106 even at 4:3.
+            opponentChip = EnsureBox("OpponentChip", chipSize, new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-chipMargin.x, chipMargin.y), chipColor, out opponentTitle);
             opponentBody = EnsureChipBody(opponentChip, opponentTitle, opponentAccent);
             opponentTitle.text = "OPPONENT";
             opponentTitle.color = opponentAccent;
@@ -698,11 +736,16 @@ namespace Overlink.Match
             playerTitle.text = "YOU";
             playerTitle.color = playerAccent;
 
-            // ---- Node list, left edge, mirrored against the log on the right.
-            nodeList = EnsureBox("NodeList", nodeListSize, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(chipMargin.x, 0f), chipColor, out TextMeshProUGUI nodeHeader);
+            // ---- Node list, top-left corner; the log mirrors it top-right. Both live in the band above the
+            // board's far rank - see the nodeListSize tooltip for why that band is the only one that is
+            // socket-free at every aspect, and why its 170 pixel height is the ceiling rather than a preference.
+            nodeList = EnsureBox("NodeList", nodeListSize, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(chipMargin.x, -chipMargin.y), chipColor, out TextMeshProUGUI nodeHeader);
             nodeHeader.text = "BATTLEFIELDS";
-            nodeHeader.fontSize = chipTitleSize;
+            // The chips can afford an 18 point title; this panel cannot. Its header shares the 170 pixel slab
+            // with four rows, so it takes the log's convention instead — one point above the body it heads.
+            float nodeHeaderSize = nodeListFontSize + 1f;
+            nodeHeader.fontSize = nodeHeaderSize;
             nodeHeader.fontStyle = FontStyles.Bold;
             nodeHeader.color = headerColor;
             nodeHeader.alignment = TextAlignmentOptions.TopLeft;
@@ -711,10 +754,11 @@ namespace Overlink.Match
 
             // One row per Node, in board order, so the list reads top-to-bottom against the four plates. The
             // Core's numbers are not repeated here — both chips already carry CORE x/y.
+            // 12 + 16 * 2.1 + 4 * (15 * 2.05) = 168.6 of the slab's 170 pixels: the rows fill the panel exactly.
             nodeRows = new TextMeshProUGUI[Board.NodeCount];
             for (int n = 0; n < Board.NodeCount; n++)
             {
-                float rowTop = panelPadding + chipTitleSize * 2.1f + n * (nodeListFontSize * 2.05f);
+                float rowTop = panelPadding + nodeHeaderSize * 2.1f + n * (nodeListFontSize * 2.05f);
                 nodeRows[n] = EnsureText($"NodeRow{n}", nodeList, nodeListFontSize, FontStyles.Normal,
                     textColor, TextAlignmentOptions.MidlineLeft, out RectTransform rowRect);
                 rowRect.anchorMin = new Vector2(0f, 1f);
@@ -725,10 +769,19 @@ namespace Overlink.Match
                 nodeRows[n].text = string.Empty;
             }
 
-            // ---- Notice line, centred above the resting fan.
-            notice = EnsureBox("Notice", new Vector2(1100f, noticeFontSize * 2.2f),
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, noticeRise),
+                        // ---- Notice line, in the far half's dead band. Fractionally anchored, and 640 rather than the
+            // 1100 it was: the wide box reached x 410..1510 at the reference resolution, which put it straight
+            // over both far Node columns at every aspect. The binding case is the widest aspect in the sweep,
+            // where the frame is under 930 reference pixels tall and the far Node Bench ranks come up to meet
+            // this line's own band. Narrowing to 640 bought those columns so much sideways room that the seam
+            // which now governs this box is the one *below* it, to the opponent's Core Bench: 9.3 reference
+            // pixels, measured by BattlefieldHudTests. Sixty was what two lines of a real notice need at 20pt,
+            // and the box is transparent, so the cost of going narrower is a wrap, not a hole. See the
+            // noticeAnchorY tooltip for why the height is a fraction rather than a rise.
+            notice = EnsureBox("Notice", new Vector2(640f, noticeFontSize * 2.5f),
+                new Vector2(0.5f, noticeAnchorY), new Vector2(0.5f, 0.5f), Vector2.zero,
                 Color.clear, out noticeText);
+            noticeText.enableWordWrapping = true;
             noticeText.fontSize = noticeFontSize;
             noticeText.fontStyle = FontStyles.Bold;
             noticeText.alignment = TextAlignmentOptions.Center;
@@ -963,11 +1016,12 @@ namespace Overlink.Match
                 image.raycastTarget = false;
             }
 
-            // Right edge, vertically centred: anchored rather than free-positioned so the panel stays glued to
-            // the bezel at any window size instead of drifting into the board.
-            panel.anchorMin = new Vector2(1f, 0.5f);
-            panel.anchorMax = new Vector2(1f, 0.5f);
-            panel.pivot = new Vector2(1f, 0.5f);
+            // Top-right corner, hanging off the same bezel the node list hangs off on the left. Anchored
+            // rather than free-positioned so the panel stays glued to the corner at any window size instead of
+            // drifting into the board.
+            panel.anchorMin = new Vector2(1f, 1f);
+            panel.anchorMax = new Vector2(1f, 1f);
+            panel.pivot = new Vector2(1f, 1f);
             panel.sizeDelta = panelSize;
             panel.anchoredPosition = panelOffset;
 

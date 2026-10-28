@@ -1518,9 +1518,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a33c1fbfc7a627a4e8ca062737a45f6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxLines: 6
-  panelSize: {x: 320, y: 240}
-  panelOffset: {x: -14, y: 0}
+  maxLines: 4
+  panelSize: {x: 320, y: 170}
+  panelOffset: {x: -22, y: -18}
   panelPadding: 12
   panelColor: {r: 0.11, g: 0.13, b: 0.19, a: 0.78}
   fontSize: 15

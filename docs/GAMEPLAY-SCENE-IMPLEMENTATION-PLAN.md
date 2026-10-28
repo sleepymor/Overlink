@@ -451,9 +451,10 @@ The presentation layer must:
 - Rebuild views from GameState snapshots
 
 The scene now provides hand-card animation, drag-to-socket play, a state-driven battlefield view
-(`BattlefieldPresenter`, bound from `Assets/Prefabs/Battlefield.prefab`), mirrored opponent presentation,
-per-player status strips, victory/result presentation, and - as screen-space UI on its own overlay canvas
-rather than as board geometry - an event log. What it still lacks is combat
+(`BattlefieldPresenter`, bound from `Assets/Prefabs/Battlefield.prefab`), mirrored opponent presentation, and
+an overlay canvas (`BattlefieldHud`) carrying everything that used to be painted on the table itself: the
+event log, the turn banner, the key legend, the two player chips, the node-bonus list, the notice line and
+the result overlay. What it still lacks is combat
 feedback: no damage flash, no screen shake on a Core hit, and no zone-to-zone trace for a card entering a
 socket, which simply repaints on the next refresh.
 
@@ -472,6 +473,30 @@ played at, against the 16.5 x 11.4 tabletop, so the table's depth is the tight a
 frame with roughly half a unit of margin top and bottom. `BirdView_OverheadFrameFitsTheTabletopSnugly`
 locks both halves of that - it must fit, and it must not be wasteful - reading the table's dimensions from
 `BattlefieldPresenter.TableWidth/TableDepth` so retuning the table retunes the camera's contract with it.
+
+**The panels sit where no socket reaches.** Vertical projection through the shipped rig does not depend on
+the aspect, so the topmost thing on the board - a far Node Bench rank - tops out at 0.841 of the frame height
+at 1920x1080, 1024x768 and 2560x1080 alike, and everything above it is void: 172 reference pixels of it at
+16:9, 196 at 4:3, 147 at 21:9. The node list and the event log hang in the two top corners inside that band,
+340x170 and 320x170 reference pixels at an 18 pixel margin - which only actually fits inside the band at 4:3,
+where 196 pixels of void hold 188 pixels of slab and leave an 8.7 pixel seam; at 16:9 and wider the slab dips
+below the far rank's top edge and clears the Node columns sideways instead, by more than fifty pixels and
+growing as the frame widens and those columns walk toward the centre. The two player chips take the near
+corners, which the resting fan's envelope is the only thing that comes close to - the nearest tile to either
+chip is its own pile, 61 pixels away. And the notice line is the one box anchored by fraction rather than by
+pixels, at 0.80 of the frame height: everything it has to miss is a projection, and a projection lands at the
+same fraction at every aspect while a fixed pixel offset does not. Its band does cross the far Node Bench
+ranks (0.796..0.841), which is why it is 640 wide rather than the 1100 it was, and why what governs it now is
+the 9.3 pixel seam down to the opponent's Core Bench (top edge 0.762).
+The log's window is the price of its 170 pixel height: four entries, not the six the tabletop column held.
+`StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is what keeps all of it honest. It builds a throwaway
+board, projects every tile the presenter's own name parser calls a socket, a Protocol socket or a pile
+through a rig read off `BattlefieldCameraController`'s shipped defaults, and holds the six non-modal status
+boxes clear of all thirty-eight of them at seven screen sizes - by a floor of four reference pixels, not by
+mere disjointness, because a seam of half a pixel is where a slab starts eating a tile's rim for real and
+disjointness alone would let a later nudge walk into it green. The tightest seam the layout leaves is 6.8
+pixels, the legend's box against a far Node Bench rank at 3440x1440 - after anchoring the rig against the
+tabletop's documented y 69..623 span, because an overlap sweep with a broken projection passes silently.
 
 **Status:** Mostly implemented; combat feedback remains the one gap. Entry paths are no longer one of them -
 the board is pointer-driven (§3.8).
@@ -747,7 +772,7 @@ intention.
 
 ## 5. Current status by milestone
 
-Measured against the suites in §2.1: EditMode 1328 discovered, 1323 passed.
+Measured against the suites in §2.1: EditMode 1329 discovered, 1324 passed.
 
 | Area | Status |
 |---|---|
@@ -761,7 +786,8 @@ Measured against the suites in §2.1: EditMode 1328 discovered, 1323 passed.
 | Four-Node rules | Implemented (`Board.NodeCount` is 4; the old three-Node note is stale) |
 | Full battlefield scene | Implemented as `Assets/Prefabs/Battlefield.prefab`, bound by name |
 | Opponent presentation | Implemented, mirrored |
-| Core/Node UI | Implemented, incl. status strips, piles and Node plates |
+| Core/Node UI | Implemented; the readouts are overlay panels seated in the top band and the near corners (§3.7), while the piles and Node plates stayed on the table |
+| Resting hand vs the piles | Open: both piles sit entirely behind the fan at rest, reachable through the rail's PILE buttons but not visible, until the fan sinks while the pointer is away (docs/CARD-FRAME-SPEC.md) |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
 | Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks; an attack pick offers both red (attack) and blue (retreat) sockets |
 | On-screen control rail | Implemented (§3.8); every keyboard verb has a button, derived per frame, and the strip was driven end to end in play mode through `event_invoke` |
@@ -771,7 +797,7 @@ Measured against the suites in §2.1: EditMode 1328 discovered, 1323 passed.
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 1328 leaves / 1323 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
+| NUnit execution | Verified: EditMode 1329 leaves / 1324 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

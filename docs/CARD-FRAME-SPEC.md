@@ -912,13 +912,16 @@ What `−1.0` buys, measured per tile at 1280×720:
 * the tabletop spans **y 69..623 of 720**, so the fan owns the bottom 218 px, the status layer owns the top 97,
   and the board is the band between them instead of bleeding under all three.
 
-What it does **not** fix, stated so it is not rediscovered as a surprise: ten sockets still sit behind the two
-side slabs — `NodeList` (470×236 reference, left middle) and the log panel (320×240, right middle) — about
-**12.7k px² at 720p**, worst case ~60% of a tile. That is visual only. The status canvas carries no
-`GraphicRaycaster` and every `Graphic` on it sets `raycastTarget = false`, which is precisely the asymmetry
-that makes the fan a hard constraint and the slabs a soft one: a socket behind a slab is dim, a socket behind
-a card is dead. It is left to Stage 3, because Stage 3 is what reflows those two columns to seat the button
-rail, and tuning the panels twice is waste.
+What it did **not** fix, and Stage 3e has: ten sockets sat behind the two side slabs — `NodeList` (470×236
+reference, left middle) and the log panel (320×240, right middle) — about **12.7k px² at 720p**, worst case
+~60% of a tile. That was visual only. The status canvas carries no `GraphicRaycaster` and every `Graphic` on
+it sets `raycastTarget = false`, which is precisely the asymmetry that made the fan a hard constraint and the
+slabs a soft one: a socket behind a slab is dim, a socket behind a card is dead. The reflow took both slabs
+into the band above the board's far rank and put the two player chips in the near corners instead, so the
+panels are clear of the board by construction rather than by agreement — the geometry is written up in
+§3.7 of the scene plan and `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` measures it at seven
+screen sizes. The one residual is the log's window: four entries where the tabletop column held six, which is
+what a 170-reference-pixel-tall slab costs at 15 point.
 
 **The two pile tiles are dead at every bias, and the live check is what found it.** `DeckPile` and
 `DiscardPile` are not decoration — `BattlefieldInput.cs:409-414` turns a click on them into the deck browser

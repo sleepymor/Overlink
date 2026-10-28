@@ -1,7 +1,10 @@
+using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using NUnit.Framework;
 using Overlink.Core;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 
 namespace Overlink.Match.Tests
@@ -60,7 +63,7 @@ namespace Overlink.Match.Tests
         // ---- The panel ------------------------------------------------------------------
 
         [Test]
-        public void Build_ProducesAnOverlayPanelPinnedToTheRightEdge()
+        public void Build_ProducesAnOverlayPanelPinnedToTheTopRightCorner()
         {
             BattlefieldHud hud = NewHud();
 
@@ -73,7 +76,9 @@ namespace Overlink.Match.Tests
             Assert.IsTrue(hud.IsBuilt, "A built HUD reports itself built.");
             Assert.AreEqual(1f, hud.Panel.anchorMin.x, 1e-4f, "The panel is anchored to the right edge.");
             Assert.AreEqual(1f, hud.Panel.anchorMax.x, 1e-4f, "The panel is anchored to the right edge.");
-            Assert.AreEqual(0.5f, hud.Panel.anchorMin.y, 1e-4f, "and vertically centred, where its tabletop column was.");
+            Assert.AreEqual(1f, hud.Panel.anchorMin.y, 1e-4f,
+                "and to its top edge: the panel hangs in the band above the board's far rank, which is the " +
+                "only part of the frame no socket reaches at any aspect.");
         }
 
         [Test]
@@ -374,6 +379,52 @@ namespace Overlink.Match.Tests
                 || ra.yMax <= rb.yMin || rb.yMax <= ra.yMin;
         }
 
+        /// <summary>
+        /// How far two rectangles are apart, in the units the rects are in: positive when they are disjoint,
+        /// being the shortest move that would bring them into contact, and negative when they overlap, being the
+        /// shallowest direction of overlap. One signed number per pair so the board sweep can rank every pairing
+        /// it measures and report the worst, instead of stopping at the first failure and leaving the rest of the
+        /// layout unknown.
+        /// </summary>
+        static float Separation(Rect a, Rect b)
+        {
+            float dx = Mathf.Max(a.xMin - b.xMax, b.xMin - a.xMax);
+            float dy = Mathf.Max(a.yMin - b.yMax, b.yMin - a.yMax);
+
+            // Separated on both axes - a diagonal pairing, which is what a corner panel and most of the board
+            // are. Sliding along either axis alone would take a hundred pixels to reach anything, so the gap
+            // that matters is the distance to the near corner, not the smaller of the two. Reporting the
+            // smaller would rank a harmless diagonal neighbour as the tightest seam in the layout and bury the
+            // pair that is actually one nudge away from covering a socket.
+            if (dx > 0f && dy > 0f)
+            {
+                return Mathf.Sqrt(dx * dx + dy * dy);
+            }
+
+            return dx > 0f ? dx : (dy > 0f ? dy : Mathf.Max(dx, dy));
+        }
+
+        /// <summary>
+        /// A board of the test's own, built the way <see cref="BattlefieldPresenter.BuildBoard"/> builds one
+        /// when there is no prefab to bind.
+        /// <para>
+        /// This mirrors the three-line helper of the same name in <c>PointerTargetingTests</c> rather than
+        /// sharing it: the two files would otherwise agree about each other's internals to save a line each,
+        /// and the duplication is a comment deep, not a fixture.
+        /// </para>
+        /// </summary>
+        BattlefieldPresenter BuildThrowawayBoard(out Transform board)
+        {
+            var go = new GameObject("BattlefieldHudTestsPresenter");
+            spawned.Add(go);
+
+            var presenter = go.AddComponent<BattlefieldPresenter>();
+            presenter.BuildBoard();
+            board = presenter.transform.Find("Battlefield");
+            Assert.IsNotNull(board, "BuildBoard must create the board root.");
+            return presenter;
+        }
+
         [Test]
         public void Build_AlsoProducesTheStatusLayer()
         {
@@ -534,17 +585,284 @@ namespace Overlink.Match.Tests
                     Assert.LessOrEqual(r.yMax, vp.y, $"{name} runs off the top edge{at}.");
                 }
 
-                // The top-left band - banner, legend, opponent chip - is stacked vertically with 2 pixel seams
-                // rather than separated by horizontal gaps, because a horizontal gap between a centred fixed-width
-                // box and an edge-pinned one closes as soon as the viewport narrows. These three assertions are
-                // what that stacking buys, and they are the only ones that can still be true at 4:3.
-                Assert.IsTrue(Disjoint(Box(hud, "Banner"), Box(hud, "OpponentChip"), vp),
-                    "The banner must clear the opponent chip" + at);
-                Assert.IsTrue(Disjoint(Box(hud, "ControlsHint"), Box(hud, "OpponentChip"), vp),
-                    "The key legend must clear the opponent chip" + at);
+                                // What the sweep is really for: the two top corners are edge-pinned with fixed widths and the
+                // banner, the legend and the notice are centred with fixed widths, so every gap in the top band
+                // is between a centred box and an edge-pinned one - the exact shape that closes as the viewport
+                // narrows. 4:3, at 1646 reference pixels wide, is where they all get tight, and these assertions
+                // are the floor for box-against-box; how close a box may sit to the board itself is the separate
+                // and stricter question MinBoardClearance answers.
+                Assert.IsTrue(Disjoint(Box(hud, "NodeList"), Box(hud, "ControlsHint"), vp),
+                    "The node list must clear the key legend" + at);
+                Assert.IsTrue(Disjoint(hud.Panel, Box(hud, "Banner"), vp),
+                    "The log must clear the turn banner" + at);
+                Assert.IsTrue(Disjoint(Box(hud, "NodeList"), Box(hud, "Notice"), vp),
+                    "The node list must clear the notice line" + at);
+                Assert.IsTrue(Disjoint(hud.Panel, Box(hud, "Notice"), vp),
+                    "The log must clear the notice line" + at);
+
+                // The two columns, each of which owns one edge of the frame top to bottom.
+                Assert.IsTrue(Disjoint(Box(hud, "NodeList"), Box(hud, "LogPanel"), vp),
+                    "The two corner panels must not meet across the band" + at);
                 Assert.IsTrue(Disjoint(Box(hud, "PlayerChip"), Box(hud, "NodeList"), vp),
                     "The left column's own members must not stack on each other" + at);
+                Assert.IsTrue(Disjoint(Box(hud, "OpponentChip"), hud.Panel, vp),
+                    "and the right column's" + at);
             }
+        }
+
+        /// <summary>
+        /// The status boxes held to the socket-clear rule. Two of the HUD's nine panels are not here. The result
+        /// overlay is the modal exception: it only exists once the match is over, it is meant to cover the board,
+        /// and the button rail is hidden in the same breath as it is shown. The reader panel is not a status box
+        /// at all - it is not in <see cref="StatusBoxNames"/>, because it is a card the player asked for rather
+        /// than a readout the game keeps lit - and it is measured where it matters by the pointer tests instead.
+        /// </summary>
+        static readonly string[] BoardCoveringBoxes =
+        {
+            "Banner", "ControlsHint", "OpponentChip", "PlayerChip", "NodeList", "Notice"
+        };
+
+        /// <summary>
+        /// The smallest gap, in reference pixels, a status box may leave between itself and a clickable tile.
+        /// <para>
+        /// The layout's tightest seam measured <b>6.8</b> on 2026-10-28 - the key legend's box against a far
+        /// Node Bench rank at 3440x1440, the widest aspect in the sweep and the one that squeezes everything
+        /// vertically. Four is that with room to spare, and it is a tripwire rather than a measurement: the
+        /// boxes are pinned to margins and fixed sizes, so this only moves when a panel is resized or reseated,
+        /// which is exactly the change that should have to argue for itself.
+        /// </para>
+        /// <para>
+        /// The per-box worst, same day, for anyone retuning one panel and wanting to know what it is competing
+        /// with: legend 6.8, node list 8.7 (at 4:3, where the reference frame is tallest and the seam above the
+        /// far rank is the binding one), notice 9.3, both chips 61.1 (against the piles, at 16:9), banner 68.8.
+        /// </para>
+        /// </summary>
+        const float MinBoardClearance = 4f;
+
+        /// <summary>One board tile's footprint in fractions of the camera's viewport, and its tile name.</summary>
+        readonly struct TileFrame
+        {
+            public readonly string Name;
+            public readonly Rect Frame;
+
+            public TileFrame(string name, Rect frame)
+            {
+                Name = name;
+                Frame = frame;
+            }
+        }
+
+        /// <summary>
+        /// Every tile a click means something on, projected through the supplied rig.
+        /// <para>
+        /// Read off the hierarchy the presenter built and classified by <see
+        /// cref="BattlefieldPresenter.TryParseTileOwnership">the presenter's own name parser</see>, so this
+        /// copies no geometry: move a socket in the scene, resize one, or add a fifth rank, and what follows
+        /// measures the board that now exists instead of the one this file remembers.
+        /// </para>
+        /// <para>
+        /// The plates and the tabletop are not in here. A plate is the artwork its two ranks stand on, and the
+        /// only plate that reaches past a socket at all is a Core plate, by about seven reference pixels -
+        /// enough that watching it would cost the notice line a margin it does not have at 21:9. The tabletop
+        /// is scenery with nothing on it to click.
+        /// </para>
+        /// </summary>
+        static List<TileFrame> ClickableTileFrames(Transform board, Camera cam)
+        {
+            // Furniture that sticks out past the footprint the click maths uses: the gold rim around an
+            // Active socket is half a tenth of a unit wider than the tile, and a pile's two offset cubes
+            // lean 0.048 out of its top card's corner. One margin covers both.
+            const float furniture = 0.05f;
+
+            var frames = new List<TileFrame>();
+            foreach (Transform holder in board.GetComponentsInChildren<Transform>(true))
+            {
+                Transform body = holder.Find("Body");
+                if (body == null)
+                {
+                    continue;
+                }
+
+                if (!BattlefieldPresenter.TryParseTileOwnership(holder.name, out PlayerIndex _,
+                        out BattlefieldPresenter.TileRole role, out int _)
+                    || (role != BattlefieldPresenter.TileRole.Socket
+                        && role != BattlefieldPresenter.TileRole.Protocol
+                        && role != BattlefieldPresenter.TileRole.Pile))
+                {
+                    continue;
+                }
+
+                Vector3 size = body.localScale;
+                float xMin = float.MaxValue, xMax = float.MinValue;
+                float yMin = float.MaxValue, yMax = float.MinValue;
+                for (int cx = -1; cx <= 1; cx += 2)
+                {
+                    for (int cy = -1; cy <= 1; cy += 2)
+                    {
+                        Vector3 world = holder.TransformPoint(new Vector3(
+                            cx * (size.x * 0.5f + furniture), cy * (size.y * 0.5f + furniture), 0f));
+                        Vector3 v = cam.WorldToViewportPoint(world);
+                        xMin = Mathf.Min(xMin, v.x);
+                        xMax = Mathf.Max(xMax, v.x);
+                        yMin = Mathf.Min(yMin, v.y);
+                        yMax = Mathf.Max(yMax, v.y);
+                    }
+                }
+
+                frames.Add(new TileFrame(holder.name, Rect.MinMaxRect(xMin, yMin, xMax, yMax)));
+            }
+
+            return frames;
+        }
+
+        /// <summary>
+        /// The tabletop's near and far edges as fractions of the frame height. Nothing in the layout is meant
+        /// to sit on the tabletop itself - only on the void around it - so this is not a constraint. It is the
+        /// ruler the constraint is measured with: if these two numbers are not the documented ones, the rig in
+        /// this file is not the camera the game ships, and every overlap assertion next to it is theatre.
+        /// </summary>
+        static Vector2 TabletopEdges(Transform board, Camera cam)
+        {
+            float near = float.MaxValue, far = float.MinValue;
+            for (int cx = -1; cx <= 1; cx += 2)
+            {
+                for (int cy = -1; cy <= 1; cy += 2)
+                {
+                    Vector3 world = board.TransformPoint(new Vector3(
+                        cx * BattlefieldPresenter.TableWidth * 0.5f,
+                        BattlefieldPresenter.TableCenterY + cy * BattlefieldPresenter.TableDepth * 0.5f, 0f));
+                    float v = cam.WorldToViewportPoint(world).y;
+                    near = Mathf.Min(near, v);
+                    far = Mathf.Max(far, v);
+                }
+            }
+
+            return new Vector2(near, far);
+        }
+
+        [UnityTest]
+        public IEnumerator StatusLayer_CoversNoClickableTileAtAnySupportedAspect()
+        {
+            // The whole point of moving the readouts off the tabletop was to hand board space back, and a HUD
+            // that buys the space and then spends it covering sockets has inverted the deal. Nothing in the
+            // editor would notice: every panel here is transparent to the pointer, so a socket under a slab
+            // still clicks - it simply cannot be seen, which is what a player aims at.
+            BattlefieldPresenter presenter = BuildThrowawayBoard(out Transform board);
+
+            // The procedural build authors tiles in the board's own XY plane and leaves the plane's rotation
+            // to the scene, so without this the board stands upright, edge on to a camera looking for a ground.
+            presenter.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+            // The rig comes off the shipped component's defaults rather than off numbers in this file - see
+            // DropTargetTests, which does the same and spells out why a hard-coded framing is a framing that
+            // nobody re-checks.
+            var defaultsGo = new GameObject("FramingDefaults");
+            spawned.Add(defaultsGo);
+            BattlefieldCameraController shipped = defaultsGo.AddComponent<BattlefieldCameraController>();
+            Quaternion rot = Quaternion.Euler(shipped.pitch, shipped.yaw, 0f);
+            Vector3 rigPosition = shipped.focus - rot * Vector3.forward * shipped.distance;
+
+            BattlefieldHud hud = NewHud();
+
+            // The worst pairing seen anywhere in the sweep, kept across aspects so the report names the aspect
+            // that governs rather than the one that happened to fail last, and per box for the same reason.
+            float tightestGap = float.MaxValue;
+            string tightestCase = string.Empty;
+            string tightestAt = string.Empty;
+            var worstPerBox = new Dictionary<string, (float gap, string tile, string at)>();
+
+            foreach (Vector2 screen in SupportedScreens)
+            {
+                // One rig per aspect, built fresh and destroyed after. Camera.aspect feeds the projection
+                // matrix, so a mutated rig would depend on the editor having refreshed that matrix by the time
+                // the next read happened; constructing it right costs one line and removes the question.
+                var rigGo = new GameObject("HudLayoutRig");
+                Camera cam = rigGo.AddComponent<Camera>();
+                cam.fieldOfView = shipped.fieldOfView;
+                cam.aspect = screen.x / screen.y;
+                rigGo.transform.rotation = rot;
+                rigGo.transform.position = rigPosition;
+
+                // WorldToViewportPoint reads the camera's matrices, which are not refreshed until it renders.
+                yield return null;
+
+                try
+                {
+                    Vector2 vp = ReferenceViewport(screen.x, screen.y);
+                    string at = $" at {(int)screen.x}x{(int)screen.y} " +
+                        $"(viewport {vp.x:F0}x{vp.y:F0})";
+
+                    // Anchor before sweep. If the rig is not the shot the game renders then every overlap below
+                    // measures a board that does not exist, and a degenerate projection cannot be told from a
+                    // correct one by pass/fail alone - it passes, quietly. The tabletop's own edges are the
+                    // anchor: BattlefieldCameraController.RestFocusZ documents the resting shot as spanning
+                    // y 69..623 of 720, and vertical projection does not care about the aspect, so the same
+                    // two numbers hold at every size in this sweep.
+                    Vector2 edges = TabletopEdges(board, cam);
+                    Assert.AreEqual(69f / 720f, edges.x, 0.004f,
+                        "The rig does not reproduce the shipped resting shot - the tabletop's near edge is" +
+                        " elsewhere, so nothing measured below describes the frame the game renders." + at);
+                    Assert.AreEqual(623f / 720f, edges.y, 0.004f,
+                        "The rig does not reproduce the shipped resting shot - the tabletop's far edge is" +
+                        " elsewhere." + at);
+
+                    List<TileFrame> tiles = ClickableTileFrames(board, cam);
+
+                    // Eighteen sockets and a Protocol per player, plus the two piles. A board that quietly lost
+                    // its tiles would turn the sweep below into a pass over nothing, so the count is pinned
+                    // first.
+                    Assert.GreaterOrEqual(tiles.Count, 38,
+                        "The throwaway board must still carry every clickable tile the layout is judged against" + at);
+
+                    foreach (string name in BoardCoveringBoxes)
+                    {
+                        Rect box = ScreenRect(Box(hud, name), vp.x, vp.y);
+                        foreach (TileFrame tile in tiles)
+                        {
+                            Rect footprint = new Rect(
+                                tile.Frame.xMin * vp.x, tile.Frame.yMin * vp.y,
+                                tile.Frame.width * vp.x, tile.Frame.height * vp.y);
+                            float gap = Separation(box, footprint);
+                            if (gap < tightestGap)
+                            {
+                                tightestGap = gap;
+                                tightestCase = $"{name} against {tile.Name}";
+                                tightestAt = at;
+                            }
+
+                            // Per box as well as globally: the six panels are tuned against six different
+                            // neighbours, and a report naming only the worst of them leaves the other five to
+                            // be guessed at.
+                            if (!worstPerBox.TryGetValue(name, out (float gap, string tile, string at) seen)
+                                || gap < seen.gap)
+                            {
+                                worstPerBox[name] = (gap, tile.Name, at);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    Object.DestroyImmediate(rigGo);
+                }
+            }
+
+            // Disjointness on its own is a weak contract: it lets a later tweak close a seam to half a pixel and
+            // still go green, and half a pixel is where a slab starts eating a tile's rim for real. So the sweep
+            // keeps the worst gap it saw and holds that above a floor, and says which pair governs - which is how
+            // the numbers in BattlefieldHud's tooltips stay measurements of the layout rather than hopes about it.
+            var report = new StringBuilder();
+            foreach (KeyValuePair<string, (float gap, string tile, string at)> entry in worstPerBox)
+            {
+                report.Append($"\n  {entry.Key,-13} {entry.Value.gap,6:F1} ref px against " +
+                    $"{entry.Value.tile}{entry.Value.at}");
+            }
+
+            Assert.GreaterOrEqual(tightestGap, MinBoardClearance,
+                $"The tightest seam between a status box and the board measured {tightestGap:F1} reference" +
+                $" pixels ({tightestCase}{tightestAt}), under the {MinBoardClearance:F0} pixel floor." +
+                $" Worst seam per box:{report}\nMove or shrink the panel rather than this floor, unless the" +
+                $" layout genuinely settled somewhere tighter - {tightestCase} is the pair to argue about.");
         }
 
         [Test]

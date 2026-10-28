@@ -405,10 +405,11 @@ namespace Overlink.Match.Tests
 
             // And the other direction: the bias may not shove the far edge of the tabletop out of the shot,
             // which is what a player who never scrolls would see as a board with no top to it. This is the
-            // FRAME bound. The status layer's top band is the tighter one in practice - at the shipped HUD
-            // layout the key legend's glyph floor sits at 0.874 of the frame, which is what rules out a
-            // deeper bias than the authored one - but that number belongs to BattlefieldHud, and Stage 3 is
-            // reflowing it for the button rail. Pinning it here would mean editing it twice.
+            // FRAME bound, and it is the loose one: the status layer gets to the board's far rank long before
+            // the tabletop's own edge does. That tighter bound is pinned where it belongs - by
+            // BattlefieldHudTests.StatusLayer_CoversNoClickableTileAtAnySupportedAspect, which projects every
+            // clickable tile through this same rig and holds the panels off all of them at every aspect.
+            // Restating its numbers here would mean editing two files whenever the layout moves.
             float farWorldZ = BattlefieldPresenter.TableCenterY + BattlefieldPresenter.TableDepth * 0.5f;
             float fdz = farWorldZ - BattlefieldCameraController.RestFocusZ;
             float farTop = 0.5f + fdz * Mathf.Sin(pitchRad)
