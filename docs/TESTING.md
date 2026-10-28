@@ -88,17 +88,29 @@ did, which was the whole story, and discovery confirmed it once the refresh ran:
 of a full-suite run when a new class will not filter — a total that ignores a brand-new class means the
 assembly did not rebuild, not that the filter is wrong.
 
-## Known state after the idle-hand sink (2026-10-28)
+**A third cause, and the cheapest to rule out: the editor is in play mode.** An EditMode job accepted while a
+play-mode session is running completes as `status: "failed"` with `totalTests: 0`, `passedTests: 0`, and the
+message `An unexpected error happened while running tests.`; the console carries the real reason one line
+further down — `InvalidOperationException: This cannot be used during play mode` from the runner's
+`SaveModiedSceneTask`. Nothing about the job's own payload names play mode, so it reads like a broken class.
+`editor_get_state`'s `isPlaying` is the one-line check, and it costs nothing to make it step 0.5. This is worth
+more than a footnote in the case that matters: a live verification session left running is exactly the state
+somebody else will try to run tests in.
 
-EditMode: **1346 leaves, 1336 passed, 4 skipped, 6 failed.** Every failure is inside the UnitySkills package and
-none is ours:
+## Known state after the board skin pass (2026-10-28)
+
+EditMode: **1356 leaves, 1351 passed, 4 skipped, 1 failed.** The one failure is inside the UnitySkills package
+and is not ours:
 
 - `PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` counts objects in whichever scene happens to be
   open. It was red before the Node rule landed, it is not ours, and it is the only *standing* red.
 - Five `ReviewFixRouterTests` cases POST to the bridge's own REST router from inside a test run and got
   `COMPILING` / 503 back, or a reply missing the field under test, because the router was busy serving the
   session that started the run. The class is **48/48 green when run on its own**, so those five are load
-  artefacts of a full-suite run: re-run the class before believing any of them.
+  artefacts of a full-suite run: re-run the class before believing any of them. Landing the board skin pass is
+  the confirmation — two consecutive full-suite runs (1355 and 1356 leaves) reproduced only the standing
+  `PerceptionSkills` red, with nothing under `Assets/` touched while either ran. The five are not a mystery
+  failure any more; they are a busy router, and the cure is to stop editing assets mid-run.
 
 The 22 tests in `Overlink.Cards.Tests` are not in that count. They belong to PlayMode and no run of either
 mode has ever executed them.
@@ -113,6 +125,23 @@ puts the row nowhere near where the player sees it. The tell is the split: every
 stayed green while all six fan tests went red, which is the shape a half-broken projection takes, and the sink's
 own round-trip assertion passed throughout because both directions shared the error. A self-consistent unit is
 not a verified unit; the anchor is what distinguishes them.
+
+**`BoardSkinTests` (10) is the first class on the board that guards a tuning surface rather than a geometry**,
+and it exists because serialized fields fail quietly in a way constants cannot. It pins the thirteen albedos
+against copies of the shipped values (not against the fields they validate, which would prove nothing), the five
+slots against `null`, the partition of the board's fifty-nine cubes against counts derived from the same `Board`
+constants the presenter lays itself out from, every branch of the name-keyed colour resolver through the hex in
+its generated material's asset name, and the multiplication contract — one material across a family whose three
+albedos provably differ, which is only meaningful next to the assertion that without a skin three colours mean
+three materials.
+
+**Nine of the ten went green on the first run, which is precisely when this project's discipline says to suspect
+the tenth kind of failure: an assertion that cannot fail.** So the guard was mutation-tested against shipped code
+rather than believed — the rim branch was deleted from `SurfaceFor`, and exactly two tests went red
+(`EveryBodyOnTheBoardIsClaimedByExactlyOneFamily` and `SurfaceFor_TellsTheRimApartFromASocket`) while the other
+seven stayed green. That split is the signature of a live guard: a dead one goes red everywhere or nowhere, and
+the two that moved are the only two that depend on the branch. The mutation was reverted and the revert verified
+by grep before the next compile.
 
 **A geometry test that projects the board has to anchor its own rig.**
 `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is a `[UnityTest]` — it needs a camera whose matrices

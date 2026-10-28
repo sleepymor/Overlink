@@ -564,6 +564,31 @@ feature fighting itself - `RestingFootprintViewport` answers at sink zero no mat
 actually fallen, so the band a pointer is tested against never moves with the pose it is testing.
 `IdleHandSinkTests` pins the arithmetic; docs/CARD-FRAME-SPEC.md §13 holds the harvest it came out of.
 
+**The board's surfaces are droppable** (`BattlefieldPresenter`, Stage 3g). Thirteen albedos were code constants
+and every cube on the table rendered through a material generated per colour, so giving the board an art pass
+meant recompiling the presenter. There are now five `Material` slots on the component - tabletop, sockets,
+plates, piles, rims - with the thirteen albedos serialized beside them, each defaulting to the value the shipped
+framing was signed off against. They are code defaults rather than scene data, which is what makes that safe: a
+scene or prefab saved before the fields existed simply carries no entry, Unity leaves the initializer standing,
+and the board renders exactly as the one that shipped. The family a body belongs to is resolved from its name,
+off the same vocabulary and in the same test order as the empty-colour resolver, so a hand-regrouped prefab and a
+procedural board skin identically; the gold border cube is named `Socket` while no tile's own name contains the
+word, which is why the rim branch has to precede the socket fallback. A skin **multiplies rather than replaces**:
+the per-frame repaint still overrides the colour through a `MaterialPropertyBlock`, so one material serves a
+family whose members are three different hues, and a skin meant to be seen at full strength wants its family's
+albedo raised toward white. That is also why the tint's property id is now chosen per material by `HasProperty`
+instead of cached once per board off the shader's name - with five droppable slots the board can genuinely mix
+shaders, and a cached id would tint one half through a property the other half's shader does not have, silently,
+on the half nobody assigned a skin to. Slots are read at build time, at bind time, and every frame through five
+reference comparisons, so a material dropped on a live match lands on the next frame; `ApplySkins` is additionally
+a `[ContextMenu]` entry, and clearing a slot is deliberately one-directional (a cleared slot cannot recover the
+colour that generated the material underneath, so it leaves the body alone and rebuilding is what restores the
+shipped look). What stayed code-owned: the pointer marks and `BlockMark`. Cool against warm is how a player tells
+"a thing of yours you may trade places with" from "a thing you may hit" at a glance across the whole table, and a
+tuning surface that lets the two land on the same hue is a rules bug waiting for an artist. `BoardSkinTests` (10)
+pins the shipped albedos, the empty-slot defaults, and a partition of the board's fifty-nine cubes asserted by
+count against numbers derived from the same `Board` constants the presenter lays itself out from.
+
 ### 3.8 Pointer interaction
 
 **GDD reference:** §2.1.6 Combat, §4.6 presentation, §4.15.1 card types.
@@ -850,7 +875,8 @@ Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 | Full battlefield scene | Implemented as `Assets/Prefabs/Battlefield.prefab`, bound by name |
 | Opponent presentation | Implemented, mirrored |
 | Core/Node UI | Implemented; the readouts are overlay panels seated in the top band and the near corners (§3.7), while the piles and Node plates stayed on the table |
-| Resting hand vs the piles | Implemented (Stage 3f); the fan sinks whole-tile-deep while the pointer is away, the depth is measured from the piles' projected rects every frame instead of budgeted as a fraction, and `IdleHandSinkTests` pins the arithmetic (docs/CARD-FRAME-SPEC.md §13) |
+| Resting hand vs the piles | Implemented (Stage 3f); the fan sinks whole-tile-deep while the pointer is away, the depth is measured from the piles' projected rects every frame rather than budgeted as a fraction, and `IdleHandSinkTests` pins the arithmetic (docs/CARD-FRAME-SPEC.md §13) |
+| Board skin / art pass | Implemented (Stage 3g); five `Material` slots plus thirteen serialized albedos on the presenter, applied at build, at bind and every frame, defaults identical to the shipped frame, and `BoardSkinTests` pins the albedos and the cube partition. No artwork has been dropped in yet beyond a live verification |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
 | Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks; an attack pick offers both red (attack) and blue (retreat) sockets |
 | On-screen control rail | Implemented (§3.8); every keyboard verb has a button, derived per frame, and the strip was driven end to end in play mode through `event_invoke` |
@@ -860,7 +886,7 @@ Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 1330 leaves / 1325 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
+| NUnit execution | Verified: EditMode 1356 leaves / 1351 passed / 4 skipped / 1 failed, the failure a pre-existing package test that counts objects in whichever scene is open (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

@@ -41,6 +41,93 @@ namespace Overlink.Match
                  "first refresh when the scene has none, so the legacy standalone hand still gets a log.")]
         public BattlefieldHud hud;
 
+        // ---- Board skin ------------------------------------------------------------
+        // Five materials, one per family of surface on the table. Left empty, every body renders with the
+        // generated per-colour material it always has (Assets/Materials/Battlefield, keyed by hex), which is
+        // the frame the board ships in. Drop a material into a slot and every body of that family takes it -
+        // both construction paths, because the family is resolved from the same name the empty colour comes
+        // from, so a hand-regrouped prefab and a procedural board skin identically. See SurfaceFor.
+        // <para>
+        // <b>A skin multiplies; it does not replace.</b> The per-frame repaint overrides the surface colour
+        // through a MaterialPropertyBlock (see SetBodyColor), so a tile's albedo below keeps tinting whatever
+        // material it is handed: a stone diffuse comes out stone-shaped and board-blue. A skin meant to be
+        // seen at full strength wants its family's albedo raised toward white. A material whose shader declares
+        // neither _BaseColor nor _Color takes no tint at all and renders exactly as authored, which is also a
+        // legitimate answer - it just means the albedos stop meaning anything for that one family.
+        // </para>
+        // <para>
+        // The albedos are serialized for the same reason the slots are: they are the board's palette. The values
+        // written here are the ones the shipped framing was measured and signed off against, and they are code
+        // defaults rather than scene data - a scene or prefab saved before this field existed simply does not
+        // carry the entry, so Unity leaves the initializer standing and the board looks exactly as it did.
+        // Nothing else in the suite reads them, so BoardSkinTests pins them instead.
+        // </para>
+        // <para>
+        // What is deliberately NOT here: the pointer marks and BlockMark. Those are not surfaces, they are
+        // meanings - cool against warm is how a player tells "a thing of yours you may trade places with" from
+        // "a thing you may hit" at a glance, across the whole table at once - and a tuning surface that lets the
+        // two land on the same hue is a rules bug waiting for an artist. They stay code constants.
+        // </para>
+
+        [Header("Board skin (materials; empty = the shipped look)")]
+        [Tooltip("The backdrop slab the whole board lies on.")]
+        public Material tableSkin;
+
+        [Tooltip("Every slot tile: Active, Bench and Protocol, both halves, all five battlefields.")]
+        public Material socketSkin;
+
+        [Tooltip("The plates behind the ranks - the two Core plates and the four Node plates.")]
+        public Material plateSkin;
+
+        [Tooltip("The deck and discard stacks, top card and buried layers alike.")]
+        public Material pileSkin;
+
+        [Tooltip("The rim cube behind every Active socket.")]
+        public Material rimSkin;
+
+        [Header("Board albedo (what the skins above are tinted with)")]
+        [Tooltip("The backdrop slab.")]
+        public Color tableTint = new Color(0.09f, 0.11f, 0.15f);
+
+        [Tooltip("An empty Active socket - deliberately the brightest thing on the board, so a row of " +
+                 "[Active][Bench][Bench] never reads as three identical slots.")]
+        public Color activeEmpty = new Color(0.30f, 0.27f, 0.19f);
+
+        [Tooltip("An empty Bench socket.")]
+        public Color benchEmpty = new Color(0.13f, 0.15f, 0.19f);
+
+        [Tooltip("An empty Protocol socket, on its own hue.")]
+        public Color protocolEmpty = new Color(0.23f, 0.18f, 0.31f);
+
+        [Tooltip("The border behind each Active tile; survives deployment, unlike the tile's own tint.")]
+        public Color activeRim = new Color(0.80f, 0.64f, 0.28f);
+
+        [Tooltip("A unit standing on a socket, in its owner's colour.")]
+        public Color playerTint = new Color(0.20f, 0.42f, 0.72f);
+
+        [Tooltip("The same, for the opponent.")]
+        public Color opponentTint = new Color(0.62f, 0.24f, 0.24f);
+
+        [Tooltip("The plate behind a Core rank. Darker than a Node plate on purpose: it sits under two full " +
+                 "ranks, and at nodeFree it would compete with the socket fills stacked on top of it.")]
+        public Color corePlateTint = new Color(0.16f, 0.18f, 0.25f);
+
+        [Tooltip("A Node plate nobody controls.")]
+        public Color nodeFree = new Color(0.26f, 0.28f, 0.32f);
+
+        [Tooltip("A Node plate the player holds.")]
+        public Color nodePlayer = new Color(0.14f, 0.48f, 0.28f);
+
+        [Tooltip("A Node plate the opponent holds.")]
+        public Color nodeOpponent = new Color(0.56f, 0.38f, 0.12f);
+
+        [Tooltip("The deck stack: a card back, cooler and darker than any empty socket, so a face-down stack " +
+                 "can never be mistaken for somewhere a card can be dropped.")]
+        public Color deckTint = new Color(0.13f, 0.19f, 0.25f);
+
+        [Tooltip("The spent pile, warmer and greyer still.")]
+        public Color discardTint = new Color(0.21f, 0.17f, 0.14f);
+
         // ---- Tabletop -------------------------------------------------------------
         // The tabletop is sized to its content and nothing else. Since the status layer moved to
         // BattlefieldHud the widest content is still the pair of outer Node plates (x = +/-6.9) and the
@@ -143,10 +230,8 @@ namespace Overlink.Match
         public static readonly Vector2 DeckPilePosition = new Vector2(-3f, -4.35f);
         public static readonly Vector2 DiscardPilePosition = new Vector2(3f, -4.35f);
         static readonly Vector3 PileSize = new Vector3(0.72f, 1.008f, 0.04f);
-        // A card back, deliberately cooler and darker than any empty socket so a face-down stack can never
-        // be mistaken for somewhere a card can be dropped, and the spent pile warmer and greyer still.
-        static readonly Color DeckTint = new Color(0.13f, 0.19f, 0.25f);
-        static readonly Color DiscardTint = new Color(0.21f, 0.17f, 0.14f);
+        // The two pile albedos live in the Board albedo region with the rest of the palette: a pile is a
+        // surface, and a surface is tunable.
 
         // Depth stacking. Local -Z faces the pitched camera, so a smaller Z draws on top of a larger one:
         // cards above their plates, caption text above the plates, tabletop furthest back.
@@ -186,26 +271,18 @@ namespace Overlink.Match
             "NODE 4  DRAW ON KILL",
         };
 
-        static readonly Color PlayerTint = new Color(0.20f, 0.42f, 0.72f);
-        static readonly Color OpponentTint = new Color(0.62f, 0.24f, 0.24f);
-        // Empty-slot colours: the Active socket is deliberately the brightest thing on the board so a
-        // row of [Active][Bench][Bench] never reads as three identical slots. Protocol gets its own hue.
-        static readonly Color ActiveEmpty = new Color(0.30f, 0.27f, 0.19f);
-        static readonly Color BenchEmpty = new Color(0.13f, 0.15f, 0.19f);
-        static readonly Color ProtocolEmpty = new Color(0.23f, 0.18f, 0.31f);
-        // Gold border drawn behind each Active tile; survives deployment, unlike the tile's own tint.
-        static readonly Color ActiveRim = new Color(0.80f, 0.64f, 0.28f);
-        static readonly Color TableTint = new Color(0.09f, 0.11f, 0.15f);
-        static readonly Color NodeFree = new Color(0.26f, 0.28f, 0.32f);
-        // The Core plate sits under two full ranks, so it stays darker than a Node plate: at NodeFree it
-        // would compete with the socket fills stacked on top of it.
-        static readonly Color CorePlateTint = new Color(0.16f, 0.18f, 0.25f);
-        static readonly Color NodePlayer = new Color(0.14f, 0.48f, 0.28f);
-        static readonly Color NodeOpponent = new Color(0.56f, 0.38f, 0.12f);
+        // The board's palette - owner tints, empty-slot fills, plate and pile albedos - is serialized in the
+        // Board albedo region near the top of the class, because every one of them is a surface a skin drop
+        // should be able to recolour rather than a constant somebody has to recompile to change. What follows
+        // is the other half of the colour inventory, and it stays code-owned on purpose: these are not
+        // surfaces, they are statements.
+
+        // A unit that is blocking this turn. Yellow because it is neither owner tint nor pointer mark and has
+        // to be readable over both at once.
         static readonly Color BlockMark = new Color(1f, 0.84f, 0.20f);
 
-        // Owner tints for the HUD's node list. Brightened from the plate albedos above: NodePlayer and
-        // NodeOpponent are cube colours meant to sit under the board light, and as 21pt text on a dark slab
+        // Owner tints for the HUD's node list. Brightened from the plate albedos above: nodePlayer and
+        // nodeOpponent are cube colours meant to sit under the board light, and as 21pt text on a dark slab
         // they read as mud.
         static readonly Color RowNeutral = new Color(0.58f, 0.65f, 0.77f);
         static readonly Color RowPlayer = new Color(0.45f, 0.95f, 0.62f);
@@ -322,6 +399,10 @@ namespace Overlink.Match
                 }
             }
 
+            // A skin dropped in the Inspector, or moved by a script mid-match, lands on the next frame
+            // rather than on the next board build. Cheap when nothing moved: five reference reads.
+            ApplySkinsIfChanged();
+
             Refresh();
         }
 
@@ -361,7 +442,7 @@ namespace Overlink.Match
 
             // Tabletop backdrop.
             MakeBody(boardRoot, "Table", new Vector3(0f, TableCenterY, TableZ),
-                new Vector3(TableWidth, TableDepth, 0.05f), TableTint);
+                new Vector3(TableWidth, TableDepth, 0.05f), tableTint);
 
             // Everything that used to be painted here — the turn header, the key legend, the two status
             // strips, the victory banner and the notice line — now lives on BattlefieldHud's overlay canvas.
@@ -448,7 +529,16 @@ namespace Overlink.Match
             deckPile = FindTile("DeckPile");
             discardPile = FindTile("DiscardPile");
 
-            return !bindFailed && root.Find("Table/Body") != null;
+            if (bindFailed || root.Find("Table/Body") == null)
+            {
+                return false;
+            }
+
+            // A board that already exists carries its own materials, and the skin slots are read at
+            // construction - so without this pass a skin dropped on a bound scene would do nothing at all,
+            // which is the one workflow the slots exist for.
+            ApplySkins();
+            return true;
         }
 
         /// <summary>
@@ -769,20 +859,63 @@ namespace Overlink.Match
         }
 
         /// <summary>
+        /// The five families of surface a body on the table can belong to, and therefore the five materials a
+        /// skin can replace.
+        /// </summary>
+        public enum Surface
+        {
+            Table,
+            Socket,
+            Plate,
+            Pile,
+            Rim,
+        }
+
+        /// <summary>
+        /// The skin family a body claims, keyed off its name.
+        /// <para>
+        /// The same names, tested in the same order, that <see cref="BaseColorForSlot"/> reads for the empty
+        /// colour - and for the same reason. The prefab cannot be relied on to carry a per-tile material any
+        /// more than it can carry a per-tile colour, but the name always identifies what the body <em>is</em>,
+        /// so a hand-regrouped board and a procedurally built one skin identically off the same vocabulary.
+        /// That is also why the two resolvers are written next to each other: a name that means one thing to
+        /// the colour and another to the slot is a tile that renders in the wrong material, silently.
+        /// </para>
+        /// <para>
+        /// Order matters, and the rim test has to precede the fallback: the gold border cube is named
+        /// <c>Socket</c> (see <see cref="MakeTile"/>) while no tile's own name ever contains the word. So a body
+        /// called Socket is a rim, and anything that is not a table, a pile or a plate is a slot.
+        /// </para>
+        /// </summary>
+        public static Surface SurfaceFor(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return Surface.Socket;
+            }
+
+            if (name.StartsWith("Table")) return Surface.Table;
+            if (name.Contains("Socket")) return Surface.Rim;
+            if (name == "DeckPile" || name == "DiscardPile" || name.StartsWith("Stack")) return Surface.Pile;
+            if (name.StartsWith("NodePlate") || name.EndsWith("CorePlate")) return Surface.Plate;
+            return Surface.Socket;
+        }
+
+        /// <summary>
         /// The empty-slot colour a tile is built with, keyed off its name. Shared by the build path and
         /// the bind path so a bound prefab repaints identically to a procedurally built board.
         /// </summary>
-        static Color BaseColorForSlot(string name)
+        Color BaseColorForSlot(string name)
         {
-            if (name == "DeckPile") return DeckTint;
-            if (name == "DiscardPile") return DiscardTint;
-            if (name.StartsWith("Table")) return TableTint;
-            if (name.Contains("Socket")) return ActiveRim;
-            if (name.StartsWith("NodePlate")) return NodeFree;
-            if (name.EndsWith("CorePlate")) return CorePlateTint;
-            if (name.Contains("Active")) return ActiveEmpty;
-            if (name.Contains("Bench")) return BenchEmpty;
-            if (name.Contains("Protocol")) return ProtocolEmpty;
+            if (name == "DeckPile") return deckTint;
+            if (name == "DiscardPile") return discardTint;
+            if (name.StartsWith("Table")) return tableTint;
+            if (name.Contains("Socket")) return activeRim;
+            if (name.StartsWith("NodePlate")) return nodeFree;
+            if (name.EndsWith("CorePlate")) return corePlateTint;
+            if (name.Contains("Active")) return activeEmpty;
+            if (name.Contains("Bench")) return benchEmpty;
+            if (name.Contains("Protocol")) return protocolEmpty;
             return Color.white;
         }
 
@@ -812,9 +945,9 @@ namespace Overlink.Match
             // Plates first: they are at PlateZ, behind every socket on top of them, so build order is the
             // only thing that keeps the hierarchy readable when a designer opens the prefab.
             opponentCorePlate = MakeTile(opponent, "OppCorePlate",
-                new Vector3(0f, CoreOpponentPlateY, PlateZ), CorePlateSize, CorePlateTint, "", 14);
+                new Vector3(0f, CoreOpponentPlateY, PlateZ), CorePlateSize, corePlateTint, "", 14);
             playerCorePlate = MakeTile(player, "PlayCorePlate",
-                new Vector3(0f, CorePlayerPlateY, PlateZ), CorePlateSize, CorePlateTint, "", 14);
+                new Vector3(0f, CorePlayerPlateY, PlateZ), CorePlateSize, corePlateTint, "", 14);
 
             // The dead band between the two facing Active ranks is left clear. It used to carry a
             // "CORE BATTLEFIELD" caption, which said nothing a player needed the table to tell them and sat
@@ -826,26 +959,26 @@ namespace Overlink.Match
             for (int i = 0; i < activeCount; i++)
             {
                 opponentCoreActive[i] = MakeTile(opponentActiveGroup, $"OppCoreActive{i}",
-                    new Vector3(0f, CoreOpponentActiveY, CardZ), CoreActiveSize, ActiveEmpty,
+                    new Vector3(0f, CoreOpponentActiveY, CardZ), CoreActiveSize, activeEmpty,
                     "ACTIVE", 20, true);
                 playerCoreActive[i] = MakeTile(playerActiveGroup, $"PlayCoreActive{i}",
-                    new Vector3(0f, CorePlayerActiveY, CardZ), CoreActiveSize, ActiveEmpty,
+                    new Vector3(0f, CorePlayerActiveY, CardZ), CoreActiveSize, activeEmpty,
                     "ACTIVE", 20, true);
             }
 
             opponentProtocol = MakeTile(opponentProtocolGroup, "OppProtocol",
-                new Vector3(CoreProtocolX, CoreOpponentActiveY, CardZ), CoreProtocolSize, ProtocolEmpty, "PROT", 12);
+                new Vector3(CoreProtocolX, CoreOpponentActiveY, CardZ), CoreProtocolSize, protocolEmpty, "PROT", 12);
             playerProtocol = MakeTile(playerProtocolGroup, "PlayProtocol",
-                new Vector3(CoreProtocolX, CorePlayerActiveY, CardZ), CoreProtocolSize, ProtocolEmpty, "PROT", 12);
+                new Vector3(CoreProtocolX, CorePlayerActiveY, CardZ), CoreProtocolSize, protocolEmpty, "PROT", 12);
 
             // Back rank: the four Bench sockets, behind the Active rank, toward its owner's own edge.
             for (int i = 0; i < benchCount; i++)
             {
                 float x = CoreSlotX(i, benchCount);
                 opponentCoreBench[i] = MakeTile(opponentBenchGroup, $"OppCoreBench{i}",
-                    new Vector3(x, CoreOpponentBenchY, CardZ), CoreBenchSize, BenchEmpty, "BENCH", 14);
+                    new Vector3(x, CoreOpponentBenchY, CardZ), CoreBenchSize, benchEmpty, "BENCH", 14);
                 playerCoreBench[i] = MakeTile(playerBenchGroup, $"PlayCoreBench{i}",
-                    new Vector3(x, CorePlayerBenchY, CardZ), CoreBenchSize, BenchEmpty, "BENCH", 14);
+                    new Vector3(x, CorePlayerBenchY, CardZ), CoreBenchSize, benchEmpty, "BENCH", 14);
             }
         }
 
@@ -882,7 +1015,7 @@ namespace Overlink.Match
                 // anyone contests the node. Riding the plate's own label rather than a sibling means the tag
                 // travels with the plate when a node is moved in the editor.
                 nodePlate[n] = MakeTile(node, $"NodePlate{n}",
-                    new Vector3(0f, 0f, PlateZ), NodePlateSize, NodeFree, $"NODE {n + 1}", 14);
+                    new Vector3(0f, 0f, PlateZ), NodePlateSize, nodeFree, $"NODE {n + 1}", 14);
 
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
@@ -902,10 +1035,10 @@ namespace Overlink.Match
                 {
                     float x = NodeSlotOffset(i, Board.NodeActiveSlots);
                     nodeOpponentActive[n][i] = MakeTile(opponentActiveGroup, $"NodeOppActive{n}_{i}",
-                        new Vector3(x, NodeOpponentActiveY, CardZ), NodeActiveSize, ActiveEmpty,
+                        new Vector3(x, NodeOpponentActiveY, CardZ), NodeActiveSize, activeEmpty,
                         "ACTIVE", 13, true);
                     nodePlayerActive[n][i] = MakeTile(playerActiveGroup, $"NodePlayActive{n}_{i}",
-                        new Vector3(x, NodePlayerActiveY, CardZ), NodeActiveSize, ActiveEmpty,
+                        new Vector3(x, NodePlayerActiveY, CardZ), NodeActiveSize, activeEmpty,
                         "ACTIVE", 13, true);
                 }
 
@@ -914,9 +1047,9 @@ namespace Overlink.Match
                 {
                     float x = NodeSlotOffset(i, Board.NodeBenchSlots);
                     nodeOpponentBench[n][i] = MakeTile(opponentBenchGroup, $"NodeOppBench{n}_{i}",
-                        new Vector3(x, NodeOpponentBenchY, CardZ), NodeBenchSize, BenchEmpty, "BENCH", 11);
+                        new Vector3(x, NodeOpponentBenchY, CardZ), NodeBenchSize, benchEmpty, "BENCH", 11);
                     nodePlayerBench[n][i] = MakeTile(playerBenchGroup, $"NodePlayBench{n}_{i}",
-                        new Vector3(x, NodePlayerBenchY, CardZ), NodeBenchSize, BenchEmpty, "BENCH", 11);
+                        new Vector3(x, NodePlayerBenchY, CardZ), NodeBenchSize, benchEmpty, "BENCH", 11);
                 }
             }
         }
@@ -942,8 +1075,8 @@ namespace Overlink.Match
         {
             Transform piles = Group(boardRoot, "Piles");
 
-            deckPile = MakePile(piles, "DeckPile", DeckPilePosition, "DECK", DeckTint);
-            discardPile = MakePile(piles, "DiscardPile", DiscardPilePosition, "DISCARD", DiscardTint);
+            deckPile = MakePile(piles, "DeckPile", DeckPilePosition, "DECK", deckTint);
+            discardPile = MakePile(piles, "DiscardPile", DiscardPilePosition, "DISCARD", discardTint);
         }
 
         /// <summary>
@@ -2089,17 +2222,17 @@ namespace Overlink.Match
                 // (both hold, one holds, neither), and the pair of holds is the primitive the four states are
                 // defined from. ControlsNode is the same expression reduced to the one half that pays:
                 // pHolds && !oHolds. A Node both sides hold is contested and pays neither side, which is why
-                // it is coloured NodeFree rather than split down the middle - the colour says "nobody's".
+                // it is coloured nodeFree rather than split down the middle - the colour says "nobody's".
                 bool pHolds = player.Board.HoldsNode(n, PlayerIndex.Player);
                 bool oHolds = opp.Board.HoldsNode(n, PlayerIndex.Opponent);
                 bool pControls = pHolds && !oHolds;
                 bool oControls = oHolds && !pHolds;
 
                 SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForMark(nodePlate[n],
-                    pControls && oControls ? NodeFree
-                    : pControls ? NodePlayer
-                    : oControls ? NodeOpponent
-                    : NodeFree)));
+                    pControls && oControls ? nodeFree
+                    : pControls ? nodePlayer
+                    : oControls ? nodeOpponent
+                    : nodeFree)));
 
                 // The bonus text and the ownership readout, which used to be the plate caption. The plate keeps
                 // only its bare NODE tag now, so this is the one place a player can read what holding a node
@@ -2146,10 +2279,21 @@ namespace Overlink.Match
         // ---- Tile painting ----------------------------------------------------------
 
         /// <summary>
-        /// Shader property id for a body's colour, resolved from whatever shader the board was built with.
-        /// URP Lit spells it <c>_BaseColor</c>; the built-in fallback spells it <c>_Color</c>.
+        /// The two spellings a lit surface's colour goes by: URP Lit says <c>_BaseColor</c>, the built-in
+        /// fallback says <c>_Color</c>.
+        /// <para>
+        /// Both ids exist for every board, and the choice is made per material rather than cached once per
+        /// repaint, because a skin is whatever the scene hands it. Before the skin slots the whole board was
+        /// built from two known shaders, so one static id resolved on the first tile was harmless; with five
+        /// droppable materials the same cache would tint a URP tile through <c>_Color</c>, or an artist's unlit
+        /// diffuse through <c>_BaseColor</c>, and the tile would simply never change colour - silently, on the
+        /// half of the board nobody assigned a skin to. Asking the material whether it has the property is both
+        /// cheaper and more honest than asking its shader what it is called.
+        /// </para>
         /// </summary>
-        static int bodyColorId = -1;
+        static readonly int baseColorId = Shader.PropertyToID("_BaseColor");
+
+        static readonly int colorId = Shader.PropertyToID("_Color");
 
         /// <summary>
         /// Reused across every tile in a repaint, which is the point: allocating one of these per renderer per
@@ -2184,16 +2328,9 @@ namespace Overlink.Match
                 tintBlock = new MaterialPropertyBlock();
             }
 
-            if (bodyColorId < 0)
-            {
-                Material shared = renderer.sharedMaterial;
-                bool urp = shared != null && shared.shader != null &&
-                    shared.shader.name.StartsWith("Universal", System.StringComparison.Ordinal);
-                bodyColorId = Shader.PropertyToID(urp ? "_BaseColor" : "_Color");
-            }
-
+            Material shared = renderer.sharedMaterial;
             tintBlock.Clear();
-            tintBlock.SetColor(bodyColorId, color);
+            tintBlock.SetColor(shared != null && shared.HasProperty(baseColorId) ? baseColorId : colorId, color);
             renderer.SetPropertyBlock(tintBlock);
         }
 
@@ -2236,7 +2373,7 @@ namespace Overlink.Match
                 return;
             }
 
-            Color baseTint = card.Owner == PlayerIndex.Player ? PlayerTint : OpponentTint;
+            Color baseTint = card.Owner == PlayerIndex.Player ? playerTint : opponentTint;
             if (preview)
             {
                 baseTint = Color.Lerp(baseTint, PendingMark, 0.45f);
@@ -2433,12 +2570,126 @@ namespace Overlink.Match
             }
 
             Renderer renderer = cube.GetComponent<Renderer>();
-            renderer.sharedMaterial = MaterialFor(color);
+            renderer.sharedMaterial = MaterialFor(color, name);
             return renderer;
         }
 
         /// <summary>
-        /// The material a tile body renders with.
+        /// The material one body renders with: its family's skin when the scene has assigned one, and the
+        /// material this colour generates when it has not.
+        /// <para>
+        /// A skin short-circuits the generator, which is the whole point of it. Every body in the family then
+        /// shares one material, so they draw in one batch, and in play mode one fewer <c>new Material</c> is
+        /// allocated per board. The colour still arrives - through the per-frame property block in
+        /// <see cref="SetBodyColor"/> - which is why a skin multiplies rather than replaces.
+        /// </para>
+        /// </summary>
+        Material MaterialFor(Color color, string name)
+        {
+            Material skin = SkinFor(SurfaceFor(name));
+            return skin != null ? skin : MaterialForColor(color);
+        }
+
+        /// <summary>
+        /// The slot a surface family reads from. Five named fields rather than a keyed table, so the Inspector
+        /// shows exactly what a skin can replace and nothing else.
+        /// </summary>
+        Material SkinFor(Surface surface)
+        {
+            switch (surface)
+            {
+                case Surface.Table: return tableSkin;
+                case Surface.Socket: return socketSkin;
+                case Surface.Plate: return plateSkin;
+                case Surface.Pile: return pileSkin;
+                case Surface.Rim: return rimSkin;
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Re-reads the five skin slots against a board that already exists, and changes nothing else.
+        /// <para>
+        /// The bound path needs it for the reason written at its call site. The Inspector needs it because a
+        /// gear-menu item is the only way a serialized field can act on a live scene without a custom editor:
+        /// drop five materials on the component, click Apply, and the tabletop changes under the cursor instead
+        /// of waiting for somebody to rebuild a board or re-run a scene builder.
+        /// </para>
+        /// <para>
+        /// One-directional on purpose. An empty slot leaves whatever the body is already wearing, because a
+        /// cleared slot cannot recover the colour that generated the material in the first place - and guessing
+        /// it from the current material would trade a hand-authored per-tile material for a generated one of
+        /// the same shade, which is the opposite of what an artist just did. Back to the shipped look means
+        /// rebuilding the board, which consults the palette from scratch.
+        /// </para>
+        /// </summary>
+        [ContextMenu("Apply Board Skins")]
+        public void ApplySkins()
+        {
+            if (boardRoot == null)
+            {
+                return;
+            }
+
+            foreach (Renderer renderer in boardRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                // Every cube MakeBody builds is named Body and hangs off a holder that carries the tile's
+                // name, which is what the family is keyed off - the same shape FindTile binds against.
+                if (renderer.name != "Body" || renderer.transform.parent == null)
+                {
+                    continue;
+                }
+
+                Material skin = SkinFor(SurfaceFor(renderer.transform.parent.name));
+                if (skin != null)
+                {
+                    renderer.sharedMaterial = skin;
+                }
+            }
+
+            // Snapshot taken here rather than at the call sites, so every route into this method - the gear
+            // menu, the bind path, the per-frame check below - leaves the same truth behind it.
+            appliedTableSkin = tableSkin;
+            appliedSocketSkin = socketSkin;
+            appliedPlateSkin = plateSkin;
+            appliedPileSkin = pileSkin;
+            appliedRimSkin = rimSkin;
+        }
+
+        // The five slots as they stood the last time the board was walked. A skin dropped mid-match has to
+        // show up on the next frame or the slots are a build-time curiosity rather than a tuning surface, but
+        // walking every renderer on the table to find out whether one of five references moved is not a
+        // per-frame cost worth paying. So the comparison is five field reads and the walk only happens when
+        // one of them disagrees - the same derived-not-remembered shape the control rail publishes with.
+        Material appliedTableSkin;
+        Material appliedSocketSkin;
+        Material appliedPlateSkin;
+        Material appliedPileSkin;
+        Material appliedRimSkin;
+
+        /// <summary>
+        /// Walks the board only if one of the five slots has moved since the last walk.
+        /// <para>
+        /// Public because <c>LateUpdate</c> is a one-line caller and EditMode never ticks a MonoBehaviour, which
+        /// is the same reason <see cref="HandIdleSinker"/> hosts its arithmetic in statics and
+        /// <see cref="BuildBoard"/> is public at all: the behaviour has to be reachable from a test to be
+        /// behaviour rather than hope.
+        /// </para>
+        /// </summary>
+        public void ApplySkinsIfChanged()
+        {
+            if (tableSkin == appliedTableSkin && socketSkin == appliedSocketSkin &&
+                plateSkin == appliedPlateSkin && pileSkin == appliedPileSkin &&
+                rimSkin == appliedRimSkin)
+            {
+                return;
+            }
+
+            ApplySkins();
+        }
+
+        /// <summary>
+        /// The material a tile body renders with when no skin claims its family.
         /// <para>
         /// In <b>edit mode</b> this must resolve to a real <c>.mat</c> asset on disk. A Material built in
         /// memory is not an asset, so saving the board as a prefab silently collapses every one of them
@@ -2449,7 +2700,7 @@ namespace Overlink.Match
         /// draw in the same pass.
         /// </para>
         /// </summary>
-        static Material MaterialFor(Color color)
+        static Material MaterialForColor(Color color)
         {
 #if UNITY_EDITOR
             if (!Application.isPlaying)
@@ -2567,7 +2818,7 @@ namespace Overlink.Match
                 // camera), so a gold rim peeks out around the Active slot and keeps identifying it even
                 // once a unit is deployed there and the fill turns into an owner tint.
                 MakeBody(holder, "Socket", new Vector3(0f, 0f, 0.05f),
-                    new Vector3(size.x + 0.06f, size.y + 0.06f, 0.04f), ActiveRim);
+                    new Vector3(size.x + 0.06f, size.y + 0.06f, 0.04f), activeRim);
             }
 
             TextMeshPro label = MakeLabel(holder, "Label", new Vector3(0f, 0f, -size.z * 0.5f - 0.004f),
