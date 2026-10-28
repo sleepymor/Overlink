@@ -589,6 +589,49 @@ tuning surface that lets the two land on the same hue is a rules bug waiting for
 pins the shipped albedos, the empty-slot defaults, and a partition of the board's fifty-nine cubes asserted by
 count against numbers derived from the same `Board` constants the presenter lays itself out from.
 
+**A socket wears the card it holds** (`BattlefieldPresenter`, Stage A). A unit on the table was a coloured cube, so
+the board could show ownership, a mark and a pending block but nothing about *what* was standing there - the name,
+the cost, the art, the live attack and health all lived only in the fan. A socket now carries the hand's own framed
+card: one `CardData` per `CardInstance` from the coordinator's cache (`GameCoordinator.DataFor`, created lazily on
+first sight, which is why the opponent's cards resolve too), re-projected through `CardView.Refresh` so a damaged
+unit shows the health the engine holds rather than the health it arrived with. The face is pooled per socket and
+three things are tested apart, because they are the only three that can change: nothing (ninety-nine repaints in a
+hundred, and the one that must allocate and relayout nothing), the same card's numbers moving, and a *different*
+card arriving - a Bench card promoted into a dead unit's Active is a rebuild, and a pooled face that only re-read
+numbers would go on showing the one that died. `CardFaceData.SameAs` guards the refresh exactly rather than by
+hash, and the frame/fan geometry itself is untouched: the board gets the same object, not a look-alike.
+
+The lane it draws in is the part no EditMode assertion could have seen. A card face writes no depth, so its place in
+the pile is sorting order alone - and this project renders the tabletop through URP's **2D Renderer**
+(`Assets/Settings/Renderer2D.asset`), which orders *meshes* by that same key, with `ProjectSettings/TagManager.asset`
+declaring exactly one sorting layer. The first version of the lane was negative, on the reasoning that board cards
+should sit under the hand's lowest slice; under a 2D renderer that is not "under the hand", it is under the table,
+and every socket kept showing nothing but its caption. So the lane has two walls and both are now measured: above the
+socket the card stands on (the table, plates, rims and cubes all keep the default 0) and below the hand's discard
+flight at 50. A face spends ten orders below its baseline on art and twenty above it on text, so per-socket slices
+would cost 31 each and 36 sockets do not fit in that gap - one shared baseline of 20 serves every socket instead,
+which is safe only because a fitted card never leaves its own disjoint socket, and that is what the sizing test
+pins. It is also what keeps one socket's art mask off another's art: every mask on the board shares one range, so
+only the pixels decide whether it bites. Widening `boardCardFill` past 1.0 in the scene is what would break that.
+
+The caption's job narrowed with it. A card now carries the name, cost, art, ability and live stats, so the label
+under it repeats them; with a card painted it speaks only the four states a frame cannot express about itself -
+NOMINATION, BLOCKING, SUMMONING, SPENT - and goes quiet when the unit may simply act. Those words are the reason the
+caption lane (45) sits *over* the card and still under the hand: burying the annotation behind the thing it annotates
+takes the message straight back off the board. With no catalogs wired the label keeps the whole description instead,
+which is what the board shipped with and what every other suite's bare test board still depends on. Wrapping is
+turned off for the state word: the captions are authored to wrap so a long description can flow, and left on, TMP
+broke SUMMONING across two lines mid-word on the narrow sockets. What that costs is stated rather than hidden - with
+wrapping off TMP no longer shrinks the line, so the word overruns the Node-Bench captions at the prefab's font size
+11, and containing it is a scene edit to those sixteen labels, not a code constant.
+
+Two supporting seams came with it because the alternative was a lie. `[RequireComponent(typeof(BoxCollider))]` left
+`CardView`: a board card must not be pickable, and picking is geometric anyway, so the interactive path adds its own
+collider explicitly and sized while the board path adds none. And `MatchEngine.IsBlocking(blockerInstanceId)` is new,
+because `GetPendingBlocker` is keyed by *attacker* and returns the blocker - so the three places the presenter asked
+"is this card involved in a block" by testing `GetPendingBlocker(card.InstanceId) != 0` were lighting a swing as
+though it were the wall.
+
 ### 3.8 Pointer interaction
 
 **GDD reference:** §2.1.6 Combat, §4.6 presentation, §4.15.1 card types.
@@ -877,6 +920,7 @@ Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 | Core/Node UI | Implemented; the readouts are overlay panels seated in the top band and the near corners (§3.7), while the piles and Node plates stayed on the table |
 | Resting hand vs the piles | Implemented (Stage 3f); the fan sinks whole-tile-deep while the pointer is away, the depth is measured from the piles' projected rects every frame rather than budgeted as a fraction, and `IdleHandSinkTests` pins the arithmetic (docs/CARD-FRAME-SPEC.md §13) |
 | Board skin / art pass | Implemented (Stage 3g); five `Material` slots plus thirteen serialized albedos on the presenter, applied at build, at bind and every frame, defaults identical to the shipped frame, and `BoardSkinTests` pins the albedos and the cube partition. No artwork has been dropped in yet beyond a live verification |
+| Board card presentation | Implemented (Stage A); a socket now wears the hand's own framed card - one `CardData` per `CardInstance`, re-projected through `CardView.Refresh`, pooled per socket, colliderless, fitted inside its socket, and sorted into the gap between the board's own meshes and the hand - while `BoardCardTests` pins the fit, the lane, the mask range and the four state words. The Node-Bench captions still overrun their sockets at the prefab's font size 11; that is scene tuning and was left there deliberately |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
 | Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks; an attack pick offers both red (attack) and blue (retreat) sockets |
 | On-screen control rail | Implemented (§3.8); every keyboard verb has a button, derived per frame, and the strip was driven end to end in play mode through `event_invoke` |
@@ -886,7 +930,7 @@ Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 1356 leaves / 1351 passed / 4 skipped / 1 failed, the failure a pre-existing package test that counts objects in whichever scene is open (§2.1, `docs/TESTING.md`) |
+| NUnit execution | Verified: EditMode 1372 leaves / 1367 passed / 4 skipped / 1 failed, the failure a pre-existing package test that counts objects in whichever scene is open (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

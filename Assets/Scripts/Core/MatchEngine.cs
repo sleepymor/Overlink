@@ -401,6 +401,40 @@ namespace Overlink.Core
             return pendingBlocks.TryGetValue(attackerInstanceId, out int blockerId) ? blockerId : 0;
         }
 
+        /// <summary>
+        /// True when <paramref name="blockerInstanceId"/> is the unit some pending attack has been assigned to
+        /// answer.
+        /// <para>
+        /// The pending block is keyed by attacker because that is the direction combat resolution walks, but the
+        /// board paints one card at a time and its question is the other way round: is THIS unit standing in a
+        /// doorway? Asking it with <see cref="GetPendingBlocker"/> is the same call shape and the opposite fact, and
+        /// it lights the attacker as though it were the blocker - which is why this exists as a separate query
+        /// rather than a convention at each call site.
+        /// </para>
+        /// <para>
+        /// A linear scan is the right shape here rather than a second dictionary kept in step: there is at most one
+        /// entry per pending attack, the whole set clears on leaving Combat, and a mirror that only one of two
+        /// mutation paths remembered to update is a worse bug than the one this method fixes.
+        /// </para>
+        /// </summary>
+        public bool IsBlocking(int blockerInstanceId)
+        {
+            if (blockerInstanceId == 0)
+            {
+                return false;
+            }
+
+            foreach (int id in pendingBlocks.Values)
+            {
+                if (id == blockerInstanceId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private CardInstance ConsumePendingBlocker(CardInstance attacker, CardInstance target)
         {
             if (!pendingBlocks.TryGetValue(attacker.InstanceId, out int blockerId))

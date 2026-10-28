@@ -128,6 +128,58 @@ namespace Overlink.Match
         [Tooltip("The spent pile, warmer and greyer still.")]
         public Color discardTint = new Color(0.21f, 0.17f, 0.14f);
 
+        // ---- Board cards ------------------------------------------------------------
+        // A unit standing on a socket used to be drawn as a name and three numbers painted onto a tinted cube,
+        // while the very same card in the fan was drawn as a framed card with art, cost, ability text and its
+        // rarity materials. One object, two appearances, and a player re-reading every unit from scratch each
+        // time it leaves the hand. These four slots are the hand's own catalogs, wired to the same assets, so a
+        // socket shows the card it is: the same frame, the same art window, the same live ATK/HP/Shield the
+        // engine holds, refreshed by CardView.Refresh rather than by a second copy of the drawing rules here.
+        // <para>
+        // Left empty the board paints the caption cube exactly as it shipped. That is not a fallback kept for
+        // form's sake: every test rig and every editor preview in the project builds a board without catalogs,
+        // and the label path is what those depend on.
+        // </para>
+        // <para>
+        // What the card deliberately does not replace: the tile's own colour. Owner tint, pointer marks, the
+        // pending-block shading and the gold rim all still live on the cube, and the card is sized to cover
+        // slightly less than the socket so they keep reading around it. Those colours say what a click would do;
+        // the card says what the thing is. Neither is tunable into the other on purpose.
+        // </para>
+
+        [Header("Board cards (the hand's own catalogs; empty = the shipped caption tiles)")]
+        [Tooltip("Frame art catalog. Drop the same asset the HandController carries and a socket draws the " +
+                 "same frame the fan does.")]
+        public CardFrameCatalog frameCatalog;
+
+        [Tooltip("Card prefab catalog, keyed by card type and rarity.")]
+        public CardTemplateCatalog templateCatalog;
+
+        [Tooltip("Rarity material set: the shaders and textures a card's frame and art draw through.")]
+        public CardTierMaterialSet tierMaterials;
+
+        [Tooltip("Face used for a card with no bound definition. A socket always has a real card under it, so " +
+                 "this only ever matters to an editor preview of a board with no match behind it.")]
+        public CardPresentationFixture placeholderFixture;
+
+        [Header("Board card fit")]
+        [Tooltip("How much of the socket a card covers, 1 being edge to edge. Under 1 on purpose: the tile's own " +
+                 "colour and its gold rim are what say whose unit this is and whether a click would land on it, " +
+                 "and a card laid edge to edge swallows both.")]
+        [Range(0.5f, 1f)]
+        public float boardCardFill = 0.92f;
+
+        [Tooltip("How far the card floats off the tile, in board units, along the axis that faces the camera " +
+                 "(local -Z, the direction the caption already sits in front of the cube). Keep it under the " +
+                 "caption's own 0.004, or the card stands in front of the one line that has to read over it.")]
+        public float boardCardLift = 0.002f;
+
+        [Tooltip("Rotation applied to every board card on top of the pose its own socket's caption uses. Zero " +
+                 "means a card lies exactly as the tile label does, which is the one orientation proven readable " +
+                 "on this table. Change it only if the board is re-posed under you and the cards land face-down " +
+                 "or mirrored.")]
+        public Vector3 boardCardExtraRotation;
+
         // ---- Tabletop -------------------------------------------------------------
         // The tabletop is sized to its content and nothing else. Since the status layer moved to
         // BattlefieldHud the widest content is still the pair of outer Node plates (x = +/-6.9) and the
@@ -465,6 +517,11 @@ namespace Overlink.Match
             boardRoot = root;
             bindFailed = false;
 
+            // Binding mints a fresh set of Tile records, and a pooled card hangs off the record that created it.
+            // Dropping the old ones here is what stops a re-bind from leaving last session's faces parented to
+            // tiles nobody is going to paint again.
+            ClearBoardCards();
+
             // The status layer moved onto BattlefieldHud's overlay canvas. A board authored before that change
             // still carries the old world labels, and binding resolves children by name — so unless they are
             // deleted here they keep painting stale strings straight over the new HUD. Pruned before the name
@@ -663,6 +720,10 @@ namespace Overlink.Match
                 Body = renderer,
                 Label = label,
                 Name = name,
+                // The cube's own local scale is the authored footprint on this path, and it is what a card
+                // standing on the socket gets fitted inside. The holder carries no scale of its own (MakeTile
+                // puts the non-uniform size on the cube child), so reading the cube is reading the tile.
+                Size = body.localScale,
                 // Derived from the slot's NAME, never read back off its material. The prefab cannot be
                 // relied on to carry a per-tile colour (inline Materials are not assets, so a prefab save
                 // collapses them onto one shared material), but the name always identifies the slot kind,
@@ -670,6 +731,7 @@ namespace Overlink.Match
                 BaseColor = BaseColorForSlot(name),
                 EmptyLabel = label.text,
             };
+            ApplyCaptionSorting(label);
             ApplyTileIdentity(tile, name);
             return tile;
         }
@@ -1978,11 +2040,28 @@ namespace Overlink.Match
         /// </summary>
         public void Repaint(MatchState state)
         {
+            Repaint(state, null);
+        }
+
+        /// <summary>
+        /// Repaints from a state the caller owns, consulting <paramref name="engine"/> for the pending-block
+        /// shading instead of the coordinator's.
+        /// <para>
+        /// Pass null for the engine and this is exactly the runtime view of the match. Passing one is for the
+        /// block step, which is the only thing on the board that reads the engine rather than the state, and the
+        /// only state a player reaches while they are not the one taking their turn: a committed blocker is the
+        /// clearest single thing the table can be showing, and leaving it unreachable from EditMode would ship it
+        /// on faith. Declaring a real block costs three lines in a test and needs no match startup, so there is
+        /// no reason to widen anything else for it.
+        /// </para>
+        /// </summary>
+        public void Repaint(MatchState state, MatchEngine engine)
+        {
             // The card-to-tile map is rebuilt as tiles are painted, and a stale map survives a rebuild only
             // because the tiles themselves are the same objects. Dropping validity here means a repaint after
             // a manual hierarchy edit re-collects the pickables rather than clicking on ghosts.
             pickablesValid = false;
-            Refresh(state);
+            Refresh(state, engine);
         }
 
         /// <summary>Starts a short board-side pulse after a hand card is accepted as a deployment.</summary>
@@ -2003,7 +2082,7 @@ namespace Overlink.Match
             Refresh(coordinator != null ? coordinator.GetMatchState() : null);
         }
 
-        void Refresh(MatchState state)
+        void Refresh(MatchState state, MatchEngine injected = null)
         {
             if (Time.unscaledTime > noticeUntil)
             {
@@ -2020,8 +2099,13 @@ namespace Overlink.Match
             }
 
             // A board with no coordinator (a test fixture, or an editor preview) still paints: the engine is
-            // only ever consulted for the pending-block shading, which PaintTile null-guards.
-            MatchEngine engine = coordinator != null ? coordinator.GetMatchEngine() : null;
+            // only ever consulted for the pending block, which PaintTile, ShadeFor and TryStateCaption all
+            // null-guard. That is now three readers of one fact, and all three say the same thing about a unit
+            // the defender has committed, so an absent engine has to mean "nothing is blocked" rather than
+            // "cannot tell" - which is what a null check on a lookup that returns 0 already gives.
+            MatchEngine engine = injected != null
+                ? injected
+                : coordinator != null ? coordinator.GetMatchEngine() : null;
             bool over = state.IsMatchOver();
 
             // The legend is rewritten on the transition only, not every frame: the board repaints sixty times a
@@ -2364,6 +2448,12 @@ namespace Overlink.Match
 
             if (card == null)
             {
+                // A socket that has just emptied takes its card with it. Dead units are removed from the board by
+                // the engine and appear in the discard, so this is the frame a death lands on: without the clear
+                // the face would hang over an empty socket describing a card that is no longer there, which is
+                // precisely the "I never saw it die" the caption used to be blamed for.
+                ClearBoardCard(tile);
+
                 Color empty = highlightedTile == tile
                     ? Color.Lerp(tile.BaseColor, new Color(1f, 0.9f, 0.5f), 0.4f)
                     : tile.BaseColor;
@@ -2378,8 +2468,14 @@ namespace Overlink.Match
             {
                 baseTint = Color.Lerp(baseTint, PendingMark, 0.45f);
             }
-            else if (engine != null && engine.GetPendingBlocker(card.InstanceId) != 0)
+            else if (engine != null && engine.IsBlocking(card.InstanceId))
             {
+                // The defender's own commitment, and the one thing on this board that has to be readable while it
+                // is not your turn. IsBlocking rather than GetPendingBlocker, deliberately: the pending block is
+                // keyed by attacker, so the near-identical call answers "is this attack answered" and would light
+                // the swing instead of the wall in front of it - the exact inversion this used to ship with. The
+                // same fact drives the card's shade and its caption two methods down, so all three say BLOCKING
+                // about the unit that said it.
                 baseTint = Color.Lerp(baseTint, BlockMark, 0.55f);
             }
             else if (card.State == UnitState.Exhausted)
@@ -2399,8 +2495,40 @@ namespace Overlink.Match
             }
 
             SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, baseTint)));
-            tile.Label.color = Color.white;
-            tile.Label.text = CardText(card, preview);
+
+            // The tile's own colour is painted first and the card laid over it, which is the order that keeps
+            // both jobs done: the cube says what a click here would do (owner, mark, pending block, the gold rim
+            // behind it), and the card says what the thing is. The card covers all but boardCardFill of the
+            // socket, so the cube keeps reading as a ring around it rather than being hidden by it.
+            if (SyncBoardCard(tile, card, engine, preview))
+            {
+                // The card already carries the name, the cost, the art, the ability text and the live attack,
+                // health and shield, in the same face the fan uses, so the caption's job has narrowed to the four
+                // states a frame cannot express about itself. With no catalogs wired the label keeps carrying the
+                // whole description instead, which is what the board shipped with and what a bare test board
+                // still depends on.
+                if (TryStateCaption(card, engine, preview, out string caption, out Color captionColor))
+                {
+                    // A state word is one word, and the label is authored with wrapping on so a socket's full
+                    // description can flow. Left on, TMP breaks SUMMONING across two lines mid-word on a Node
+                    // Active, which is narrow enough that auto-size cannot save it first. Wrapping off hands the
+                    // fitting to auto-size alone, so the word stays whole and shrinks instead.
+                    tile.Label.enableWordWrapping = false;
+                    tile.Label.text = caption;
+                    tile.Label.color = captionColor;
+                }
+                else
+                {
+                    tile.Label.enableWordWrapping = false;
+                    tile.Label.text = string.Empty;
+                }
+            }
+            else
+            {
+                tile.Label.enableWordWrapping = true;
+                tile.Label.color = Color.white;
+                tile.Label.text = CardText(card, preview);
+            }
         }
 
         /// <summary>
@@ -2430,6 +2558,271 @@ namespace Overlink.Match
         Color TintForHover(Tile tile, Color tint)
         {
             return tile != null && tile == hoveredTile ? Color.Lerp(tint, Color.white, 0.22f) : tint;
+        }
+
+        // ---- Board cards ------------------------------------------------------------
+
+        /// <summary>
+        /// Every card face currently standing on a socket, so the board can clear them all in one pass when it
+        /// is rebuilt or re-bound. Mirrors <see cref="Tile.Card"/>, which is where a single socket's card is found.
+        /// </summary>
+        readonly List<CardView> boardCards = new List<CardView>();
+
+        /// <summary>
+        /// True when this view can draw a card at all. A face built without the catalogs is the legacy
+        /// placeholder cube rather than the card the fan shows, so having neither is the same as having no board
+        /// cards, and the caption tiles stay where they were.
+        /// </summary>
+        bool BoardCardsAvailable => frameCatalog != null || templateCatalog != null;
+
+        /// <summary>
+        /// Puts the real card face on a socket that has a card standing on it, and keeps it there across every
+        /// repaint that follows.
+        /// <para>
+        /// Three things can change and they are handled apart, because they cost very differently. The socket's
+        /// occupant can become a <em>different</em> card - a promotion off the Bench, a retreat, a replacement -
+        /// and then the pooled face describes the wrong object entirely and is rebuilt. The same card's numbers
+        /// can move, which is one re-projection through <see cref="CardView.Refresh"/> and nothing else. Or
+        /// neither can change, which is ninety-nine frames in a hundred and costs a reference comparison.
+        /// </para>
+        /// </summary>
+        /// <returns>True when a card is painted, which is what lets the caller narrow the socket's caption to the
+        /// states a card cannot describe about itself.</returns>
+        /// <summary>
+        /// Where a socket's card gets its presentation record from.
+        /// <para>
+        /// Left empty the board asks the coordinator, which caches one <see cref="CardData"/> per live card
+        /// instance — and that cache is what makes a card standing on the tabletop literally the same record the
+        /// fan was holding, the identity both <c>HandController.SetHand</c> and <see cref="SyncBoardCard"/> key
+        /// their view reuse on. Two records for one instance would not merely waste memory, it would make the same
+        /// card draw from two sources and be free to disagree.
+        /// </para>
+        /// <para>
+        /// Set it and the board draws cards with no match running, which is what makes this path testable at all:
+        /// a <see cref="GameCoordinator"/> boots its match from a coroutine half a second into play mode, and
+        /// tying a view's tests to that is the same mistake <see cref="Repaint"/> exists to avoid. Deliberately
+        /// not serialized, so the Inspector never shows it and no scene can ship wired to a delegate.
+        /// </para>
+        /// </summary>
+        public System.Func<CardInstance, CardData> cardDataResolver;
+
+        CardData ResolveCardData(CardInstance card)
+        {
+            if (card == null)
+            {
+                return null;
+            }
+
+            if (cardDataResolver != null)
+            {
+                return cardDataResolver(card);
+            }
+
+            return coordinator != null ? coordinator.DataFor(card) : null;
+        }
+
+        bool SyncBoardCard(Tile tile, CardInstance card, MatchEngine engine, bool preview)
+        {
+            // The card hangs off the tile's holder, not off its cube, for the reason written in MakeTile: the
+            // cube carries the non-uniform footprint, and a face parented to it would arrive flattened to
+            // 0.06 of its height. A tile authored without a holder therefore gets no card rather than a wrong one.
+            Transform holder = tile.Body != null ? tile.Body.transform.parent : null;
+            if (holder == null || !BoardCardsAvailable)
+            {
+                ClearBoardCard(tile);
+                return false;
+            }
+
+            CardData data = ResolveCardData(card);
+            if (data == null)
+            {
+                // Nothing behind this socket to project a face from, which is the editor-preview case. The
+                // caption tile is the honest rendering of a board with no match on it, rather than a card built
+                // out of the placeholder fixture - a preview board is exactly where a fake card would be
+                // mistaken for a real one.
+                ClearBoardCard(tile);
+                return false;
+            }
+
+            CardView view = tile.Card;
+            if (view != null && !ReferenceEquals(view.Data, data))
+            {
+                ClearBoardCard(tile);
+                view = null;
+            }
+
+            if (view == null)
+            {
+                view = CardView.CreateBoard(data, holder, FitSize(tile), frameCatalog, templateCatalog,
+                    placeholderFixture, tierMaterials, BoardCardSortBaseline);
+                tile.Card = view;
+                boardCards.Add(view);
+            }
+            else
+            {
+                view.Refresh();
+            }
+
+            PoseBoardCard(tile, view);
+            view.SetShade(ShadeFor(card, engine, preview));
+            return true;
+        }
+
+        /// <summary>
+        /// The largest card that fits this socket, keeping the frame's own aspect and covering only
+        /// <see cref="boardCardFill"/> of the tile.
+        /// <para>
+        /// Fitted on the tighter axis, and the two axes disagree across the board: a Core Active socket is
+        /// 1.10 x 1.54 against a card's 1.0 x 1.4615, so width would allow a scale of 1.01 while height allows
+        /// 0.95, and taking the wider answer would spill the card past the top and bottom of the tile it stands
+        /// on. A Node Active at 0.74 x 1.036 is the opposite way round. <c>min</c> is the only answer that is
+        /// right on both, and it is what the fill factor is then applied to.
+        /// </para>
+        /// </summary>
+        Vector3 FitSize(Tile tile)
+        {
+            Vector3 card = CardView.CardSize;
+            float scale = Mathf.Min(tile.Size.x * boardCardFill / card.x,
+                tile.Size.y * boardCardFill / card.y);
+            return new Vector3(card.x * scale, card.y * scale, card.z * scale);
+        }
+
+        /// <summary>
+        /// Lays the card onto its socket, facing the way the socket's own caption faces.
+        /// <para>
+        /// The caption's rotation is the source and not a convenience: it is the one orientation on this table
+        /// that is known to read, because it is the one that is being read every frame. Copying it means a board
+        /// re-posed in the scene takes its cards with it instead of stranding them face-down, and
+        /// <see cref="boardCardExtraRotation"/> is the escape hatch if a future pose ever needs one.
+        /// </para>
+        /// </summary>
+        void PoseBoardCard(Tile tile, CardView view)
+        {
+            Transform holder = tile.Body.transform.parent;
+            if (view.transform.parent != holder)
+            {
+                view.transform.SetParent(holder, false);
+            }
+
+            // In front of the cube on the axis that faces the pitched camera - local -Z, the same rule the
+            // caption follows at -half thickness less a hair - and a hair behind the caption, which is the one
+            // thing on a socket that has to read over a card rather than under it.
+            view.transform.localPosition = new Vector3(0f, 0f, -tile.Size.z * 0.5f - boardCardLift);
+            view.transform.localRotation = (tile.Label != null
+                ? tile.Label.transform.localRotation
+                : Quaternion.identity) * Quaternion.Euler(boardCardExtraRotation);
+            view.transform.localScale = Vector3.one;
+        }
+
+        /// <summary>
+        /// The colour multiplied over a board card's whole face. <see cref="Color.white"/> is the card as
+        /// authored, and that is what a ready unit gets: nothing is holding it back, so nothing is drawn on it.
+        /// <para>
+        /// These are the states a frame cannot carry. Dimming the entire face rather than one label is
+        /// deliberate - a spent unit has to read as spent from across the table, and the attack number is the one
+        /// detail a player is least likely to be looking at when they decide whether they may swing.
+        /// </para>
+        /// <para>
+        /// Code constants, not serialized knobs, on the same argument as the pointer marks: these four colours
+        /// are the difference between "this unit is available" and "this unit is not", and a tuning surface that
+        /// lets a summoned unit land on the same shade as a ready one is a rules bug waiting for an artist.
+        /// </para>
+        /// </summary>
+        static Color ShadeFor(CardInstance card, MatchEngine engine, bool preview)
+        {
+            if (preview)
+            {
+                // A nomination is a promise rather than a body. The engine holds no unit here yet, and the state
+                // an offered card carries is an artefact of how it was constructed, so cooling the whole face is
+                // what stops a preview reading as something already fielded.
+                return new Color(0.70f, 0.76f, 0.88f);
+            }
+
+            if (engine != null && engine.IsBlocking(card.InstanceId))
+            {
+                return new Color(1f, 0.87f, 0.64f);
+            }
+
+            switch (card.State)
+            {
+                case UnitState.Summoned: return new Color(0.66f, 0.68f, 0.74f);
+                case UnitState.Exhausted: return new Color(0.50f, 0.51f, 0.55f);
+                default: return Color.white;
+            }
+        }
+
+        /// <summary>
+        /// The one line a card cannot say about itself, and the colour it draws in, for a socket that has a real
+        /// card on it. False when the unit is simply ready, because an empty caption is the correct signal for
+        /// "nothing is holding this one back" and a word there would be noise the player learns to ignore.
+        /// <para>
+        /// One switch for both the shade and the words, deliberately: the two are the same four states seen two
+        /// ways, and the version of this with a separate colour function is one edit away from disagreeing with
+        /// the one next to it.
+        /// </para>
+        /// </summary>
+        static bool TryStateCaption(CardInstance card, MatchEngine engine, bool preview,
+            out string caption, out Color color)
+        {
+            if (preview)
+            {
+                caption = "NOMINATION";
+                color = new Color(0.74f, 0.80f, 0.94f);
+                return true;
+            }
+
+            if (engine != null && engine.IsBlocking(card.InstanceId))
+            {
+                caption = "BLOCKING";
+                color = new Color(1f, 0.88f, 0.68f);
+                return true;
+            }
+
+            switch (card.State)
+            {
+                case UnitState.Summoned:
+                    caption = "SUMMONING";
+                    color = new Color(0.82f, 0.84f, 0.88f);
+                    return true;
+                case UnitState.Exhausted:
+                    caption = "SPENT";
+                    color = new Color(0.70f, 0.71f, 0.76f);
+                    return true;
+                default:
+                    caption = string.Empty;
+                    color = Color.white;
+                    return false;
+            }
+        }
+
+        /// <summary>Takes the card off one socket, if it carries one.</summary>
+        void ClearBoardCard(Tile tile)
+        {
+            if (tile == null || tile.Card == null)
+            {
+                return;
+            }
+
+            boardCards.Remove(tile.Card);
+            DestroyTarget(tile.Card.gameObject);
+            tile.Card = null;
+        }
+
+        /// <summary>
+        /// Takes every card off the board. Called when the board itself goes away, at which point the tile
+        /// records are being rebuilt too, so there is no per-tile reference left to null.
+        /// </summary>
+        void ClearBoardCards()
+        {
+            for (int i = 0; i < boardCards.Count; i++)
+            {
+                if (boardCards[i] != null)
+                {
+                    DestroyTarget(boardCards[i].gameObject);
+                }
+            }
+
+            boardCards.Clear();
         }
 
         static string CardText(CardInstance card, bool preview = false)
@@ -2525,6 +2918,48 @@ namespace Overlink.Match
 
         // ---- Primitive helpers ------------------------------------------------------
 
+        // ---- Board card plumbing ----------------------------------------------------
+        // A card face writes no depth, so where it lands in the pile is decided by sorting order alone - and the
+        // tabletop renders through URP's 2D Renderer, which orders meshes and sprites by that one key. So a board
+        // card's lane is a gap rather than a free choice: it has to clear the board's own geometry (table,
+        // plates, gold rims and socket cubes all draw at the default 0) and still stay under the hand's lowest
+        // slice, a discard flight at 50, so a card lifted out of the fan covers the unit it is played onto
+        // instead of hiding behind it. Below zero does not mean "under the hand", it means under the TABLE: the
+        // first version of this lane was negative, and a socket holding a unit kept showing nothing but its
+        // caption, which is the failure no EditMode assertion about relative lanes could have seen.
+        //
+        // One baseline serves every socket. A face spends ten orders below its baseline on art and twenty above
+        // it on text, so per-socket slices would cost 31 each and 36 sockets do not fit between 0 and 50. None
+        // are needed: two board cards contend only where they overlap, and each is fitted inside its own socket
+        // (see BoardCard_FitsInsideItsSocketOnTheTighterAxis) while the authored sockets are disjoint. That
+        // disjointness is also what keeps one socket's art mask off another's art - every mask on the board
+        // shares one range, so only the pixels decide whether it bites. Widening boardCardFill past 1.0 in the
+        // scene is what would break that, and the fit test is what says not to.
+        const int BoardCardSortBaseline = 20;
+
+        /// <summary>
+        /// Where a socket's caption draws: over the card standing on it, under the hand.
+        /// <para>
+        /// The caption is the only place the states a frame cannot speak for itself get named - SUMMONING,
+        /// BLOCKING, SPENT, NOMINATION - so letting a card bury the caption that annotates it would take the
+        /// message straight back off the board.
+        /// </para>
+        /// </summary>
+        const int BoardCaptionSortOrder = 45;
+
+        /// <summary>
+        /// Raises one socket's caption into the lane above the cards. Both construction paths call it, because a
+        /// caption bound from the prefab arrives at the default 0 exactly as a built one does.
+        /// </summary>
+        static void ApplyCaptionSorting(TextMeshPro label)
+        {
+            Renderer renderer = label != null ? label.GetComponent<Renderer>() : null;
+            if (renderer != null)
+            {
+                renderer.sortingOrder = BoardCaptionSortOrder;
+            }
+        }
+
         /// <summary>
         /// Find-or-create an empty grouping node. Groups carry no geometry and are created at the identity,
         /// so every child's local position is still expressed in board-root units and the layout constants
@@ -2537,6 +2972,7 @@ namespace Overlink.Match
         /// editor is respected, because binding never rewrites a transform it did not create.
         /// </para>
         /// </summary>
+
         static Transform Group(Transform parent, string name)
         {
             Transform existing = parent.Find(name);
@@ -2834,11 +3270,13 @@ namespace Overlink.Match
                 Body = body,
                 Label = label,
                 Name = name,
+                Size = size,
                 BaseColor = emptyColor,
                 EmptyLabel = emptyLabel,
             };
             // Same name-keyed identity as the prefab-bind path, so a board built from scratch and a board
             // bound from the prefab resolve drop targets identically.
+            ApplyCaptionSorting(label);
             ApplyTileIdentity(tile, name);
             return tile;
         }
@@ -2858,6 +3296,28 @@ namespace Overlink.Match
             public SlotType SlotType;
             public int SlotIndex;
             public int NodeIndex;
+
+            /// <summary>
+            /// The authored footprint of this tile's cube: x wide, y tall, z thick, in board units.
+            /// <para>
+            /// Carried on the record rather than measured off the renderer, because the thing that has to fit
+            /// inside it is a card, and <c>Renderer.bounds</c> is the pitched board's answer to a question the
+            /// tile was built knowing. Both construction paths fill it: the build path from the size it was
+            /// handed, the bind path from the cube's own local scale.
+            /// </para>
+            /// </summary>
+            public Vector3 Size;
+
+            /// <summary>
+            /// The real card face standing on this socket, or null when it carries none.
+            /// <para>
+            /// Pooled per tile across repaints. The board repaints every frame for a socket whose occupant
+            /// changes a few times a match, so a card is created when its socket gains an occupant, re-projected
+            /// when that occupant's numbers move, and destroyed when the socket empties or a <em>different</em>
+            /// card takes it. See <see cref="SyncBoardCard"/>.
+            /// </para>
+            /// </summary>
+            public CardView Card;
 
             /// <summary>
             /// The tile holder's name, which is the one thing both construction paths agree on and therefore

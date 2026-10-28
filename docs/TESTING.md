@@ -97,9 +97,9 @@ further down — `InvalidOperationException: This cannot be used during play mod
 more than a footnote in the case that matters: a live verification session left running is exactly the state
 somebody else will try to run tests in.
 
-## Known state after the board skin pass (2026-10-28)
+## Known state after the board card pass (2026-10-29)
 
-EditMode: **1356 leaves, 1351 passed, 4 skipped, 1 failed.** The one failure is inside the UnitySkills package
+EditMode: **1372 leaves, 1367 passed, 4 skipped, 1 failed.** The one failure is inside the UnitySkills package
 and is not ours:
 
 - `PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` counts objects in whichever scene happens to be
@@ -142,6 +142,32 @@ rather than believed — the rim branch was deleted from `SurfaceFor`, and exact
 seven stayed green. That split is the signature of a live guard: a dead one goes red everywhere or nowhere, and
 the two that moved are the only two that depend on the branch. The mutation was reverted and the revert verified
 by grep before the next compile.
+
+**`BoardCardTests` (16) is where this project's measurement discipline got its sharpest lesson, because the class
+was green while the feature was invisible.** The board card's lane had one assertion — that its sorting order sat
+below the hand's lowest slice — and that was true, and it was the wrong half of the rule. Under URP's 2D Renderer
+meshes are ordered by the same key as sprites, so "below the hand" also meant "below the table", and nothing in the
+EditMode tree could see a card that never drew. The guard now measures both walls off live renderers rather than off
+a remembered constant: every order a face occupies (its sprite and text renderers plus both edges of its art mask,
+since a `SpriteMask` derives from `Renderer` but enforces a range rather than an order) is asserted above the socket
+cube it stands on and below the hand's discard flight, and the caption is asserted above the whole face. Two more
+assertions exist for the same reason the lane is shared: the art is inside its own mask's range, and a fitted card
+never leaves its socket — the second is what makes the first safe, and neither is decidable from the numbers alone.
+
+**All four of the class's new guards were mutation-proven, and one of them reproduces the live defect exactly.** The
+baseline was moved back to `-10000` and the test went red with `Expected: greater than 0 / But was: -10010` — the
+same symptom the screenshot showed, now caught without a camera. The caption assignment was deleted and it went red
+with `Expected: greater than 10 / But was: 0`. `ArtOffset` was swapped for `FrameOffset` in `ApplyRenderLayers` and
+the mask-range assertion moved. And `enableWordWrapping` was switched back on for the state word, which took
+`StateCaptionStaysOnOneLine_OnTheNarrowestCaptionedSocket` to `lineCount: 2` — the mid-word break the live board
+showed, reproducible in EditMode with no play mode and no screenshot at all. Each mutation was reverted and the
+revert verified before the next compile.
+
+**The wrap test measures TMP's generated mesh, not the flag it is nominally about.** `enableWordWrapping` is the
+mechanism; one line is what the player sees, and the test asserts `textInfo.lineCount` after `ForceMeshUpdate`, with
+`textInfo.characterCount > 0` asserted first — a font asset that generated no glyphs would otherwise make
+`lineCount == 1` pass on an empty mesh. It deliberately uses the narrowest socket that carries a card, because the
+wide ones never had the problem and a test on a Core Active would have gone green over the shipped defect.
 
 **A geometry test that projects the board has to anchor its own rig.**
 `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is a `[UnityTest]` — it needs a camera whose matrices

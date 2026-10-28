@@ -348,7 +348,7 @@ namespace Overlink.Match
             {
                 if (offer != null && !IsNominated(offer.InstanceId))
                 {
-                    shown.Add(GetOrMakeData(offer));
+                    shown.Add(DataFor(offer));
                 }
             }
 
@@ -1038,14 +1038,36 @@ namespace Overlink.Match
             var data = new List<CardData>(player.Hand.Count);
             foreach (CardInstance card in player.Hand)
             {
-                data.Add(GetOrMakeData(card));
+                data.Add(DataFor(card));
             }
 
             handController.SetHand(data);
         }
 
-        private CardData GetOrMakeData(CardInstance card)
+        /// <summary>
+        /// The presentation record for a live card, creating it on first sight and returning the same object
+        /// every time after that.
+        /// <para>
+        /// Views ask for this instead of building their own because reuse downstream depends on reference
+        /// identity: <c>HandController.SetHand</c> keeps a card view alive across syncs by spotting the same
+        /// <see cref="CardData"/> it saw last time, and the board's pooled cards key their existence on the same
+        /// trick. Two records for one <c>CardInstance</c> would not merely waste memory, it would make a card look
+        /// like a different object in the fan and on the tabletop, which is the thing this whole seam exists to
+        /// stop.
+        /// </para>
+        /// <para>
+        /// The record carries the running <c>CardInstance</c> rather than a snapshot of it, so a face projected
+        /// from it reads the engine's current attack, health and shield. That is what lets a board card refresh
+        /// itself off <see cref="CardView.Refresh"/> instead of the presenter learning how a card is drawn.
+        /// </para>
+        /// </summary>
+        public CardData DataFor(CardInstance card)
         {
+            if (card == null)
+            {
+                return null;
+            }
+
             if (dataByInstance.TryGetValue(card.InstanceId, out CardData existing))
             {
                 return existing;

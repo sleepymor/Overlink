@@ -388,6 +388,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   coordinator: {fileID: 397533433}
   hud: {fileID: 1723947092}
+  frameCatalog: {fileID: 11400000, guid: f4e29557f64556d448a6219fcd675ade, type: 2}
+  templateCatalog: {fileID: 11400000, guid: d437d12d2ddd6224596c610484170e0c, type: 2}
+  tierMaterials: {fileID: 11400000, guid: c3a536c991c2d8b44a5a87f1a320a732, type: 2}
+  placeholderFixture: {fileID: 0}
   lineupPreview: 
 --- !u!114 &397533433
 MonoBehaviour:

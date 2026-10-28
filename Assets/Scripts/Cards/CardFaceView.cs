@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using Overlink.Core;
@@ -319,6 +320,14 @@ namespace Overlink.Cards
             SetText(HpValue, hasStats ? face.Hp.Value.ToString() : string.Empty);
             SetText(ShieldValue, hasStats ? face.Shield.Value.ToString() : string.Empty);
             ApplyLayout();
+
+            // Last, and in this order on purpose: un-multiply whatever the previous bind left applied so the
+            // assignments above are describing pristine colours again, snapshot them, then put the current
+            // shade back. Skipping the restore is how a re-bound card greys itself to nothing one dim per
+            // combat step, because the multiplier would be folding into the value it is about to multiply.
+            RestoreShadeBase();
+            CacheShadeBase();
+            ApplyShade();
         }
 
         void ApplyLayout()
@@ -484,6 +493,115 @@ namespace Overlink.Cards
             SetTextOrder(AbilityValue, b + TextOffset);
             SetTextOrder(IdValue, b + TextOffset);
             SetTextOrder(AtkLabel, b + TextOffset);
+        }
+
+        // ---- Shade ----------------------------------------------------------------------
+        // One multiplier over the whole face. A card standing on the tabletop has to say things the frame does
+        // not: it is spent, it was summoned this step, it is a nomination rather than a body, it has just been
+        // hit. None of those are surfaces, so none of them belong in the frame art or in a material swap, and
+        // recolouring labels one by one would fight whatever the bind just set. Multiplying over every renderer
+        // the card draws reaches the frame, the art and the text identically.
+        //
+        // The base colours are snapshotted at the end of every bind rather than authored here, because the bind
+        // is what decides them (a neutral frame sprite draws dark, a real one white) and a copy of that rule
+        // kept over here would be one change to Bind away from being wrong.
+
+        /// <summary>The colour currently multiplied over every renderer on this face.</summary>
+        Color shade = Color.white;
+
+        // The shadeable things on a card are its two sprite renderers and its labels, and they do not share a
+        // colour channel: a SpriteRenderer owns .color, a TextMeshPro owns .color on the text component, and the
+        // Renderer underneath has no colour at all. Collecting Renderers and reaching for .color is the obvious
+        // move and it does not compile, which is the cheaper way of finding out.
+        Component[] shadeTargets;
+        Color[] shadeBase;
+
+        static Color ReadTargetColor(Component target)
+        {
+            if (target is SpriteRenderer sprite) return sprite.color;
+            if (target is TMP_Text text) return text.color;
+            return Color.white;
+        }
+
+        static void WriteTargetColor(Component target, Color color)
+        {
+            if (target is SpriteRenderer sprite) { sprite.color = color; return; }
+            if (target is TMP_Text text) { text.color = color; }
+        }
+
+        /// <summary>
+        /// Multiplies <paramref name="value"/> over every renderer this face draws and leaves it there until the
+        /// next call. <see cref="Color.white"/> is the card untouched. Cheap enough to call every repaint: an
+        /// unchanged colour does nothing at all.
+        /// </summary>
+        public void SetShade(Color value)
+        {
+            if (value == shade)
+            {
+                return;
+            }
+
+            shade = value;
+            ApplyShade();
+        }
+
+        void ApplyShade()
+        {
+            if (shadeTargets == null || shadeBase == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < shadeTargets.Length && i < shadeBase.Length; i++)
+            {
+                if (shadeTargets[i] != null)
+                {
+                    WriteTargetColor(shadeTargets[i], shadeBase[i] * shade);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Puts the snapshotted colours back, so the bind that follows assigns the pristine values it expects to
+        /// find itself setting.
+        /// </summary>
+        void RestoreShadeBase()
+        {
+            if (shadeTargets == null || shadeBase == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < shadeTargets.Length && i < shadeBase.Length; i++)
+            {
+                if (shadeTargets[i] != null)
+                {
+                    WriteTargetColor(shadeTargets[i], shadeBase[i]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Records what every renderer on this card is wearing right now, which is the pristine colour
+        /// <see cref="ApplyShade"/> multiplies from. Inactive children are included, so a layer switched on
+        /// later still arrives shaded rather than bare.
+        /// </summary>
+        void CacheShadeBase()
+        {
+            Component[] all = GetComponentsInChildren<Component>(true);
+            var targets = new List<Component>(all.Length);
+            var bases = new List<Color>(all.Length);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] is SpriteRenderer || all[i] is TMP_Text)
+                {
+                    targets.Add(all[i]);
+                    bases.Add(ReadTargetColor(all[i]));
+                }
+            }
+
+            shadeTargets = targets.ToArray();
+            shadeBase = bases.ToArray();
         }
 
         /// <summary>
