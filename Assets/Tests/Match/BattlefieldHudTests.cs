@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using NUnit.Framework;
 using Overlink.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -619,22 +620,26 @@ namespace Overlink.Match.Tests
         /// </summary>
         static readonly string[] BoardCoveringBoxes =
         {
-            "Banner", "ControlsHint", "OpponentChip", "PlayerChip", "NodeList", "Notice"
+            "Banner", "ControlsHint", "OpponentChip", "PlayerChip", "NodeList", "Notice", "LogPanel"
         };
 
         /// <summary>
         /// The smallest gap, in reference pixels, a status box may leave between itself and a clickable tile.
         /// <para>
-        /// The layout's tightest seam measured <b>6.8</b> on 2026-10-28 - the key legend's box against a far
-        /// Node Bench rank at 3440x1440, the widest aspect in the sweep and the one that squeezes everything
+        /// The layout's tightest seam measured <b>6.3</b> on 2026-10-28 - the notice line against the opponent's
+        /// Core Bench at 3440x1440, the widest aspect in the sweep and the one that squeezes everything
         /// vertically. Four is that with room to spare, and it is a tripwire rather than a measurement: the
         /// boxes are pinned to margins and fixed sizes, so this only moves when a panel is resized or reseated,
         /// which is exactly the change that should have to argue for itself.
         /// </para>
         /// <para>
         /// The per-box worst, same day, for anyone retuning one panel and wanting to know what it is competing
-        /// with: legend 6.8, node list 8.7 (at 4:3, where the reference frame is tallest and the seam above the
-        /// far rank is the binding one), notice 9.3, both chips 61.1 (against the piles, at 16:9), banner 68.8.
+        /// with: notice 6.3, node list 8.7 and the log 8.7 (both at 4:3, where the reference frame is tallest and
+        /// the seam above the far Node Bench rank is the binding one; the log is in this table as of the ink
+        /// commit, having been left out of <see cref="BoardCoveringBoxes"/> by oversight while its own doc
+        /// already claimed only two exclusions), legend 40.8, both chips 46.5 (against the near Node Bench at
+        /// 3440x1440 - they were 61.1 against the piles at 16:9 until the chips grew a second counter line), and
+        /// banner 86.8.
         /// </para>
         /// </summary>
         const float MinBoardClearance = 4f;
@@ -863,6 +868,233 @@ namespace Overlink.Match.Tests
                 $" pixels ({tightestCase}{tightestAt}), under the {MinBoardClearance:F0} pixel floor." +
                 $" Worst seam per box:{report}\nMove or shrink the panel rather than this floor, unless the" +
                 $" layout genuinely settled somewhere tighter - {tightestCase} is the pair to argue about.");
+        }
+
+        // ---- Ink against the box -------------------------------------------------------
+        //
+        // The board sweep asks whether a box covers a tile. It cannot ask the other question, which is whether
+        // the box covers itself: every one of these texts is authored with word wrapping and Truncate overflow,
+        // so a string wider than its slab does not spill into the frame, it quietly stops existing. That is how
+        // the shipped banner rendered as "FIELD YOUR OPENING F" and the chips as "CORE 3/3  NP 3/10  NODES 0/4"
+        // with the hand and deck counts simply absent, both of which a box-vs-box test scores as clean.
+        //
+        // Truncate is still the right setting - the alternative drags text across the board - but it means the
+        // box has to be measured against the ink, and that is a question no amount of rectangle arithmetic can
+        // answer. So this asks TMP itself.
+
+        [Test]
+        public void StatusInk_FitsItsBoxes()
+        {
+            BattlefieldHud hud = NewHud();
+            var table = new StringBuilder();
+            var problems = new List<string>();
+
+            // The worst case per box, from the formatters that write it. The banner has exactly two strings it
+            // can hold; TURN 99 and CLEANUP are the longest turn number and phase name a match realistically
+            // reaches. The chip's figures are real ceilings rather than guesses: NP caps at 10 plus four nodes,
+            // the Core starts at 3, a deck is 30 cards, and a hand of ten is a ruined match but not an
+            // impossible one. The log's four entries are the four SetLog can show at once, each long enough to
+            // wrap, which is the tallest the panel can legitimately get.
+            Ink(table, problems, hud, "banner/setup", "Banner/BannerText",
+                "LINEUP SETUP   \u2022   FIELD YOUR OPENING FIVE");
+            Ink(table, problems, hud, "banner/battle", "Banner/BannerText",
+                "TURN 99   \u2022   CLEANUP   \u2022   ACTIVE: OPPONENT");
+            Ink(table, problems, hud, "hint/battle", "ControlsHint/ControlsHintText",
+                BattlefieldPresenter.ControlsHintText);
+            Ink(table, problems, hud, "hint/setup", "ControlsHint/ControlsHintText",
+                BattlefieldPresenter.SetupHintText);
+            Ink(table, problems, hud, "chip/body", "PlayerChip/Body",
+                "CORE 3/3   NP 14/14\nNODES 4/4   HAND 10   DECK 30");
+            Ink(table, problems, hud, "chip/title", "OpponentChip/OpponentChipText", "OPPONENT");
+            Ink(table, problems, hud, "nodeRow", "NodeList/NodeRow3",
+                "NODE 4  DRAW ON KILL   \u2022   CONTESTED");
+            // The longest rejection the coordinator can issue, with a card name at twenty-four characters. The
+            // line is 640 wide and two lines tall at 20pt, which is about 200 characters of headroom, so this
+            // fits with room - and a third line is exactly what the box cannot show, which is why its height is
+            // 2.8 times the font size rather than the 2.5 it shipped with.
+            Ink(table, problems, hud, "notice", "Notice/NoticeText",
+                "Warden of the Nine Gates cannot be played during CLEANUP - cards are played in the Main " +
+                "phase (press P).");
+            // The log is measured through SetLog rather than by writing its TMP directly, because SetLog now owns
+            // a policy the box depends on: four entries of the length the engine really writes lay out seven
+            // lines and the body holds six, so the panel backs its window off from the oldest end until the text
+            // measures whole. Measuring a four-entry string by hand would score a panel the shipped code cannot
+            // produce, and would score the old silently-eats-the-newest bug as a pass.
+            var entries = new List<string>
+            {
+                "Setup - Player offered 5 card(s), Opponent offered 5 card(s)",
+                "Coin flip: tails - Opponent goes first, Player starts with +1 NP",
+                "Opponent fields 5 unit(s) (0 offered card(s) returned to deck)",
+                "Anchor Guard hits the Player Core for 1 durability"
+            };
+            hud.SetLog(entries);
+            Ink(table, problems, hud, "log", "LogPanel/LogText", null);
+
+            Ink(table, problems, hud, "result", "Result/ResultText",
+                "VICTORY<size=36%>   \u2022   BOTH CORES DESTROYED</size>");
+
+            // The rail is the same question with the opposite answer. Its labels are raw TextMeshProUGUI rather
+            // than EnsureText's, so they carry TMP's default Overflow mode: a label too long for its 162x36 slab
+            // does not disappear, it walks out from under the button and onto the board. That is how
+            // "CONFIRM LINEUP  0/5" rendered in the shipped scene, its counter drawn on the tabletop - and the
+            // authored "CONFIRM LINEUP" was itself 160 of those 162 pixels, so both that word and the size of
+            // "DONE BLOCKING" (155) are changed, with the measurements recorded where they are set.
+            // The two pile arrows are the exception this does not cover: measuring them rasterises U+25C4 and
+            // U+25BA into the dynamic fallback atlas and dirties the font asset on every run, and one glyph in
+            // a 78 pixel slab is not a plausible overflow anyway.
+            string[] railObjects =
+            {
+                "EndPhaseButton", "DoneBlockingButton", "ConfirmLineupButton", "RerollLineupButton",
+                "EndTurnButton", "StateButton", "ConcedeButton",
+                "SwingCoreButton", "SwingNode1Button", "SwingNode2Button", "SwingNode3Button",
+                "SwingNode4Button", "ActivateButton"
+            };
+            foreach (string railObject in railObjects)
+            {
+                Ink(table, problems, hud, "rail/" + railObject,
+                    "PhaseControls/" + railObject + "/Label", null);
+            }
+
+            // The two labels the coordinator rewrites every frame, so the authored text is not their worst case.
+            Ink(table, problems, hud, "rail/confirm-count",
+                "PhaseControls/ConfirmLineupButton/Label", "CONFIRM  0/5");
+            Ink(table, problems, hud, "rail/reroll-cost",
+                "PhaseControls/RerollLineupButton/Label", "REROLL - 10 NP");
+
+            Assert.IsEmpty(problems,
+                "Some status text does not fit the box it is written in." +
+                $"\n{table}" +
+                "Fix the box or the string, never this assertion: a shortfall here means the engine decided to " +
+                "tell the player something and the panel threw it away before it reached the screen.");
+        }
+
+        /// <summary>
+        /// The slack every status text owes its own box, in reference pixels. Four, the same number the board
+        /// sweep is held to, because it answers the same question from the other side: <see
+        /// cref="StatusLayer_CoversNoClickableTileAtAnySupportedAspect"/> asks whether a box covers the board, and
+        /// this asks whether a box covers itself.
+        /// <para>
+        /// The floor is not decoration. Every text in this layer is authored with word wrapping and Truncate
+        /// overflow, so ink that outruns its slab does not spill - it stops being drawn, silently, and the player
+        /// is told less than the engine decided. Text exactly flush with its box survives until someone changes a
+        /// font asset, a card name, or a node count, so the four pixels are the difference between a layout and a
+        /// coincidence. Measured 2026-10-28, worst per box, to the pixel the guard's own table prints: banner 7
+        /// tall and 81 wide, legend 7 tall, chip body 9 tall, node row 14 tall and 23 wide, notice 10 tall, log
+        /// 10 tall, result 121 tall. The rail's thirteen labels are held by the same floor; the two that came
+        /// nearest its wall are recorded where they are set, in <c>BattlefieldHud.EnsurePhaseControls</c>.
+        /// </para>
+        /// <para>
+        /// The width half of the floor only binds single-line boxes - see <c>Ink</c> for why a wrapped line near
+        /// its wall is the wrapping working rather than a squeeze.
+        /// </para>
+        /// </summary>
+        const float MinInkSlack = 4f;
+
+        /// <summary>
+        /// Asks TMP what it actually laid out for one string in one box, and records the answer. Three numbers
+        /// matter and they catch different failures: <c>parsed</c> against the string's own plain length is text
+        /// the player never sees at all, which is the failure Truncate hides; the widest line against the box
+        /// width and the block height against the box height are the same text spilling, which is what the
+        /// overflow mode would do if it were ever changed. Every case appends a row, so one failure reports the
+        /// whole layer rather than its first symptom.
+        /// </summary>
+        static void Ink(StringBuilder table, List<string> problems, BattlefieldHud hud,
+            string label, string path, string source)
+        {
+            Transform found = hud.transform.Find(path);
+            if (found == null)
+            {
+                problems.Add(label + ": no such object at " + path);
+                table.Append($"{label,-14} MISSING {path}\n");
+                return;
+            }
+
+            var tmp = found.GetComponent<TextMeshProUGUI>();
+            if (tmp == null)
+            {
+                problems.Add(label + ": no TextMeshProUGUI on " + path);
+                table.Append($"{label,-14} NO TMP ON {path}\n");
+                return;
+            }
+
+            // TMP's own layout, asked for by name rather than by inference. Both arguments matter: the result
+            // overlay and the whole button rail are on inactive GameObjects at build, and ForceMeshUpdate()
+            // early-outs on an inactive text - reporting zero lines and zero characters, which is indistinguishable
+            // from the truncation this measures - while the rail's labels already hold the text being assigned, so
+            // without a forced reparse TMP would consider itself clean and lay out nothing new.
+            if (source == null) source = tmp.text;
+            tmp.text = source;
+            tmp.ForceMeshUpdate(true, true);
+            TMP_TextInfo info = tmp.textInfo;
+            Rect rect = tmp.rectTransform.rect;
+
+            float widest = 0f;
+            float inkHeight = 0f;
+            int lineCount = info.lineCount;
+            for (int i = 0; i < lineCount; i++)
+            {
+                TMP_LineInfo line = info.lineInfo[i];
+                widest = Mathf.Max(widest, line.length);
+                inkHeight += line.lineHeight;
+            }
+
+            // Rich text tags occupy no characters on screen and TMP's characterCount is the post-parse total, so
+            // the comparison has to be made against the string as a player would read it.
+            string plain = StripTags(source);
+            int parsed = info.characterCount;
+            string lost = parsed < plain.Length ? plain.Substring(parsed) : string.Empty;
+
+            table.Append($"{label,-13} box {rect.width,5:F0}x{rect.height,4:F0}" +
+                $" font {tmp.fontSize,4:F1} wrap {(tmp.enableWordWrapping ? "on " : "off")}" +
+                $" {tmp.overflowMode,-8} lines {lineCount}" +
+                $" widest {widest,5:F0} inkH {inkHeight,5:F0}" +
+                $" chars {plain.Length,3} parsed {parsed,3}" +
+                (lost.Length > 0 ? $" LOST \"{lost}\"\n" : "\n"));
+
+            if (parsed != plain.Length)
+            {
+                problems.Add($"{label}: {plain.Length - parsed} of {plain.Length} characters never reach the " +
+                    $"screen (it stops at \"{plain.Substring(0, parsed)}\")");
+            }
+
+            // The width floor only applies to text that stayed on one line. A wrapped box has already been told
+            // where to break, so a line sitting near its wall is the wrapping working rather than a squeeze; what
+            // a wrapped box can genuinely run out of is height, and the height floor covers both kinds.
+            float widthSlack = rect.width - widest;
+            float heightSlack = rect.height - inkHeight;
+            if (lineCount == 1 && widthSlack < MinInkSlack)
+            {
+                problems.Add($"{label}: its one line lays out {widest:F1} pixels into a {rect.width:F0} pixel " +
+                    $"box, leaving {widthSlack:F1} pixels where this layer is held to {MinInkSlack:F0}");
+            }
+            if (heightSlack < MinInkSlack)
+            {
+                problems.Add($"{label}: its {lineCount} lines are {inkHeight:F1} pixels tall in a " +
+                    $"{rect.height:F0} pixel box, leaving {heightSlack:F1} pixels where this layer is held to " +
+                    $"{MinInkSlack:F0}");
+            }
+        }
+
+        /// <summary>TMP markup, removed the way TMP reads it: everything between angle brackets.</summary>
+        static string StripTags(string s)
+        {
+            var sb = new StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] == '<')
+                {
+                    int close = s.IndexOf('>', i + 1);
+                    if (close < 0)
+                    {
+                        sb.Append(s[i]);
+                        continue;
+                    }
+                    i = close;
+                    continue;
+                }
+                sb.Append(s[i]);
+            }
+            return sb.ToString();
         }
 
         [Test]

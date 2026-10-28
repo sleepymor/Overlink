@@ -73,9 +73,9 @@ loaded AppDomain's, so it reports a brand-new file as present regardless of what
 domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
 is how "the runner's cache must be stale" gets mistaken for a fact.
 
-## Known state after the HUD reflow (2026-10-28)
+## Known state after the HUD ink pass (2026-10-28)
 
-EditMode: **1329 leaves, 1324 passed, 4 skipped, 1 failed.** The failure is
+EditMode: **1330 leaves, 1325 passed, 4 skipped, 1 failed.** The failure is
 `UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
 UnitySkills package that counts objects in whichever scene happens to be open. It was red before the Node
 rule landed, it is not ours, and it is the only expected red.
@@ -90,6 +90,34 @@ it checks that the tabletop's near and far edges land at y 69 and 623 of 720, th
 `BattlefieldCameraController.RestFocusZ` documents. Without that, a projection that measures nothing still
 passes an overlap sweep, which is the shape this failure takes: a degenerate or NaN rect intersects nothing,
 so every assertion below it goes green at the exact moment it stops testing anything.
+
+**`StatusInk_FitsItsBoxes` is the same argument pointed inward.** Boxes that clear the board can still cover
+themselves, and four of the layer's nine panels were doing exactly that in the shipped scene. The guard asks
+TMP what it laid out — widest line, block height, and `textInfo.characterCount` against the tag-stripped
+length of the source — for every string in the layer, and appends a row per case so one failure reports the
+whole table. Four things about that API are not obvious and each of them was a false green or a false red:
+
+- **Truncate does not spill, it deletes.** Every status text is authored with `TextOverflowModes.Truncate`, so
+  ink that outruns its slab stops being drawn with no visual evidence at all. `characterCount` falling short
+  of the plain length is the only signal that cannot lie. (`visibleCharacterCount` excludes spaces, which
+  makes it useless here; rich tags are consumed by the parser, which makes the *stripped* length the right
+  denominator.)
+- **Overflow, the rail's default, does the opposite.** Its labels are raw `TextMeshProUGUI`, never passed
+  through `EnsureText`, so a long label walks out from under its 162x36 button and draws onto the board. Same
+  root cause, opposite symptom, and only a live frame shows it.
+- **An inactive TMP generates no mesh.** Zero lines, zero characters — indistinguishable from truncation. The
+  result overlay and the whole button rail are hidden at build, so the guard calls
+  `ForceMeshUpdate(true, true)`: `ignoreActiveState` to lay it out anyway, `forceTextReparsing` because the
+  rail's labels already hold the string being assigned and TMP otherwise considers itself clean.
+- **Glyphs have a side effect.** Measuring the two pile arrows rasterises U+25C4/U+25BA into the dynamic
+  fallback atlas and dirties the font asset on every run, so those two labels are excluded by documented
+  choice; one glyph in a 78 pixel slab was never a plausible overflow anyway.
+
+The width half of the floor binds single-line boxes only — a wrapped line sitting near its wall is the
+wrapping working, not a squeeze — and the height floor covers both kinds. To find the numbers the first time,
+set `MinInkSlack` (or `MinBoardClearance`) to an impossible value like `999f` and run once: every case then
+reports, and passing tests report nothing. That harvest is where 819-of-900, 432-of-446, 46-of-56 and the
+per-box board seams in §3.7 come from. Recalled geometry is not evidence.
 
 **Adding to this count is where a filter bites.** `test_run {filter}` takes a name fragment, not a regex: a
 `"^Namespace\.Class"` pattern matches nothing, and a run that matches nothing is the one that wedges in

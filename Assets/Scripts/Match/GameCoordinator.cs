@@ -393,7 +393,11 @@ namespace Overlink.Match
                 matchState.SetupInProgress && !player.LineupConfirmed,
                 $"REROLL - {cost} NP",
                 player.CurrentNP >= cost,
-                $"CONFIRM LINEUP  {fielded}/{lineupNomination.Length}");
+                // "CONFIRM LINEUP  n/5" was 19 characters in a 162 pixel slab at 17pt, and the rail's labels are
+                // raw TextMeshProUGUI with TMP's default Overlay overflow, so the surplus was not truncated - it
+                // was drawn under the button, on the tabletop, where the shipped scene showed it. The counter is
+                // the half worth keeping: LINEUP is what the banner says, and CONFIRM is what the button does.
+                $"CONFIRM  {fielded}/{lineupNomination.Length}");
         }
 
         bool IsNominated(int instanceId)
@@ -1110,7 +1114,7 @@ namespace Overlink.Match
             if (matchState.SetupInProgress)
             {
                 return Reject("the opening is a lineup, not a play - drop a Unit onto one of the five lit " +
-                              "Active sockets, then press CONFIRM LINEUP.");
+                              "Active sockets, then press CONFIRM.");
             }
 
             if (matchState.ActivePlayer != PlayerIndex.Player)

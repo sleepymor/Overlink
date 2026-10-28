@@ -483,20 +483,65 @@ where 196 pixels of void hold 188 pixels of slab and leave an 8.7 pixel seam; at
 below the far rank's top edge and clears the Node columns sideways instead, by more than fifty pixels and
 growing as the frame widens and those columns walk toward the centre. The two player chips take the near
 corners, which the resting fan's envelope is the only thing that comes close to - the nearest tile to either
-chip is its own pile, 61 pixels away. And the notice line is the one box anchored by fraction rather than by
-pixels, at 0.80 of the frame height: everything it has to miss is a projection, and a projection lands at the
-same fraction at every aspect while a fixed pixel offset does not. Its band does cross the far Node Bench
+chip is the near Node Bench rank, 46.5 pixels away at 3440x1440, since the chips grew the second counter line
+that made 112 pixels of height necessary. And the notice line is the one box anchored by fraction rather than
+by pixels, at 0.80 of the frame height: everything it has to miss is a projection, and a projection lands at
+the same fraction at every aspect while a fixed pixel offset does not. Its band does cross the far Node Bench
 ranks (0.796..0.841), which is why it is 640 wide rather than the 1100 it was, and why what governs it now is
-the 9.3 pixel seam down to the opponent's Core Bench (top edge 0.762).
-The log's window is the price of its 170 pixel height: four entries, not the six the tabletop column held.
+the 6.3 pixel seam down to the opponent's Core Bench (top edge 0.762).
 `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is what keeps all of it honest. It builds a throwaway
 board, projects every tile the presenter's own name parser calls a socket, a Protocol socket or a pile
-through a rig read off `BattlefieldCameraController`'s shipped defaults, and holds the six non-modal status
+through a rig read off `BattlefieldCameraController`'s shipped defaults, and holds the seven non-modal status
 boxes clear of all thirty-eight of them at seven screen sizes - by a floor of four reference pixels, not by
 mere disjointness, because a seam of half a pixel is where a slab starts eating a tile's rim for real and
-disjointness alone would let a later nudge walk into it green. The tightest seam the layout leaves is 6.8
-pixels, the legend's box against a far Node Bench rank at 3440x1440 - after anchoring the rig against the
-tabletop's documented y 69..623 span, because an overlap sweep with a broken projection passes silently.
+disjointness alone would let a later nudge walk into it green. The log is one of the seven as of the ink
+commit; it had been left out by oversight while the test's own doc already claimed only two exclusions, the
+result overlay and the reader. Per-box worst seam, measured: notice 6.3, node list and log 8.7 each, legend
+40.8, both chips 46.5, banner 86.8. The rig is anchored against the tabletop's documented y 69..623 span,
+because an overlap sweep with a broken projection passes silently.
+
+**Text is measured against its own box, not against arithmetic.** The same four pixel floor applies inward,
+and `StatusInk_FitsItsBoxes` is the guard that applies it: it asks TMP what it actually laid out for every
+string in the layer - the widest line, the block height, and the post-parse character count against the
+tag-stripped length of the source - and reports the whole layer on one failure rather than its first symptom.
+It found four defects no box-versus-box test can see, and they are why the numbers above moved.
+
+- The banner shipped at 38pt in a 900x62 box, and every status text in the layer is authored with
+  **Truncate** overflow, so ink that outruns its slab stops being drawn with no visible evidence at all:
+  live, the setup banner rendered as "FIELD YOUR OPENING F". Its longest line - turn number, phase, active
+  player and the airy bullet separators the layer uses everywhere - measures 819 wide and 37 tall at the
+  32pt inside a 900x44 box it uses now, 81 and 7 pixels in hand, which is about 973 of the 900 at the 38
+  it shipped with. Tightening the bullet spacing was the other candidate fix and it is the worse one: the
+  airy separator is how this layer reads as one family, and 32pt still stands 1.9x over the legend below it.
+- The key legend was sized by arithmetic that promised three wrapped lines, 58.6 pixels of ink in a 62 pixel
+  box. TMP lays it out as two: 851 wide and 39 tall. The box is 46 now, and its seam to a far Node Bench
+  rank went from the layer's tightest - 6.8 - to 40.8, handing that title to the notice.
+- The player chips could never mention hand or deck. Five counters never fitted on one line: the text
+  rect inside a 470 slab is 446 wide and the readout runs past it, so Truncate ate the last two outright.
+  The readout now breaks after NP - the two numbers that tick down through a turn carry the first line and
+  the three stock counts the second - and the wider of the two lays out 432 of those 446 pixels while the
+  pair fills 60 of a 69 pixel body. Breaking after NODES reads more tidily, but it is the ordering and not
+  the width that decides, and either seam is held to the same four pixels by the ink guard. Widening the
+  slab was not on the table: 470 already touches the fan's maximum-span envelope.
+- The event log promised four entries and delivered three-and-a-half. Four entries of the length the engine
+  really writes lay out seven lines against a body that holds six, so the panel silently dropped the newest
+  event - the one line a player is reading for. `SetLog` starts at `maxLines` and now backs off from the
+  oldest end until the text measures whole, which is a loss the player can see rather than a lie; the notice
+  line grew from 2.5 to 2.8 times its font size for the same reason (two lines of a real rejection measure 46
+  pixels, and the old 50 pixel box had four to its name, which is the same defect as none).
+
+The button rail is in the guard for the opposite reason. Its labels are raw `TextMeshProUGUI` rather than
+`EnsureText`'s, so they carry TMP's default **Overflow** mode, and a label too long for its 162x36 slab
+does not disappear - it walks out from under the button and draws onto the board. That is how the setup
+bar's `"CONFIRM LINEUP  0/5"` rendered live, its counter sitting on the tabletop: the authored word alone
+measures 160 of the 162 pixels, before the coordinator appends anything. The runtime label is
+`"CONFIRM  n/5"` now and `"DONE BLOCKING"` dropped from 17pt to 16 (it measured 155 of 162), both held to
+the guard's four pixels. Building the rail used to be gated on `Application.isPlaying`, which is why none
+of that had ever been measurable in EditMode; the gate is gone and `HideRail()` still closes the build, so
+nothing is drawn that a player would not otherwise see. Measuring an inactive TMP is its own trap - it lays
+out zero lines and zero characters, indistinguishable from the truncation being detected, which is why the
+guard calls `ForceMeshUpdate(true, true)` to wake the result overlay and the hidden buttons without
+touching their state.
 
 **Status:** Mostly implemented; combat feedback remains the one gap. Entry paths are no longer one of them -
 the board is pointer-driven (§3.8).
@@ -772,7 +817,7 @@ intention.
 
 ## 5. Current status by milestone
 
-Measured against the suites in §2.1: EditMode 1329 discovered, 1324 passed.
+Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 
 | Area | Status |
 |---|---|
@@ -797,7 +842,7 @@ Measured against the suites in §2.1: EditMode 1329 discovered, 1324 passed.
 | Runtime CardDatabase loading | Not demonstrated |
 | Build-settings registration | Missing; `ProjectSettings/**` protected, owner declined |
 | Unity compilation | Verified clean via the editor's compiler output |
-| NUnit execution | Verified: EditMode 1329 leaves / 1324 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
+| NUnit execution | Verified: EditMode 1330 leaves / 1325 passed, one pre-existing package failure (§2.1, `docs/TESTING.md`) |
 | Scene runtime playtest | Verified by boot + Game View capture; no console errors |
 | Full match completion | Not demonstrated end-to-end in play |
 

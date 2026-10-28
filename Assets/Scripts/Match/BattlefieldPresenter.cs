@@ -164,7 +164,9 @@ namespace Overlink.Match
         // would spend two lines of the frame on a list the player can read off the screen faster than they can
         // read this one. What is left is what no button advertises - the drag, the pick, the read, and the two
         // camera gestures.
-        const string ControlsHintText =
+        // Public because the HUD's ink test measures the real strings rather than a copy that can drift: the
+        // legend's own width is what its box has to hold.
+        public const string ControlsHintText =
             "Drag onto a lit socket to deploy (MAIN)   \u2022   Click a Ready unit, then a red socket to attack " +
             "or a blue one to retreat\n" +
             "Click any card to read it   \u2022   ESC cancel   \u2022   \u2190/\u2192 browse   \u2022   Wheel zoom   \u2022   RMB pan";
@@ -172,7 +174,7 @@ namespace Overlink.Match
         // The legend setup needs, which is a different job from the one above: nothing on the table is a
         // command during the opening, the only drag that means anything is a nomination, and the two buttons
         // that close setup are the only interactive things on the screen.
-        const string SetupHintText =
+        public const string SetupHintText =
             "Drag a card onto a lit socket to field it   \u2022   Click a fielded card to send it back\n" +
             "REROLL replaces all five offers for NP   \u2022   CONFIRM opens the match";
 
@@ -1898,6 +1900,13 @@ namespace Overlink.Match
                 SetHint(hintShowsSetup ? SetupHintText : ControlsHintText);
             }
 
+            // The banner is 32pt rather than the 38 it shipped with, and the reason is a number rather than a
+            // taste: its longest line - TURN 99, CLEANUP, ACTIVE: OPPONENT, bullet separators and all - lays out
+            // 819 reference pixels at 32pt inside a 900 pixel box, which is about 973 at the 38 it used to be,
+            // and TMP's Truncate overflow eats the surplus without complaint. The shipped setup banner rendered
+            // as "FIELD YOUR OPENING F". Tightening the bullet spacing was the other candidate fix and it is the
+            // worse one: the airy separator is how this HUD reads as one family, and 32pt still stands 1.9x over
+            // the legend it sits above.
             if (hintShowsSetup)
             {
                 // There is no turn worth numbering and no active player worth naming while setup is open, and
@@ -2054,10 +2063,18 @@ namespace Overlink.Match
             if (hud != null)
             {
                 hud.SetStatus(who,
+                    // Five counters on one line need 732 reference pixels at 26pt and the chip's text rect is 446
+                    // wide, so the readout either breaks or loses HAND and DECK to Truncate - which is exactly
+                    // what it was doing, silently, in the shipped scene. It breaks after NP, because that is the
+                    // seam that leaves both halves comfortable: the two numbers that tick down through a turn on
+                    // the first line, the three stock counts on the second. Breaking after NODES - the other
+                    // obvious seam, and the first one tried here - lays its top line out at 442 of 446 pixels,
+                    // four pixels of slack on a figure the player grows by holding ground. Widening the slab is
+                    // not on the table: the chips live in the fan's corners and 470 already touches the fan's
+                    // maximum-span envelope.
                     $"CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}   " +
-                    $"NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}   " +
-                    $"NODES {nodes}/{Board.NodeCount}   " +
-                    $"HAND {p.Hand.Count}   DECK {p.Deck.Count}");
+                    $"NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}\n" +
+                    $"NODES {nodes}/{Board.NodeCount}   HAND {p.Hand.Count}   DECK {p.Deck.Count}");
             }
         }
 

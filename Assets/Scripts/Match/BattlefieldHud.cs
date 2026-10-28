@@ -79,22 +79,37 @@ namespace Overlink.Match
                  "the node list, the notice line and the result overlay. They are world-space text on a 52 " +
                  "degree pitch today, which foreshortens a 32 point header into a smear and shrinks it every " +
                  "time the camera pulls back; as UI they are pinned, crisp at any zoom, and they hand the board " +
-                 "back the two bands of table they were standing on.")]
-        public Vector2 bannerSize = new Vector2(900f, 62f);
+                 "back the two bands of table they were standing on.\n" +
+                 "32pt, not the 38 it shipped with, and 44 tall, not the 62 before it. Both numbers came off " +
+                 "TMP's own layout rather than an estimate: the longest line this header can hold - TURN 99, " +
+                 "CLEANUP, ACTIVE: OPPONENT, with the airy bullet separators the rest of the layer uses - lays " +
+                 "out 819 reference pixels wide and 37 tall at 32pt, so the box keeps 80 pixels of width and 7 " +
+                 "of height in hand. At 38pt that line needs about 973 of the 900 the box has, and Truncate " +
+                 "overflow eats the tail without warning: the shipped setup banner lost its last two words to " +
+                 "it. Width stays 900 because the corner panels own everything outside it at 4:3.")]
+        public Vector2 bannerSize = new Vector2(900f, 44f);
         public Vector2 bannerOffset = new Vector2(0f, -16f);
-        public float bannerFontSize = 38f;
+        public float bannerFontSize = 32f;
 
         [Tooltip("The per-player readout (CORE, NP, NODES, HAND, DECK). Both chips hang in the near corners, " +
                  "which is the one region the hand fan does not own: the fan's resting box spans x 489..1431 at " +
                  "the reference resolution, so a 470 pixel slab at a 22 pixel margin touches it by three pixels " +
                  "at 16:9 - and that box is the maximum-span envelope, so at a normal hand size there is " +
-                 "daylight. Neither chip is anywhere near a tile: the nearest clickable thing to either is its own pile, 61 " +
-                 "reference pixels away at 16:9, and the board's nearest rank - the near Node Bench, at 0.185 of " +
-                 "the frame height - sits well above a chip whose top edge is at 0.106 even at 4:3. " +
-                 "The opponent's belongs at the bottom rather than the top because the far half of " +
-                 "the frame is the board's, and the top band it used to share with the banner is where the node " +
-                 "list and the log now live.")]
-        public Vector2 chipSize = new Vector2(470f, 96f);
+                 "daylight. Neither chip is anywhere near a tile: the nearest clickable thing to either is " +
+                 "the near Node Bench rank, 46.5 reference pixels away at 3440x1440, and that rank sits at " +
+                 "0.185 of the frame height, well above a chip whose top edge is at 0.115 even at 4:3.\n" +
+                 "112 tall, not 96. The five counters never fitted on one line: the text rect inside a 470 slab " +
+                 "is 446 wide and the readout runs past it, so at the old height the readout had exactly one " +
+                 "line of room and Truncate ate the last two counters outright - the shipped chips read CORE " +
+                 "3/3, NP 3/10, NODES 0/4 and never mentioned hand or deck. The presenter breaks after NP: the " +
+                 "two numbers that tick down through a turn carry the first line and the three stock counts the " +
+                 "second, and the wider of the two lays out 432 of those 446 pixels while the pair fills 60 of " +
+                 "a 69 pixel body. Breaking after NODES instead reads more tidily, but it is the ordering and " +
+                 "not the width that decides here, and either seam this slab ships with is held to the same " +
+                 "four pixels by the ink guard. The opponent's belongs at the bottom rather than " +
+                 "the top because the far half of the frame is the board's, and the top band it used to share " +
+                 "with the banner is where the node list and the log now live.")]
+        public Vector2 chipSize = new Vector2(470f, 112f);
         public Vector2 chipMargin = new Vector2(22f, 18f);
         public float chipTitleSize = 18f;
         public float chipBodySize = 26f;
@@ -137,15 +152,15 @@ namespace Overlink.Match
         [Tooltip("The key legend, which was a two-line 11pt caption on the table at 52 degrees — small enough " +
                  "to be unreadable and wide enough to run past the table edge. As UI it is crisp, and the on-" +
                  "screen buttons it no longer lists sit in the two side corridors.\n" +
-                 "The height is the ink, not a margin: two authored lines, the first of which wraps once at " +
-                 "this width, so three lines at 17pt is 58.6 reference pixels and 62 is the box that holds " +
-                 "exactly that. It matters because the box is transparent, so a taller one is a lie the layout " +
-                 "test would have to forgive — at 21:9 the frame is 926 reference pixels tall and a 74 pixel " +
-                 "box reached four pixels into the far Node Bench rank. Sized to its ink, box clearance and " +
-                 "ink clearance become the same statement: 62 buys a 6.8 pixel seam to that rank at 3440x1440, " +
-                 "which is the tightest pairing anywhere in the status layer, and BattlefieldHudTests holds " +
-                 "every box but the result overlay four pixels clear of every clickable tile for that reason.")]
-        public Vector2 hintSize = new Vector2(900f, 62f);
+                 "46 tall, and it was 62 on the strength of arithmetic that said the first authored line " +
+                 "wraps once into three lines of 17pt. TMP says otherwise: the legend lays out as two lines, 851 " +
+                 "pixels wide and 39 tall inside a 900 x 46 box, so seven of that height is spare and the 23 the " +
+                 "old box carried were empty transparent slab reaching down into the board. " +
+                 "Shrinking it here, and the banner above it with it, took this box's tightest seam - 6.8 pixels " +
+                 "to a far Node Bench rank at 3440x1440, the narrowest gap in the whole status layer - to 40.8, " +
+                 "and handed the title of tightest seam to the notice line at 6.3. The setup legend is the same " +
+                 "shape and shorter (575 wide, still two lines), so it costs a wrap and not a hole.")]
+        public Vector2 hintSize = new Vector2(900f, 46f);
         public float hintFontSize = 17f;
         public Color hintColor = new Color(0.60f, 0.68f, 0.80f);
 
@@ -431,10 +446,13 @@ namespace Overlink.Match
             EnsurePanel();
             EnsureReader();
             EnsureStatus();
-            if (Application.isPlaying)
-            {
-                EnsurePhaseControls();
-            }
+
+            // The rail used to be built only under Application.isPlaying, which kept the editor quiet and also
+            // kept it unmeasurable: a rail label too long for its 162x36 slab walks out from under the button and
+            // onto the board (raw TextMeshProUGUI, so TMP's default Overflow rather than Truncate), and that is
+            // only something the ink guard can catch if EditMode can construct the buttons at all. HideRail()
+            // still closes the build, so nothing here is drawn that a player would not otherwise see.
+            EnsurePhaseControls();
         }
 
         void EnsurePhaseControls()
@@ -467,13 +485,19 @@ namespace Overlink.Match
             // ---- Right band: the turn's own flow. Slot 0 has three tenants and never more than one at a time -
             // CONFIRM and REROLL while setup is open, END PHASE on the player's own turn, DONE BLOCKING while
             // answering the opponent's - because each is the loudest available action at its moment.
+            // The words and sizes are measured rather than judged. TMP lays these labels out at 16-18pt inside a
+            // 162x36 slab (BattlefieldHudTests.StatusInk_FitsItsBoxes), and the two that came closest to the wall
+            // are the two changed: "DONE BLOCKING" at 17pt is 155 of those 162 pixels, which is legal and thin,
+            // so it is 16pt now; "CONFIRM LINEUP" at 17pt was 160 of 162, and the coordinator overwrites the label
+            // with a counter the moment setup opens, so the authored word now matches the published one and leaves
+            // LINEUP to the banner, which says it in 32pt.
             EnsureRail(RailKey.EndPhase, "EndPhaseButton", RailBand.Right, 0,
                 new Color(0.18f, 0.40f, 0.60f, 0.96f), 18f, "END PHASE", () => EndPhaseRequested?.Invoke());
             EnsureRail(RailKey.DoneBlocking, "DoneBlockingButton", RailBand.Right, 0,
-                new Color(0.70f, 0.36f, 0.10f, 0.98f), 17f, "DONE BLOCKING",
+                new Color(0.70f, 0.36f, 0.10f, 0.98f), 16f, "DONE BLOCKING",
                 () => RailPressed?.Invoke(RailKey.DoneBlocking));
             EnsureRail(RailKey.Confirm, "ConfirmLineupButton", RailBand.Right, 0,
-                new Color(0.20f, 0.52f, 0.34f, 0.97f), 17f, "CONFIRM LINEUP",
+                new Color(0.20f, 0.52f, 0.34f, 0.97f), 17f, "CONFIRM",
                 () => ConfirmLineupRequested?.Invoke());
             EnsureRail(RailKey.Reroll, "RerollLineupButton", RailBand.Right, 1,
                 new Color(0.34f, 0.30f, 0.52f, 0.96f), 16f, "REROLL - 2 NP",
@@ -774,11 +798,13 @@ namespace Overlink.Match
             // over both far Node columns at every aspect. The binding case is the widest aspect in the sweep,
             // where the frame is under 930 reference pixels tall and the far Node Bench ranks come up to meet
             // this line's own band. Narrowing to 640 bought those columns so much sideways room that the seam
-            // which now governs this box is the one *below* it, to the opponent's Core Bench: 9.3 reference
-            // pixels, measured by BattlefieldHudTests. Sixty was what two lines of a real notice need at 20pt,
-            // and the box is transparent, so the cost of going narrower is a wrap, not a hole. See the
-            // noticeAnchorY tooltip for why the height is a fraction rather than a rise.
-            notice = EnsureBox("Notice", new Vector2(640f, noticeFontSize * 2.5f),
+            // which now governs this box is the one *below* it, to the opponent's Core Bench: 6.3 reference
+            // pixels at 3440x1440, measured by BattlefieldHudTests, and now the tightest seam in the whole status
+            // layer. The height is 2.8 times the font size because two lines of a real notice lay out 46 pixels
+            // at 20pt and the box is transparent, so the extra ten cost three pixels of that seam rather than a
+            // hole; at 2.5 the box was 50 and had four pixels to its name, which is the same defect as none. See
+            // the noticeAnchorY tooltip for why the height is a fraction rather than a rise.
+            notice = EnsureBox("Notice", new Vector2(640f, noticeFontSize * 2.8f),
                 new Vector2(0.5f, noticeAnchorY), new Vector2(0.5f, 0.5f), Vector2.zero,
                 Color.clear, out noticeText);
             noticeText.enableWordWrapping = true;
@@ -1235,11 +1261,25 @@ namespace Overlink.Match
         // ---- View API -----------------------------------------------------------------
 
         /// <summary>
-        /// Shows the most recent <see cref="maxLines"/> entries of a chronological event log, oldest at the
-        /// top, which is the order a reader expects to scan down into "what is happening now".
+        /// The last text this panel was told to display. SetLog is called from the presenter's paint pass, which
+        /// runs sixty times a second, and the fit measurement below costs a mesh rebuild - so the string is
+        /// compared before anything is measured and an unchanged log costs one string comparison.
+        /// </summary>
+        string logShown;
+
+        /// <summary>
+        /// Shows the most recent entries of a chronological event log, oldest at the top, which is the order a
+        /// reader expects to scan down into "what is happening now" - and never more of them than the panel can
+        /// actually draw.
         /// <para>
-        /// Unlike the tabletop version these lines are not truncated to a fixed character count: the panel
-        /// wraps, so a long event stays legible instead of being cut off mid-word.
+        /// Unlike the tabletop version these lines are not truncated to a fixed character count: the panel wraps,
+        /// so a long event stays legible instead of being cut off mid-word. Wrapping is also what makes the entry
+        /// count a promise this panel cannot keep. Four entries of the length the engine really writes lay out
+        /// seven lines, the body holds six at 15pt, and TMP's Truncate overflow stops parsing at the wall and eats
+        /// the tail - so the shipped panel silently dropped the newest event, the one line a player is reading
+        /// for. The window therefore starts at <see cref="maxLines"/> and drops from the oldest end until the text
+        /// measures whole. Losing a finished older line is a loss the player can see; losing the current one
+        /// mid-word is a lie.
         /// </para>
         /// </summary>
         public void SetLog(IList<string> log)
@@ -1250,15 +1290,38 @@ namespace Overlink.Match
             }
 
             int count = log == null ? 0 : log.Count;
-            int shown = Mathf.Min(Mathf.Max(1, maxLines), count);
-            int start = count - shown;
-
-            if (shown <= 0)
+            int start = Mathf.Max(0, count - MaxLines);
+            string joined = JoinEntries(log, start, count);
+            if (joined == logShown)
             {
-                body.text = "";
                 return;
             }
 
+            // characterCount is the post-parse total, so a shortfall against the joined length is the one signal
+            // that cannot lie: characters that never reached the screen. One entry is as far as this backs off,
+            // because a single event longer than the panel is a wording problem for the engine rather than a
+            // reason to show the player nothing.
+            while (start < count - 1)
+            {
+                logShown = joined;
+                body.text = joined;
+                body.ForceMeshUpdate();
+                if (body.textInfo.characterCount >= joined.Length)
+                {
+                    return;
+                }
+
+                start++;
+                joined = JoinEntries(log, start, count);
+            }
+
+            logShown = joined;
+            body.text = joined;
+        }
+
+        /// <summary>The entries from <c>start</c> to <c>count</c>, newline-joined, oldest first.</summary>
+        static string JoinEntries(IList<string> log, int start, int count)
+        {
             var sb = new System.Text.StringBuilder();
             for (int i = start; i < count; i++)
             {
@@ -1268,8 +1331,7 @@ namespace Overlink.Match
                 }
                 sb.Append(log[i]);
             }
-
-            body.text = sb.ToString();
+            return sb.ToString();
         }
 
         /// <summary>How many entries this panel is configured to keep.</summary>

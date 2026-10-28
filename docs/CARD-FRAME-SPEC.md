@@ -920,8 +920,11 @@ slabs a soft one: a socket behind a slab is dim, a socket behind a card is dead.
 into the band above the board's far rank and put the two player chips in the near corners instead, so the
 panels are clear of the board by construction rather than by agreement — the geometry is written up in
 §3.7 of the scene plan and `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` measures it at seven
-screen sizes. The one residual is the log's window: four entries where the tabletop column held six, which is
-what a 170-reference-pixel-tall slab costs at 15 point.
+screen sizes. The one residual is the log's window: a 170-reference-pixel-tall slab holds six lines at 15 point, and
+four entries of the length the engine really writes lay out seven. Until the ink pass the panel let Truncate
+eat the tail, which meant it silently dropped the newest event, the one line a player is reading for; SetLog now
+backs its window off from the oldest end until the text measures whole, so it shows three finished events
+rather than three and a half.
 
 **The two pile tiles are dead at every bias, and the live check is what found it.** `DeckPile` and
 `DiscardPile` are not decoration — `BattlefieldInput.cs:409-414` turns a click on them into the deck browser
