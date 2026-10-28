@@ -546,6 +546,24 @@ touching their state.
 **Status:** Mostly implemented; combat feedback remains the one gap. Entry paths are no longer one of them -
 the board is pointer-driven (§3.8).
 
+**The resting hand gets out of the pile tiles' way** (`HandIdleSinker`, Stage 3f). The two piles are not
+decoration - `BattlefieldInput` turns a click on one into the deck browser and the discard viewer - and at the
+shipped framing both land inside the resting fan's screen rectangle, wholly from a five-card hand up, which is
+the hand the match opens with. There is no board answer: clearing the fan's x-span at the piles' depth needs
+|x| of at least 4.5 and the Node plates own that lane, so the hand moves instead of the board. It lives on
+`Match` beside the presenter, and everything it owns is Inspector surface - four references and five numbers.
+`hand` and `boardCamera` are wired in the scene; `deckPile` and `discardPile` are deliberately `{fileID: 0}`, so
+the sinker binds them by name off the board the presenter built, which keeps the Battlefield prefab
+authoritative and survives a rename as long as either reference is set. How far it falls is measured every frame
+from the piles' projected rects rather than budgeted - 0.166 of the frame at the opening framing, 44 percent of
+a five-card fan's own height, and the same figure at all seven supported aspects - and an uncovering that needs
+more than `sinkCapFraction` of the fan's height is abandoned outright rather than taken halfway: at
+`minDistance` seven the piles have walked off the bottom of the screen, and the rail's PILE buttons are the way
+in. The trigger is the fan's *resting* footprint with the pile columns carved out of it, which is what stops the
+feature fighting itself - `RestingFootprintViewport` answers at sink zero no matter how far the hand has
+actually fallen, so the band a pointer is tested against never moves with the pose it is testing.
+`IdleHandSinkTests` pins the arithmetic; docs/CARD-FRAME-SPEC.md §13 holds the harvest it came out of.
+
 ### 3.8 Pointer interaction
 
 **GDD reference:** §2.1.6 Combat, §4.6 presentation, §4.15.1 card types.
@@ -832,7 +850,7 @@ Measured against the suites in §2.1: EditMode 1330 discovered, 1325 passed.
 | Full battlefield scene | Implemented as `Assets/Prefabs/Battlefield.prefab`, bound by name |
 | Opponent presentation | Implemented, mirrored |
 | Core/Node UI | Implemented; the readouts are overlay panels seated in the top band and the near corners (§3.7), while the piles and Node plates stayed on the table |
-| Resting hand vs the piles | Open: both piles sit entirely behind the fan at rest, reachable through the rail's PILE buttons but not visible, until the fan sinks while the pointer is away (docs/CARD-FRAME-SPEC.md) |
+| Resting hand vs the piles | Implemented (Stage 3f); the fan sinks whole-tile-deep while the pointer is away, the depth is measured from the piles' projected rects every frame instead of budgeted as a fraction, and `IdleHandSinkTests` pins the arithmetic (docs/CARD-FRAME-SPEC.md §13) |
 | GDD victory conditions | All four implemented (`MatchStateTests`) |
 | Pointer interaction | Implemented (§3.8); click routing verified by inspection, not by simulated clicks; an attack pick offers both red (attack) and blue (retreat) sockets |
 | On-screen control rail | Implemented (§3.8); every keyboard verb has a button, derived per frame, and the strip was driven end to end in play mode through `event_invoke` |

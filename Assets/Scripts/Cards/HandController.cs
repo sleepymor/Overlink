@@ -142,6 +142,14 @@ namespace Overlink.Cards
         public float dragThresholdPixels = 14f;
         public float heldScale = 1.85f;
 
+        [Header("Idle sink")]
+        [Tooltip("Time constant of the ease that carries the whole fan down toward the bottom of the frame "
+            + "and back, in seconds. The hand never decides to sink: it only follows a target handed to it by "
+            + "whatever owner is watching the board (the match layer's HandIdleSinker), so a scene with no "
+            + "sinker in it keeps this at zero displacement and behaves exactly as it did before the field "
+            + "existed. Zero makes the move a snap, which is only defensible on a hand nobody is reading.")]
+        public float idleSinkSeconds = 0.18f;
+
         // Sorting order is global, so a hand of overlapping cards needs one slice of that space per
         // card. Without it card A's labels (local order 20) draw across card B's frame (local 0) and
         // art (local -10), which is the bleed visible when the fan stacks. Stride 100 leaves room
@@ -166,6 +174,17 @@ namespace Overlink.Cards
         float lastDragX;
         float dragFromDepth;
         float dragElapsed;
+
+        // The idle sink translates CardSpace rather than the cards, so the fan's own math never sees it: the
+        // row is posed in a room that moved. cardSpaceRest is that room's authored pose, captured once at
+        // Awake, and every footprint query is answered against it rather than against the live one - which is
+        // what keeps the trigger band fixed while the hand is in motion. A band that watched the hand's
+        // current position would uncover the piles as it fell, qualify for a rise on its own edge, and
+        // oscillate there for as long as the pointer stayed put.
+        Vector3 cardSpaceRest;
+        bool sinkRestCaptured;
+        float sinkTarget;
+        float sinkCurrent;
 
         /// <summary>
         /// Optional external authority for plays. When set, a card released above the play line is offered
@@ -377,13 +396,22 @@ namespace Overlink.Cards
         /// </summary>
         float EffectiveFanSpacing()
         {
-            if (maxHandSpan <= 0f || cards.Count < 2)
+            return EffectiveFanSpacing(cards.Count);
+        }
+
+        /// <summary>
+        /// The same corridor for a hand of <paramref name="count"/> cards, so the row's extent can be asked
+        /// about before the views exist. See <see cref="RestingFootprintViewport(Camera,int)"/>.
+        /// </summary>
+        float EffectiveFanSpacing(int count)
+        {
+            if (maxHandSpan <= 0f || count < 2)
             {
                 return fanSpacing;
             }
 
             // Span is measured between the two OUTER CENTRES, so n cards leave n-1 gaps in it.
-            return Mathf.Min(fanSpacing, maxHandSpan / (cards.Count - 1));
+            return Mathf.Min(fanSpacing, maxHandSpan / (count - 1));
         }
 
         void Awake()
@@ -461,6 +489,236 @@ namespace Overlink.Cards
                 DrawOne();
                 yield return new WaitForSeconds(0.1f);
             }
+        }
+
+        // ---- Idle sink ------------------------------------------------------------
+
+        /// <summary>
+        /// True while a card is in the player's grip. A sinker needs exactly this and nothing else about the
+        /// hand's internals: a fan that moved underneath a card being carried would teleport the drag plane
+        /// out from under the pointer.
+        /// </summary>
+        public bool IsDragging => dragged != null;
+
+        /// <summary>
+        /// Asks the hand to drop by <paramref name="viewportFraction"/> of the frame's height, or back up
+        /// again with zero.
+        /// <para>
+        /// A screen distance is the unit on purpose. What a sink has to beat is a pile drawn somewhere else on
+        /// the screen, and only the two rectangles' overlap in pixels decides whether it beat it; board units
+        /// and camera units both move with the lens, while the fan's own plane does not move at all.
+        /// </para>
+        /// <para>
+        /// The request is a target, not a move - <see cref="LateUpdate"/> travels toward it. A caller that
+        /// stops asking leaves the last target standing, so whoever owns the sink retires it by asking for zero
+        /// when it goes away.
+        /// </para>
+        /// </summary>
+        public void SetIdleSinkViewport(float viewportFraction)
+        {
+            sinkTarget = Mathf.Max(0f, viewportFraction) * UnitsPerViewportHeight();
+        }
+
+        /// <summary>The sink asked for, in the viewport fractions it was requested in.</summary>
+        public float IdleSinkTargetViewport
+        {
+            get
+            {
+                float units = UnitsPerViewportHeight();
+                return units <= 0f ? 0f : sinkTarget / units;
+            }
+        }
+
+        /// <summary>How far the fan has actually travelled, in viewport fractions of the frame's height.</summary>
+        public float IdleSinkViewport
+        {
+            get
+            {
+                float units = UnitsPerViewportHeight();
+                return units <= 0f ? 0f : sinkCurrent / units;
+            }
+        }
+
+        /// <summary>
+        /// Camera-space units that one whole frame height buys at the fan's own depth.
+        /// <para>
+        /// The fan hangs off the camera, so its plane is parallel to the image plane and the exchange rate is
+        /// the frustum's own: two tangents of the vertical field of view, times the distance from the lens to
+        /// that plane. The distance is measured along the view axis rather than read off the root's local z,
+        /// because that is the one definition a camera-held hand and a hand laid flat on a table can share.
+        /// </para>
+        /// </summary>
+        float UnitsPerViewportHeight()
+        {
+            Camera probe = cam != null ? cam : Camera.main;
+            if (probe == null)
+            {
+                return 0f;
+            }
+
+            Transform space = CardSpace;
+            float depth = Vector3.Dot(RestWorld(space) - probe.transform.position,
+                probe.transform.forward);
+            return Mathf.Max(0.0001f, depth) * 2f * Mathf.Tan(probe.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        }
+
+        /// <summary>
+        /// The authored local pose of <see cref="CardSpace"/>, captured the first time the sink machinery
+        /// needs it rather than in Awake: a hand wired up after construction - which is every test that adds
+        /// this component and then assigns its root - has to answer to the root it ended up with, not to
+        /// whatever transform stood there when Awake ran.
+        /// </summary>
+        Vector3 RestPose(Transform space)
+        {
+            if (!sinkRestCaptured)
+            {
+                cardSpaceRest = space.localPosition;
+                sinkRestCaptured = true;
+            }
+
+            return cardSpaceRest;
+        }
+
+        /// <summary>
+        /// The authored pose of <paramref name="space"/>, resolved to world.
+        /// <para>
+        /// <see cref="RestPose"/> answers in the root's own local space, which for the shipped rig is the
+        /// camera's - so it has to be resolved through the PARENT. Passing it back through the root itself is
+        /// the mistake this comment exists to record: it applies the root's position to a vector that already
+        /// includes it, doubling the fan's offset inside the camera and putting the row six units behind where
+        /// the player is looking at it. Every measured figure the sink depends on came out wrong that way,
+        /// quietly, while the sink's own round trip still passed because both directions shared the error.
+        /// </para>
+        /// </summary>
+        Vector3 RestWorld(Transform space)
+        {
+            Vector3 rest = RestPose(space);
+            return space.parent != null ? space.parent.TransformPoint(rest) : rest;
+        }
+
+        /// <summary>The rectangle the resting fan covers, for the hand as it stands.</summary>
+        public Rect RestingFootprintViewport(Camera probe)
+        {
+            return RestingFootprintViewport(probe, cards.Count);
+        }
+
+        // Every corner of a face, because a rolled card's highest point is a corner and its lowest is the
+        // opposite one, and the band a pointer gets tested against needs both edges, not just the tops.
+        static readonly Vector2[] FaceCorners =
+        {
+            new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f),
+        };
+
+        /// <summary>
+        /// The rectangle the resting fan covers, in viewport fractions - 0,0 at the bottom-left of the frame
+        /// and 1,1 at the top-right, the space <see cref="Camera.WorldToViewportPoint"/> speaks.
+        /// <para>
+        /// Answered at sink zero whatever the hand is actually doing, because the band a pointer has to be
+        /// tested against is the one the hand would occupy if it were not moving. A band that tracked the live
+        /// pose would uncover the piles as it fell, qualify for a rise on its own top edge, and sit there
+        /// oscillating for as long as the pointer stayed put.
+        /// </para>
+        /// <para>
+        /// The row is measured at its authored size and no further: a hovered or held card is not at rest, and
+        /// the half-inch of scale a lift buys it is not what the band is for.
+        /// </para>
+        /// <para>
+        /// Degenerate for an empty hand and for a null camera - nothing to cover, nothing to ask of it.
+        /// </para>
+        /// </summary>
+        public Rect RestingFootprintViewport(Camera probe, int cardCount)
+        {
+            if (probe == null || cardCount < 1)
+            {
+                return default;
+            }
+
+            Transform space = CardSpace;
+            // The sink is a translation of the room the fan is posed in, so the rest-world of any point is its
+            // live world position plus however far that room has travelled. Composing it this way is exact
+            // under any parenting, rotation or scale the root happens to carry, and it touches no transform.
+            Vector3 shift = RestWorld(space) - space.position;
+            Vector2 half = new Vector2(cardSize.x, cardSize.y) * 0.5f;
+            float spacing = EffectiveFanSpacing(cardCount);
+            float xMin = float.MaxValue, xMax = float.MinValue;
+            float yMin = float.MaxValue, yMax = float.MinValue;
+            for (int i = 0; i < cardCount; i++)
+            {
+                Vector3 pos;
+                Quaternion rot;
+                if (layoutMode == HandLayoutMode.Gallery)
+                {
+                    ComputeGallerySlot(i, cardCount, galleryColumns, galleryCellWidth,
+                        galleryCellHeight, galleryTopY, out pos, out rot);
+                }
+                else
+                {
+                    ComputeSlot(i, cardCount, spacing, arcHeight, maxYaw, handY, fanPivotsOnRivet,
+                        out pos, out rot);
+                }
+
+                for (int c = 0; c < FaceCorners.Length; c++)
+                {
+                    Vector2 corner = FaceCorners[c];
+                    Vector3 local = pos + rot * new Vector3(corner.x * half.x, corner.y * half.y, 0f);
+                    Vector3 v = probe.WorldToViewportPoint(space.TransformPoint(local) + shift);
+                    xMin = Mathf.Min(xMin, v.x);
+                    xMax = Mathf.Max(xMax, v.x);
+                    yMin = Mathf.Min(yMin, v.y);
+                    yMax = Mathf.Max(yMax, v.y);
+                }
+            }
+
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        }
+
+        void LateUpdate()
+        {
+            TickIdleSink(Time.unscaledDeltaTime);
+        }
+
+        /// <summary>
+        /// Travels the fan toward the sink it was last asked for.
+        /// <para>
+        /// Driven from LateUpdate rather than Update, because Update bails out early in two states - the
+        /// pointer over the HUD's controls, and a drag in flight - and a sink that froze in either would stay
+        /// parked at whatever depth the last unobstructed frame left it at. Moving the root also costs the
+        /// layout nothing: every pose the fan writes is a local one, so the row simply rides along inside a
+        /// room that moved.
+        /// </para>
+        /// <para>
+        /// Exponential rather than tweened, because a sink target changes as often as the pointer does and a
+        /// tween restarted every frame either stutters or has to be cancelled by hand. One time constant
+        /// settles 95 percent of the way in three times <see cref="idleSinkSeconds"/> and needs no state.
+        /// </para>
+        /// <para>
+        /// Down is the root's local minus y, which is the bottom of the frame for as long as the root hangs
+        /// off the camera unscaled and unrotated - the shipped rig. A hand rooted anywhere else should not be
+        /// sunk by anything that has not looked at its axes, and nothing in this project does.
+        /// </para>
+        /// <para>
+        /// Public and taking its own delta because EditMode never ticks a MonoBehaviour: the tests that pin
+        /// the sink call this directly rather than pretend a frame passed, which is the same reason
+        /// <c>BattlefieldPresenter.BuildBoard</c> is public.
+        /// </para>
+        /// </summary>
+        public void TickIdleSink(float deltaTime)
+        {
+            if (sinkTarget == 0f && sinkCurrent == 0f)
+            {
+                return;
+            }
+
+            float step = idleSinkSeconds <= 0f
+                ? 1f : 1f - Mathf.Exp(-deltaTime / idleSinkSeconds);
+            sinkCurrent = Mathf.Lerp(sinkCurrent, sinkTarget, step);
+            if (Mathf.Abs(sinkCurrent - sinkTarget) < 0.0002f)
+            {
+                sinkCurrent = sinkTarget;
+            }
+
+            Transform space = CardSpace;
+            space.localPosition = RestPose(space) - new Vector3(0f, sinkCurrent, 0f);
         }
 
         void Update()

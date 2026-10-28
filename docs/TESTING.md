@@ -73,15 +73,46 @@ loaded AppDomain's, so it reports a brand-new file as present regardless of what
 domain reload — including a play-mode round trip, which is two — does not fix a misclassified assembly, which
 is how "the runner's cache must be stale" gets mistaken for a fact.
 
-## Known state after the HUD ink pass (2026-10-28)
+**The assembly-classification cause is not the only one, and the other is easier to miss.** An assembly that
+*currently* fails to compile is absent from the tree too, which therefore keeps serving whatever its last good
+build contained. Nothing logs, no dialog appears, and the symptom is byte-identical to the one above: a
+filtered run for one class never leaves `starting`, while a full-suite run completes happily with a total that
+has simply not moved. So step 0 is `debug_get_errors` read right now — the sentence in this file's own bridge
+mechanics that says a compile error freezes discovery is stronger than it reads like, because it also freezes
+the tree at a version that predates your new file.
 
-EditMode: **1330 leaves, 1325 passed, 4 skipped, 1 failed.** The failure is
-`UnitySkills.Tests.Core.PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` — a test inside the
-UnitySkills package that counts objects in whichever scene happens to be open. It was red before the Node
-rule landed, it is not ours, and it is the only expected red.
+This cost three runs landing Stage 3f. The class compiled clean when it was written; three `CS1503` arrived
+with a later edit to it; the fixes were applied; and the refresh that would have cleared them was never run
+before the test job was started. The full suite reported 1330 leaves both before the file existed and after it
+did, which was the whole story, and discovery confirmed it once the refresh ran: **1346**. Read the leaf count
+of a full-suite run when a new class will not filter — a total that ignores a brand-new class means the
+assembly did not rebuild, not that the filter is wrong.
+
+## Known state after the idle-hand sink (2026-10-28)
+
+EditMode: **1346 leaves, 1336 passed, 4 skipped, 6 failed.** Every failure is inside the UnitySkills package and
+none is ours:
+
+- `PerceptionSkillsTests.SceneSummarize_CountsObjectsCorrectly` counts objects in whichever scene happens to be
+  open. It was red before the Node rule landed, it is not ours, and it is the only *standing* red.
+- Five `ReviewFixRouterTests` cases POST to the bridge's own REST router from inside a test run and got
+  `COMPILING` / 503 back, or a reply missing the field under test, because the router was busy serving the
+  session that started the run. The class is **48/48 green when run on its own**, so those five are load
+  artefacts of a full-suite run: re-run the class before believing any of them.
 
 The 22 tests in `Overlink.Cards.Tests` are not in that count. They belong to PlayMode and no run of either
 mode has ever executed them.
+
+**`IdleHandSinkTests` (16) is the third geometry class, and it earned its keep on its first run.** Six of its
+tests measure the resting fan's screen footprint through the shipped rig, one anchors the rig against the
+tabletop's documented 0.096..0.8648 span first, and nine are pure arithmetic on synthetic rects. The anchor
+matters for the same reason it does for the status layer: a projection that measures nothing still passes an
+overlap sweep. What it caught was worth the trouble — `RestingFootprintViewport` resolved the fan root's
+*parent-space* rest pose through the root's own transform, which doubles the fan's offset inside the camera and
+puts the row nowhere near where the player sees it. The tell is the split: every pile-side and rule-side test
+stayed green while all six fan tests went red, which is the shape a half-broken projection takes, and the sink's
+own round-trip assertion passed throughout because both directions shared the error. A self-consistent unit is
+not a verified unit; the anchor is what distinguishes them.
 
 **A geometry test that projects the board has to anchor its own rig.**
 `StatusLayer_CoversNoClickableTileAtAnySupportedAspect` is a `[UnityTest]` — it needs a camera whose matrices

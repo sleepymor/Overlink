@@ -938,22 +938,63 @@ There is no board-space answer this time, so it must not be "fixed" by nudging a
 x-span at the piles' depth needs `|x| ≥ 4.5`, and the node plates own `x −6.9..−4.1` at exactly that depth —
 the pile would land on NODE 1.
 
-**The decision, taken: the piles stay on the table and the resting hand gets out of their way.** The fan
-sinks while the pointer is away from it and rises back when the pointer comes to read a card, so the piles are
-reachable in the state a player is not looking at their hand, and the hand is whole in the state they are.
-Depth of sink: three quarters of the fan's own screen height, falling back to a half when three quarters would
-push it off the bottom of the frame. This is Stage 3 work and it lands with the button rail, not here.
+**The decision, taken and now built as Stage 3f: the piles stay on the table and the resting hand gets out of
+their way.** The fan sinks while the pointer is away from it and rises back when the pointer comes to read a
+card, so the piles are reachable in the state a player is not looking at their hand, and the hand is whole in
+the state they are. It lands as two pieces on either side of the assembly boundary: `HandIdleSinker`
+(`Assets/Scripts/Match/HandIdleSinker.cs`) decides, because it owns the board and the lens, while
+`HandController` travels, because it owns the fan. The hand only ever follows a target and never forms an
+opinion about piles — the same injection seam `pointerOverControls` already uses — so a scene with no sinker in
+it gets a zero target and behaves exactly as it did before the field existed. Everything the sinker owns is
+Inspector surface: four object slots (hand, lens, the two pile tiles, bound by name off the board when left
+empty) and five numbers, so dropping a pile somewhere else in the scene needs no code.
 
-Two things Stage 3 has to measure rather than assume. First, the required sink is set by the *piles'* screen
-rect, not by the fan's: uncovering a tile that sits inside the fan's band means dropping the fan's top edge
-below the tile's top edge, so the number to hit is measured against the pile rects at the authored framing
-(70×74 px at `fz −1.0`, 73×81 at `fz −0.2`) and the ¾/½ rule is a budget, not a guarantee. If the honest
-measurement says a half is not enough, that is a finding to bring back rather than a reason to slide the
-constant past the floor. Second, **the trigger region must be the fan's resting footprint — a fixed band — and
-not its current position.** A sink that watches where the fan actually is oscillates on the boundary in one
-frame: the fan moves away, the pointer is outside, the fan rises, the pointer is inside, and the player
-watches it flutter. Hysteresis on a fixed band is the whole fix, and it is the kind of thing that reads as
-polish and is actually correctness.
+**The ¾/½ budget is gone; the depth is measured every frame.** The harvest ran the shipped rig — the shipped
+lens, the shipped fan dials, the tiles the presenter actually builds — through a real camera at all seven
+supported aspects and across the whole zoom range. Every vertical fraction came out identical at all seven,
+because the fan and the board scale together, which is what lets the rule be written in frame fractions at
+all. At the opening framing, in fractions of frame height:
+
+| what | measured | share of the fan's own height at n=5 |
+|---|---|---|
+| resting fan, top edge | 0.340 at one card, 0.310 at two, **0.302..0.306 from three up to ten** | — |
+| deck / discard rect (0.05 furniture) | v 0.145 .. 0.259 = 119 × 123 reference px at 16:9 | — |
+| drop to clear a tile's **top edge** | 0.049 | 12.8% |
+| drop to a tile's **centre**, where its caption lays out | 0.100 | 26.0% |
+| drop to clear the **whole tile** | **0.166** | 43.7% |
+| the ¾ rule this replaces | 0.285 | 75.0% — the fan's top lands at 0.018 of the frame |
+
+Three quarters buries the hand nineteen reference pixels above the bottom of the frame to solve a problem that
+needs two fifths of it, and the ½ fallback (0.190) leaves 0.024 of a frame of headroom over what the piles
+actually need — one resized tile away from being wrong. So the number is not a constant: `UncoverDrop`
+measures the fan's top edge against the lower pile's **visible** bottom edge and adds `uncoverMargin` (0.008),
+which is 0.166 at the opening framing and follows the zoom from there. The caption is centred, so a clickable
+sliver of a tile identifies nothing: the honest target is the whole tile, and the measurement says the hand can
+pay it.
+
+**And it never falls further than half the hand.** Occlusion is measured too. It starts at three cards, where
+the wing tips brush 16 of a tile's 105 pixels; it is 102 of 105 at four; and it is total from five, which is
+the hand the match opens with. At two cards and below the piles sit outside the fan's x-band, `UncoverDrop`
+returns zero, and the sink costs nothing. Past the opening framing the piles walk off the bottom of the screen
+— at `minDistance` seven the whole tile is below the frame — and the drop that would uncover a *partly seen*
+pile is larger than the fan itself. A half-sunk hand is neither readable nor out of the way, so an uncovering
+needing more than `sinkCapFraction` (0.5) of the fan's own height is **abandoned outright, not taken halfway**,
+and the action rail's PILE buttons stay the way in. Measured spend at the opening framing: 0.461 of the fan's
+height at three cards, 0.437 at five, 0.385 at ten — the cap is headroom, never the thing that saves the
+framing.
+
+**Trigger: the resting band, minus the pile columns, and the pile outranks the band.** The footprint is
+answered at sink zero no matter where the hand has actually fallen, because a band that tracked the live pose
+would uncover the piles as it fell, qualify for a rise on its own top edge, and flutter there for as long as
+the pointer stayed put; `RestingFootprintViewport` is the whole fix, and
+`RestingFootprint_IgnoresHowFarTheHandHasFallen` pins it. A pointer inside the band raises the hand, except
+that a pointer over a pile — padded by `pilePointerPadding` (0.012), because a 105-pixel tile is not a needle
+— sinks it. Settling it in the pile's favour is also what removes the loop: sunk exposes the pile, the pointer
+is still on the pile, so it stays sunk — a fixed point rather than an oscillation. What that costs is measured
+as well: the two furnished columns are 0.119 of the band each, so three quarters of the resting footprint still
+raises the hand, including the whole of the centre where a player actually reads. A drag vetoes the sink
+entirely, because the drag maths is posed in the hand's own space and a fan that moved mid-flight would
+teleport the drag plane out from under the pointer.
 
 The pan origin moves with the bias **on purpose**. `boardCenter` is captured from the authored focus, so the
 clamp is now `[−1.55, −0.45]` at the opening framing (slack 0.55, because the table already fits the frame).
