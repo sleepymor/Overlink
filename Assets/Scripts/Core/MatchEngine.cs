@@ -269,7 +269,8 @@ namespace Overlink.Core
                 // GDD 2.1.6 Step 4: an unblocked direct Core attack reduces durability by exactly 1,
                 // regardless of the attacker's ATK.
                 opponent.TakeDamage(1);
-                State.LogEvent($"{attacker.Definition.Name} hits the {opponent.Index} Core for 1 durability");
+                State.LogEvent(BattleEvent.CoreStruck(attacker, opponent.Index, 1),
+                    $"{attacker.Definition.Name} hits the {opponent.Index} Core for 1 durability");
             }
 
             attacker.Exhaust();
@@ -367,7 +368,8 @@ namespace Overlink.Core
             }
 
             pendingBlocks[attacker.InstanceId] = blocker.InstanceId;
-            State.LogEvent($"{command.Player} readies {blocker.Definition.Name} to block {attacker.Definition.Name}");
+            State.LogEvent(BattleEvent.Blocked(blocker, attacker),
+                $"{command.Player} readies {blocker.Definition.Name} to block {attacker.Definition.Name}");
             return CommandResult.Success;
         }
 
@@ -815,7 +817,8 @@ namespace Overlink.Core
             bool attackerHasFirstStrike = StrikesFirst(attacker);
             bool defenderHasFirstStrike = StrikesFirst(defender);
 
-            State.LogEvent($"{attacker.Definition.Name} attacks {defender.Definition.Name}");
+            State.LogEvent(BattleEvent.Attacked(defender, attacker),
+                $"{attacker.Definition.Name} attacks {defender.Definition.Name}");
 
             if (attackerHasFirstStrike && !defenderHasFirstStrike)
             {
@@ -880,12 +883,14 @@ namespace Overlink.Core
                     target.CurrentHp = 0;
                     target.State = UnitState.Destroyed;
                 }
-                State.LogEvent($"{source.Definition.Name} deals {damage} piercing damage to {target.Definition.Name}");
+                State.LogEvent(BattleEvent.Damaged(target, source, damage),
+                    $"{source.Definition.Name} deals {damage} piercing damage to {target.Definition.Name}");
             }
             else
             {
                 target.TakeDamage(damage);
-                State.LogEvent($"{source.Definition.Name} deals {damage} damage to {target.Definition.Name}");
+                State.LogEvent(BattleEvent.Damaged(target, source, damage),
+                    $"{source.Definition.Name} deals {damage} damage to {target.Definition.Name}");
             }
 
             // GDD 2.1.7: damage to a shield-less Core Active transfers to its controller's Core.

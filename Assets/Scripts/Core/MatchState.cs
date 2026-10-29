@@ -87,6 +87,16 @@ namespace Overlink.Core
         public string ResultReason { get; private set; }
         public List<string> EventLog { get; }
 
+        /// <summary>
+        /// What has happened since whoever presents the match last looked.
+        /// <para>
+        /// A queue rather than a running history, because the board's job is to animate a fact once. Nothing in
+        /// <c>Overlink.Core</c> ever reads this back - only <see cref="DrainEvents"/> - so the engine's behaviour
+        /// cannot depend on it, and a view that never drains it costs one list that grows.
+        /// </para>
+        /// </summary>
+        public List<BattleEvent> PendingEvents { get; }
+
         public MatchState(int? seed = null)
         {
             Seed = seed;
@@ -100,6 +110,7 @@ namespace Overlink.Core
             TurnNumber = 1;
             Result = MatchResult.None;
             EventLog = new List<string>();
+            PendingEvents = new List<BattleEvent>();
         }
 
         public PlayerState GetPlayer(PlayerIndex index)
@@ -291,7 +302,8 @@ namespace Overlink.Core
             if (board.Protocol != null && !board.Protocol.IsAlive())
             {
                 player.DiscardCard(board.Protocol);
-                LogEvent($"{player.Index} Protocol {board.Protocol.Definition.Name} is destroyed");
+                LogEvent(BattleEvent.Destroyed(board.Protocol),
+                    $"{player.Index} Protocol {board.Protocol.Definition.Name} is destroyed");
                 board.Protocol = null;
             }
         }
@@ -304,14 +316,19 @@ namespace Overlink.Core
             }
 
             CardInstance dead = slot.Card;
-            LogEvent($"{dead.Definition.Name} is destroyed");
+            // This is the single place a death is announced, and it carries no killer on purpose. Nothing on this
+            // path knows it - a card's HP can reach zero in the exchange, in an effect, or by a loss with no fighter
+            // at all - and the batch the board drains already contains the Damaged record that did it, with its
+            // source, immediately above this one.
+            LogEvent(BattleEvent.Destroyed(dead), $"{dead.Definition.Name} is destroyed");
 
             // GDD 2.1.7: each Core Active destroyed (by combat or an effect) costs its owner exactly 1
             // Core durability, separately from any direct-Core or damage-transfer loss.
             if (slot.Type == SlotType.CoreActive && dead.Definition.Type == CardType.Unit)
             {
                 player.TakeDamage(1);
-                LogEvent($"{player.Index} loses 1 Core durability (Core Active destroyed)");
+                LogEvent(BattleEvent.CoreSlotLost(dead, player.Index, 1),
+                    $"{player.Index} loses 1 Core durability (Core Active destroyed)");
             }
 
             player.DiscardCard(dead);
@@ -339,7 +356,8 @@ namespace Overlink.Core
                     CardInstance promoted = board.CoreBench[b].Card;
                     board.CoreBench[b].Card = null;
                     board.CoreActive[i].Card = promoted;
-                    LogEvent($"{player.Index} promotes {promoted.Definition.Name} from Core Bench to Core Active {i}");
+                    LogEvent(BattleEvent.Promoted(promoted),
+                        $"{player.Index} promotes {promoted.Definition.Name} from Core Bench to Core Active {i}");
                     break;
                 }
             }
@@ -366,7 +384,8 @@ namespace Overlink.Core
                     CardInstance promoted = board.NodeBench[node][b].Card;
                     board.NodeBench[node][b].Card = null;
                     board.NodeActive[node][0].Card = promoted;
-                    LogEvent($"{player.Index} promotes {promoted.Definition.Name} to Node {node + 1} Active");
+                    LogEvent(BattleEvent.Promoted(promoted),
+                        $"{player.Index} promotes {promoted.Definition.Name} to Node {node + 1} Active");
                     break;
                 }
             }
@@ -493,7 +512,8 @@ namespace Overlink.Core
             }
 
             owner.TakeDamage(transfer);
-            LogEvent($"{unit.Definition.Name} transfers {transfer} Core durability ({damage} damage, no Shield)");
+            LogEvent(BattleEvent.CoreTransferred(unit, owner.Index, transfer),
+                $"{unit.Definition.Name} transfers {transfer} Core durability ({damage} damage, no Shield)");
         }
 
         /// <summary>
@@ -882,6 +902,47 @@ namespace Overlink.Core
         public void LogEvent(string message)
         {
             EventLog.Add(message);
+        }
+
+        /// <summary>
+        /// Raises one fight fact and the sentence that already described it, in the same statement.
+        /// <para>
+        /// The pairing is the point. The engine has always narrated its own combat in prose, and the board now needs
+        /// the same facts as addresses; two independent calls would let the log say one thing while the tabletop
+        /// animated another, which is the class of bug nobody catches because the sentence still reads plausibly.
+        /// One call, two arguments, and the wording at every migrated site is the wording that shipped.
+        /// </para>
+        /// </summary>
+        public void LogEvent(BattleEvent battleEvent, string message)
+        {
+            PendingEvents.Add(battleEvent);
+            LogEvent(message);
+        }
+
+        /// <summary>
+        /// Hands over everything raised since the last call and leaves the queue empty.
+        /// <para>
+        /// A snapshot rather than the live list, because the presenter holds a batch across the frames it takes to
+        /// animate it, and a view iterating a list the engine is still appending to would be a mutation during
+        /// enumeration waiting on a combat step's timing. The empty case returns a shared array so the common
+        /// "nothing happened this frame" poll costs nothing.
+        /// </para>
+        /// <para>
+        /// Whoever calls this owns the events. Nobody in <c>Overlink.Core</c> drains it, so a build with no
+        /// presenter leaves it growing for the length of a match - bounded by the fight's own facts, and the right
+        /// failure to have, since dropping events on the floor would lose feedback instead of delaying it.
+        /// </para>
+        /// </summary>
+        public IReadOnlyList<BattleEvent> DrainEvents()
+        {
+            if (PendingEvents.Count == 0)
+            {
+                return Array.Empty<BattleEvent>();
+            }
+
+            BattleEvent[] drained = PendingEvents.ToArray();
+            PendingEvents.Clear();
+            return drained;
         }
     }
 }

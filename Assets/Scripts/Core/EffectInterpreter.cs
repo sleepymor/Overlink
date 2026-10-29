@@ -73,7 +73,8 @@ namespace Overlink.Core
                     {
                         int shieldBefore = target.CurrentShield;
                         target.TakeDamage(effect.Amount);
-                        state.LogEvent($"{prefix}: {target.Definition.Name} takes {effect.Amount} damage");
+                        state.LogEvent(BattleEvent.Damaged(target, source, effect.Amount),
+                            $"{prefix}: {target.Definition.Name} takes {effect.Amount} damage");
                         // GDD 2.1.7: damage to a shield-less Core Active transfers to its controller's Core.
                         state.ApplyCoreDamageTransfer(target, effect.Amount, shieldBefore);
                     }
@@ -118,6 +119,9 @@ namespace Overlink.Core
                     foreach (CardInstance target in ResolveUnitTargets(source, controller, effect.Target))
                     {
                         target.Destroy();
+                        // No BattleEvent here on purpose. The card is only marked dead at this point; the slot is
+                        // still holding it, so MatchState.CollectDeadSlot is the single place a death gets
+                        // announced. Raising one at both sites makes every ability kill flash twice on the board.
                         state.LogEvent($"{prefix}: {target.Definition.Name} is destroyed");
                     }
                     break;
