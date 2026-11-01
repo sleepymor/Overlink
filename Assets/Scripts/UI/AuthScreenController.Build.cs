@@ -82,6 +82,7 @@ namespace Overlink.UI
             card.anchorMin = card.anchorMax = new Vector2(0.5f, 0.5f);
             card.sizeDelta = new Vector2(CardWidth, CardHeight);
             cardGo.AddComponent<Image>().color = UiKit.Card;
+            UiKit.ApplyCardBorder(cardGo);
 
             BuildLoadingPanel(card);
             BuildSignInPanel(card);

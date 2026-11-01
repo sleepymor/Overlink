@@ -42,6 +42,8 @@ namespace Overlink.Match.Tests
         static readonly Color ShippedBenchEmpty = new Color(0.13f, 0.15f, 0.19f);
         static readonly Color ShippedProtocolEmpty = new Color(0.23f, 0.18f, 0.31f);
         static readonly Color ShippedActiveRim = new Color(0.80f, 0.64f, 0.28f);
+        static readonly Color ShippedBenchRim = new Color(0.28f, 0.39f, 0.54f);
+        static readonly Color ShippedProtocolRim = new Color(0.58f, 0.36f, 0.78f);
         static readonly Color ShippedPlayerTint = new Color(0.20f, 0.42f, 0.72f);
         static readonly Color ShippedOpponentTint = new Color(0.62f, 0.24f, 0.24f);
         static readonly Color ShippedCorePlateTint = new Color(0.16f, 0.18f, 0.25f);
@@ -199,8 +201,8 @@ namespace Overlink.Match.Tests
                 case BattlefieldPresenter.Surface.Plate:
                     return 2 + Board.NodeCount;                        // two Core plates, one per Node
                 case BattlefieldPresenter.Surface.Rim:
-                    return 2 * Board.CoreActiveSlots
-                        + Board.NodeCount * 2 * Board.NodeActiveSlots;  // one behind every Active
+                    return 4 * (2 * (Board.CoreActiveSlots + Board.CoreBenchSlots + 1)
+                        + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots));
                 case BattlefieldPresenter.Surface.Pile:
                     return 2 * (1 + BuriedLayersPerPile);               // two tops, stacked
                 default:
@@ -241,6 +243,8 @@ namespace Overlink.Match.Tests
             AssertSame(presenter.benchEmpty, ShippedBenchEmpty, "benchEmpty");
             AssertSame(presenter.protocolEmpty, ShippedProtocolEmpty, "protocolEmpty");
             AssertSame(presenter.activeRim, ShippedActiveRim, "activeRim");
+            AssertSame(presenter.benchRim, ShippedBenchRim, "benchRim");
+            AssertSame(presenter.protocolRim, ShippedProtocolRim, "protocolRim");
             AssertSame(presenter.playerTint, ShippedPlayerTint, "playerTint");
             AssertSame(presenter.opponentTint, ShippedOpponentTint, "opponentTint");
             AssertSame(presenter.corePlateTint, ShippedCorePlateTint, "corePlateTint");
@@ -267,6 +271,20 @@ namespace Overlink.Match.Tests
         }
 
         // ---- The partition -------------------------------------------------------------
+
+        [Test]
+        public void FallbackBoardShader_HasPassAcceptedByThe2DRenderer()
+        {
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/OverlinkBoardFallback.shader");
+            Assert.IsNotNull(shader);
+            var material = new Material(shader);
+            probes.Add(material);
+            int pass = material.FindPass("ForwardLit");
+            Assert.That(pass, Is.GreaterThanOrEqualTo(0));
+            var lightMode = shader.FindPassTagValue(pass, new UnityEngine.Rendering.ShaderTagId("LightMode"));
+            Assert.AreEqual(new UnityEngine.Rendering.ShaderTagId("SRPDefaultUnlit"), lightMode,
+                "Renderer2D skips UniversalForward passes, making all fallback board surfaces invisible.");
+        }
 
         [Test]
         public void EveryBodyOnTheBoardIsClaimedByExactlyOneFamily()
@@ -349,21 +367,66 @@ namespace Overlink.Match.Tests
                     $"{pair.Holder} is wearing the wrong generated colour.");
             }
 
-            // The rim is the tenth branch and the only one whose holder name is not unique - ten of them exist,
-            // one behind every Active socket, and all ten are the same gold.
+            // Active retains the historical Socket holder name; every card-bearing slot has a frame, while
+            // Bench and Protocol use SlotFrame so the editable hierarchy exposes their role.
             Renderer rim = null;
             foreach (Renderer body in bodies)
             {
-                if (body.transform.parent.name == "Socket")
+                Transform cursor = body.transform;
+                while (cursor != null && cursor != board)
                 {
-                    rim = body;
+                    if (cursor.name == "Socket")
+                    {
+                        rim = body;
+                        break;
+                    }
+                    cursor = cursor.parent;
+                }
+
+                if (rim != null)
+                {
                     break;
                 }
             }
 
-            Assert.IsNotNull(rim, "Every Active socket carries a rim cube, so a board with none is incomplete.");
+            Assert.IsNotNull(rim, "Every Active socket carries a frame cube, so a board with none is incomplete.");
             Assert.AreEqual("Slot_" + ColorUtility.ToHtmlStringRGB(ShippedActiveRim), rim.sharedMaterial.name,
                 "The Active rim is the one border that survives deployment; it cannot take the socket colour.");
+
+            int frames = 0;
+            foreach (Renderer body in bodies)
+            {
+                if (body.transform.parent.name.StartsWith("Frame"))
+                {
+                    frames++;
+                }
+            }
+
+            int expectedFrames = 4 * (2 * (Board.CoreActiveSlots + Board.CoreBenchSlots + 1)
+                + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots));
+            Assert.AreEqual(expectedFrames, frames,
+                "Every card slot must have four visible editable edge frames.");
+
+            Renderer benchFrame = null;
+            foreach (Renderer body in bodies)
+            {
+                if (body.transform.parent.name.StartsWith("Frame")
+                    && body.transform.parent.parent != null)
+                {
+                    string slotName = body.transform.parent.parent.parent != null
+                        ? body.transform.parent.parent.parent.name
+                        : string.Empty;
+                    if (slotName.Contains("Bench"))
+                    {
+                        benchFrame = body;
+                        break;
+                    }
+                }
+            }
+
+            Assert.IsNotNull(benchFrame, "A Bench slot must carry a SlotFrame.");
+            Assert.AreEqual("Slot_" + ColorUtility.ToHtmlStringRGB(ShippedBenchRim), benchFrame.sharedMaterial.name,
+                "Bench frames use the cool bench accent.");
         }
 
         // ---- Skin ----------------------------------------------------------------------
@@ -433,6 +496,30 @@ namespace Overlink.Match.Tests
             Assert.AreSame(probe, deck.sharedMaterial,
                 "Clearing a slot leaves the body wearing what it was wearing. This is the documented " +
                 "asymmetry: rebuilding is what restores a generated material.");
+        }
+
+        [Test]
+        public void TableSkin_ReceivesTableTintOnBuildAndSkinChanges()
+        {
+            var go = new GameObject("TintedTableBoard");
+            spawned.Add(go);
+            var presenter = go.AddComponent<BattlefieldPresenter>();
+            presenter.tableTint = new Color(0.045f, 0.07f, 0.12f, 1f);
+            var skin = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Battlefield/Fallback_Table.mat");
+            Assert.IsNotNull(skin);
+            presenter.tableSkin = skin;
+            presenter.BuildBoard();
+
+            Transform board = presenter.transform.Find("Battlefield");
+            Renderer table = BodyNamed(Bodies(board), "Table");
+            var block = new MaterialPropertyBlock();
+            table.GetPropertyBlock(block);
+            AssertSame(block.GetColor("_BaseColor"), presenter.tableTint, "built table tint");
+
+            presenter.tableTint = new Color(0.1f, 0.15f, 0.2f, 1f);
+            presenter.ApplySkins();
+            table.GetPropertyBlock(block);
+            AssertSame(block.GetColor("_BaseColor"), presenter.tableTint, "reapplied table tint");
         }
 
         [Test]

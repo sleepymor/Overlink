@@ -102,6 +102,30 @@ namespace Overlink.Match
         [Tooltip("The border behind each Active tile; survives deployment, unlike the tile's own tint.")]
         public Color activeRim = new Color(0.80f, 0.64f, 0.28f);
 
+        [Tooltip("The border behind each Bench tile. Cooler and quieter than Active so the front rank owns the " +
+                 "visual focus while every Bench card still has a clear box.")]
+        public Color benchRim = new Color(0.28f, 0.39f, 0.54f);
+
+        [Tooltip("The border behind each Protocol tile. Violet separates Protocol from both unit ranks without " +
+                 "competing with a deployed card face.")]
+        public Color protocolRim = new Color(0.58f, 0.36f, 0.78f);
+
+        [Header("Card slot boxes")]
+        [Tooltip("Extra width and height around every card slot's frame. The frame stays outside the card fit " +
+                 "footprint so the card face remains readable and the socket remains visibly editable.")]
+        [Min(0.01f)]
+        public float slotFrameMargin = 0.14f;
+
+        [Tooltip("Visible width of the four-sided slot outline. This is deliberately wider than a hairline so " +
+                 "boxes remain readable at the tabletop camera's normal zoom.")]
+        [Min(0.01f)]
+        public float slotFrameBorder = 0.045f;
+
+        [Tooltip("Depth of the backing frame cube. It remains behind the socket body and card face, with no " +
+                 "collider, so it cannot intercept board input.")]
+        [Min(0.005f)]
+        public float slotFrameDepth = 0.04f;
+
         [Tooltip("A unit standing on a socket, in its owner's colour.")]
         public Color playerTint = new Color(0.20f, 0.42f, 0.72f);
 
@@ -179,6 +203,17 @@ namespace Overlink.Match
                  "on this table. Change it only if the board is re-posed under you and the cards land face-down " +
                  "or mirrored.")]
         public Vector3 boardCardExtraRotation;
+
+        [Tooltip("Extra rotation applied to the OPPONENT's cards only, on top of the shared pose above. Zero " +
+                 "means both halves lie exactly as the board's captions do, which is how the table has always " +
+                 "shipped: every card on it, yours and theirs, reads upright from your seat.\n" +
+                 "(0, 0, 180) turns their half about the table normal so it faces its own owner, which is the " +
+                 "real-table convention - and from your seat their cards are then upside down, so their stats " +
+                 "and art stop being readable to you. That trade is the whole content of this knob, and it is " +
+                 "why the default keeps the board legible rather than polite.\n" +
+                 "Captions are untouched either way: this rotates the card and not the socket's state word, so " +
+                 "SPENT and SUMMONING stay readable while the card beneath them turns.")]
+        public Vector3 opponentCardExtraRotation;
 
         // ---- Tabletop -------------------------------------------------------------
         // The tabletop is sized to its content and nothing else. Since the status layer moved to
@@ -312,8 +347,8 @@ namespace Overlink.Match
         // command during the opening, the only drag that means anything is a nomination, and the two buttons
         // that close setup are the only interactive things on the screen.
         public const string SetupHintText =
-            "Drag a card onto a lit socket to field it   \u2022   Click a fielded card to send it back\n" +
-            "REROLL replaces all five offers for NP   \u2022   CONFIRM opens the match";
+            "SETUP: Drag a UNIT from your hand to a glowing ACTIVE slot on your side - CORE or NODE 1-4\n" +
+            "Do not use BENCH or PROTOCOL   \u2022   Click a fielded card to return it   \u2022   Press CONFIRM when ready";
 
         static readonly string[] NodeCaption =
         {
@@ -380,6 +415,10 @@ namespace Overlink.Match
 
         Tile highlightedTile;
 
+        // Setup guidance is a view-only mark. The coordinator still owns the real drop legality; this simply
+        // makes the five destinations accepted by the opening lineup picker obvious before the player drags.
+        bool lineupGuideShown;
+
         // The player's opening nomination, published by the coordinator while the lineup setup is open: one
         // offered card id per Active socket in battlefield order (the Core rank, then each Node's Active), and
         // 0 for a socket the player has not filled. Front-end state rather than rules on purpose - the engine
@@ -417,12 +456,12 @@ namespace Overlink.Match
                 hud = BattlefieldHud.Ensure();
             }
 
-            // A HUD serialized before the status layer existed is a valid, complete log panel that simply has
-            // no banner, chips or node list on it. Building it in place is idempotent and re-binds every child
-            // by name, so the authored object survives and only the missing panels are added. Guarded to play
-            // mode for the same reason as Ensure(): an editor build must not grow scene objects.
-            if (hud != null && Application.isPlaying &&
-                (!hud.IsBuilt || !hud.IsReaderBuilt || !hud.IsStatusBuilt))
+            // Unconditional. The guard here used to be `!IsBuilt || !IsReaderBuilt || !IsStatusBuilt`, and
+            // every one of those reads a serialized reference that a scene-authored HUD fills in from disk
+            // before anything has run - so on the HUD this scene actually ships the guard reported "done"
+            // while the rail store sat empty and not one button had a listener. Build is bind plus author,
+            // and the bind half is what makes a complete-looking panel work.
+            if (hud != null && Application.isPlaying)
             {
                 hud.Build();
             }
@@ -456,6 +495,9 @@ namespace Overlink.Match
             ApplySkinsIfChanged();
 
             Refresh();
+
+            // Last, so an inspected card tracks whatever this frame did to the board and to the reader box.
+            UpdateInspectCard();
         }
 
         // ---- Construction -----------------------------------------------------------
@@ -715,6 +757,14 @@ namespace Overlink.Match
                 return null;
             }
 
+            // Older authored battlefield prefabs only framed Active sockets. Add the missing Bench and
+            // Protocol boxes when they bind so an existing scene receives the presentation upgrade immediately;
+            // the prefab builder persists the same hierarchy for the editable source asset.
+            if (IsCardSlotName(name) && FindSlotFrame(slot) == null)
+            {
+                MakeSlotFrame(slot, name, body.localScale, false);
+            }
+
             var tile = new Tile
             {
                 Body = renderer,
@@ -729,11 +779,76 @@ namespace Overlink.Match
                 // collapses them onto one shared material), but the name always identifies the slot kind,
                 // and that is exactly what the build path used to pick the colour in the first place.
                 BaseColor = BaseColorForSlot(name),
+                Frame = FindSlotFrame(slot),
+                Frames = FindSlotFrames(slot),
+                FrameBaseColor = FrameColorForSlot(name),
                 EmptyLabel = label.text,
             };
             ApplyCaptionSorting(label);
             ApplyTileIdentity(tile, name);
             return tile;
+        }
+
+        /// <summary>
+        /// Finds the editable box behind a slot. The Active rank used the original <c>Socket/Body</c> rim before
+        /// every slot received a frame; accepting both paths keeps old authored boards bindable while the rebuilt
+        /// prefab uses <c>SlotFrame/Frame</c> consistently for Bench and Protocol sockets.
+        /// </summary>
+        static Renderer FindSlotFrame(Transform slot)
+        {
+            if (slot == null)
+            {
+                return null;
+            }
+
+            List<Renderer> frames = FindSlotFrames(slot);
+            return frames.Count > 0 ? frames[0] : null;
+        }
+
+        static List<Renderer> FindSlotFrames(Transform slot)
+        {
+            var frames = new List<Renderer>(4);
+            if (slot == null)
+            {
+                return frames;
+            }
+
+            string[] edgeNames = { "FrameTop", "FrameBottom", "FrameLeft", "FrameRight" };
+            for (int i = 0; i < edgeNames.Length; i++)
+            {
+                Transform body = slot.Find("SlotFrame/" + edgeNames[i] + "/Body");
+                if (body == null)
+                {
+                    body = slot.Find("Socket/" + edgeNames[i] + "/Body");
+                }
+                if (body == null)
+                {
+                    // Current generated hierarchy: SlotFrame/FrameTop/Body (or Socket/FrameTop/Body for
+                    // Active). The longer paths above preserve the intermediate authored prefab revision.
+                    body = slot.Find("SlotFrame/" + edgeNames[i]);
+                }
+                if (body == null)
+                {
+                    body = slot.Find("Socket/" + edgeNames[i]);
+                }
+
+                Renderer renderer = body != null ? body.GetComponent<Renderer>() : null;
+                if (renderer != null)
+                {
+                    frames.Add(renderer);
+                }
+            }
+
+            // Compatibility with the original one-piece Active rim and the intermediate prefab revision.
+            if (frames.Count == 0)
+            {
+                Transform body = slot.Find("SlotFrame/Body");
+                if (body == null) body = slot.Find("Socket/Body");
+                Renderer renderer = body != null ? body.GetComponent<Renderer>() : null;
+                if (renderer != null) frames.Add(renderer);
+            }
+
+            return frames;
         }
 
         /// <summary>
@@ -957,6 +1072,7 @@ namespace Overlink.Match
             }
 
             if (name.StartsWith("Table")) return Surface.Table;
+            if (name == "SlotFrame" || name == "Socket" || name.StartsWith("Frame")) return Surface.Rim;
             if (name.Contains("Socket")) return Surface.Rim;
             if (name == "DeckPile" || name == "DiscardPile" || name.StartsWith("Stack")) return Surface.Pile;
             if (name.StartsWith("NodePlate") || name.EndsWith("CorePlate")) return Surface.Plate;
@@ -979,6 +1095,58 @@ namespace Overlink.Match
             if (name.Contains("Bench")) return benchEmpty;
             if (name.Contains("Protocol")) return protocolEmpty;
             return Color.white;
+        }
+
+        Color FrameColorForSlot(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return activeRim;
+            }
+
+            if (name.EndsWith("Protocol")) return protocolRim;
+            if (name.Contains("Bench")) return benchRim;
+            return activeRim;
+        }
+
+        Renderer MakeSlotFrame(Transform holder, string slotName, Vector3 size, bool preserveActiveName)
+        {
+            string frameName = preserveActiveName ? "Socket" : "SlotFrame";
+            var frame = new GameObject(frameName);
+            frame.transform.SetParent(holder, false);
+            frame.transform.localPosition = new Vector3(0f, 0f, 0.05f);
+
+            // Four ordinary cubes make the box unambiguous in both the Scene view and the Game view. They are
+            // deliberately separate editable edges rather than a thin backing slab: the old slab could hide
+            // behind the socket body and leave only the caption visible at the tabletop camera angle.
+            float outerX = size.x + slotFrameMargin;
+            float outerY = size.y + slotFrameMargin;
+            float edge = Mathf.Min(slotFrameBorder, Mathf.Min(outerX, outerY) * 0.45f);
+            Color color = FrameColorForSlot(slotName);
+
+            // The edge holder itself carries the family name. MakeBody keeps the renderer child named Body,
+            // which means SurfaceFor and the skin pass can classify the edge without walking an extra helper
+            // object (and the serialized prefab remains easy to edit: SlotFrame/FrameTop/Body).
+            Renderer top = MakeBody(frame.transform, "FrameTop",
+                new Vector3(0f, (outerY - edge) * 0.5f, 0f),
+                new Vector3(outerX, edge, slotFrameDepth), color);
+            MakeBody(frame.transform, "FrameBottom",
+                new Vector3(0f, -(outerY - edge) * 0.5f, 0f),
+                new Vector3(outerX, edge, slotFrameDepth), color);
+            MakeBody(frame.transform, "FrameLeft",
+                new Vector3(-(outerX - edge) * 0.5f, 0f, 0f),
+                new Vector3(edge, outerY - edge * 2f, slotFrameDepth), color);
+            MakeBody(frame.transform, "FrameRight",
+                new Vector3((outerX - edge) * 0.5f, 0f, 0f),
+                new Vector3(edge, outerY - edge * 2f, slotFrameDepth), color);
+
+            return top;
+        }
+
+        static bool IsCardSlotName(string name)
+        {
+            return !string.IsNullOrEmpty(name)
+                && (name.Contains("Active") || name.Contains("Bench") || name.EndsWith("Protocol"));
         }
 
         void BuildCoreBattlefield()
@@ -1416,8 +1584,12 @@ namespace Overlink.Match
         readonly List<Tile> pickables = new List<Tile>();
         readonly Dictionary<Tile, CardInstance> cardByTile = new Dictionary<Tile, CardInstance>();
         readonly Dictionary<int, Tile> tileByCard = new Dictionary<int, Tile>();
+        readonly Dictionary<int, int> cardFeedbackSignatures = new Dictionary<int, int>();
+        readonly Dictionary<int, float> cardFeedbackUntil = new Dictionary<int, float>();
         bool pickablesValid;
         bool coreMarked;
+        Tile impactPulseTile;
+        float impactPulseUntil;
 
         /// <summary>The tile a unit is standing on, or null when the board has not painted it yet.</summary>
         public Tile TileOf(CardInstance card)
@@ -1765,6 +1937,11 @@ namespace Overlink.Match
         /// <param name="foot">The footer - a position in a pile, or a hint. Null clears the line.</param>
         public void ShowInfo(string title, string body, string foot)
         {
+            // A card held up for reading belongs to the reader, and this is the other thing the reader shows.
+            // Clicking a Node after clicking one of their units would otherwise leave the card from the first
+            // click floating over the board behind a slab that is not about it.
+            ClearInspectCard();
+
             if (hud == null)
             {
                 ResolveHud();
@@ -1795,7 +1972,15 @@ namespace Overlink.Match
 
             if (hud != null)
             {
-                hud.ShowReader(card.Definition.Name, CardDetails(card, state), where, CardAccent(card.Definition.Type));
+                // The card first, the summary only when there is no card to draw: without a match running there
+                // is no CardData behind the instance, and a placeholder face would be a fake card in a real
+                // reader.
+                if (!ShowInspectCard(card, where))
+                {
+                    ClearInspectCard();
+                    hud.ShowReader(card.Definition.Name, CardDetails(card, state), where,
+                        CardAccent(card.Definition.Type));
+                }
             }
         }
 
@@ -1890,17 +2075,12 @@ namespace Overlink.Match
                 parts.Add(slot.Type.ToString().ToUpper());
             }
 
-            if (card.HasSummoningDelay)
+            // The state words come from the same rule the card preview's footer uses, so the two reader modes
+            // cannot disagree about whether a card has anything to report about its readiness.
+            string readiness = ReadinessLine(card);
+            if (readiness != null)
             {
-                parts.Add("SUMMONING DELAY");
-            }
-            else if (card.State == UnitState.Exhausted)
-            {
-                parts.Add("EXHAUSTED");
-            }
-            else if (card.State == UnitState.Summoned)
-            {
-                parts.Add("SUMMONED");
+                parts.Add(readiness);
             }
 
             return parts.Count == 0 ? null : string.Join("   •   ", parts);
@@ -1950,7 +2130,14 @@ namespace Overlink.Match
 
             if (hud != null)
             {
-                hud.ShowReader(card.Definition.Name, CardDetails(card, null), where, CardAccent(card.Definition.Type));
+                // A spent card has no state on the table to report, so the footer is the position in the pile
+                // and nothing else.
+                if (!ShowInspectCard(card, where))
+                {
+                    ClearInspectCard();
+                    hud.ShowReader(card.Definition.Name, CardDetails(card, null), where,
+                        CardAccent(card.Definition.Type));
+                }
             }
         }
 
@@ -1981,13 +2168,333 @@ namespace Overlink.Match
                 $"DECK  {count}");
         }
 
-        /// <summary>Takes the details panel off screen.</summary>
+        /// <summary>Takes the details panel, and any card standing in front of it, off screen.</summary>
         public void ClearDetails()
         {
+            ClearInspectCard();
+
             if (hud != null)
             {
                 hud.HideReader();
             }
+        }
+
+        // ---- Card inspection -----------------------------------------------------------------
+
+        [Header("Card inspection")]
+        [Tooltip("The space an inspected card is drawn in, and expected to be a child of the board camera so the " +
+                 "face arrives parallel to the image plane the way the hand's cards do - CardFaceView.PixelPosition " +
+                 "records what a tilted face costs. Left empty, the presenter makes one under Camera.main at " +
+                 "runtime, because the battlefield ships no authored preview socket.")]
+        public Transform inspectRoot;
+
+        [Tooltip("How far in front of the camera the runtime preview stands, in table units. An authored " +
+                 "inspectRoot is measured instead, so this only ever describes the object this file makes.")]
+        public float inspectDistance = 5f;
+
+        [Tooltip("The fraction of the reader's own box the card fills. Just short of one: the slab's edge is the " +
+                 "thing that tells the eye this is a card held up for reading and not a hole punched in the board.")]
+        [Range(0.5f, 1f)]
+        public float inspectFill = 0.96f;
+
+        // Above the hand's PlaySlice (HandController, 10300) and every board lane, for the reason the hand's own
+        // hold-to-zoom gives its InspectSlice: an inspected card is read on its own, so no neighbour's frame,
+        // rail or label may cut across its art or its stats.
+        const int InspectSortBaseline = 11000;
+
+        const string InspectRootName = "CardInspect";
+
+        CardView inspectCard;
+        CardInstance inspectSource;
+        int inspectSignature;
+        float inspectBoxHeight;
+        float inspectZoom = 1f;
+        Vector2 inspectRotation;
+        bool inspectDragging;
+        Vector3 inspectPointer;
+        MatchState inspectState;
+
+        /// <summary>Whether the pointer is on the card preview, not on the table behind it.</summary>
+        public bool IsPointerOverInspect(Vector2 pointer)
+        {
+            if (inspectCard == null || hud == null || !hud.ReaderShowsCard
+                || !hud.TryGetReaderCardBox(out Vector2 center, out float height)) return false;
+            float halfHeight = height * inspectZoom * 0.5f;
+            float halfWidth = halfHeight * CardView.CardSize.x / CardView.CardSize.y;
+            return Mathf.Abs(pointer.x - center.x) <= halfWidth && Mathf.Abs(pointer.y - center.y) <= halfHeight;
+        }
+
+        /// <summary>
+        /// Stands a card up in front of the camera as the card itself - the same <see cref="CardView"/> the board
+        /// sockets and the hand fan are built from - rather than as a summary of it.
+        /// <para>
+        /// The text reader duplicated the face: cost, name, type, rarity, live attack, health, shield and the
+        /// ability (whose leading word is the keyword, so nothing is lost) are all printed on the art. What the
+        /// frame cannot say is where the card stands and whether it can act, and that is all the footer keeps.
+        /// </para>
+        /// </summary>
+        /// <param name="foot">The position line, e.g. <c>YOUR NODE 2 ACTIVE</c>.</param>
+        /// <returns>False when there is nothing to draw from, so the caller keeps the text reader.</returns>
+        bool ShowInspectCard(CardInstance card, string foot)
+        {
+            if (!Application.isPlaying || card == null || hud == null)
+            {
+                return false;
+            }
+
+            CardData data = ResolveCardData(card);
+            Camera cam = Camera.main;
+            if (data == null || cam == null)
+            {
+                return false;
+            }
+
+            ClearInspectCard();
+            // Activate and lay out the reader before measuring it. A hidden canvas hierarchy may not
+            // have valid screen geometry on the first click, especially at the start of a match.
+            hud.ShowReaderCard(ComposeFooter(foot, ReadinessLine(card)) + "  •  DRAG ROTATE  •  WHEEL ZOOM  •  ESC CLOSE");
+            Canvas.ForceUpdateCanvases();
+            Transform root = EnsureInspectRoot(cam);
+            if (root == null || !hud.TryGetReaderCardBox(out _, out float height))
+            {
+                return false;
+            }
+
+            inspectCard = CardView.CreateBoard(data, root, InspectSize(cam, root, height), frameCatalog,
+                templateCatalog, placeholderFixture, tierMaterials, InspectSortBaseline);
+            inspectSource = card;
+            inspectSignature = CardFeedbackSignature(card);
+            inspectBoxHeight = height;
+            inspectZoom = 1f;
+            inspectRotation = Vector2.zero;
+            inspectDragging = false;
+            inspectState = coordinator != null ? coordinator.GetMatchState() : null;
+            hud.SetInspectionDetails(card.Definition.Name, CardDetails(card, inspectState));
+            UpdateInspectCard();
+
+            // The same arrival a card gets when it lands in a socket, so a preview reads as a card being held up
+            // rather than as a window opening over the board.
+            inspectCard.transform.localScale = Vector3.one * 0.84f;
+            inspectCard.Tween.Play(null, null, Vector3.one, 0.20f, CardEase.OutCubic);
+            return true;
+        }
+
+        /// <summary>Retires the preview card. The camera-held space it stood in is kept for the next one.</summary>
+        void ClearInspectCard()
+        {
+            if (inspectCard != null)
+            {
+                DestroyTarget(inspectCard.gameObject);
+            }
+
+            inspectCard = null;
+            inspectSource = null;
+            inspectBoxHeight = 0f;
+            inspectDragging = false;
+            inspectState = null;
+            if (hud != null) hud.SetInspectionDetails(null, null);
+        }
+
+        /// <summary>
+        /// Keeps the preview pinned to the reader's box, sized to it, and its numbers live.
+        /// <para>
+        /// Per frame rather than once on click, because the box is UI on an overlay canvas: it moves while the
+        /// panel floats in, and it changes with the resolution. A card that stopped tracking it would end up in
+        /// the wrong half of the screen. The stats track for the same reason - the inspected card is still on the
+        /// table and can be hit while it is being read, and a face frozen at the numbers it had when it was
+        /// clicked would be lying about the match.
+        /// </para>
+        /// </summary>
+        void UpdateInspectCard()
+        {
+            if (inspectCard == null || hud == null)
+            {
+                return;
+            }
+
+            if (inspectSource == null)
+            {
+                ClearInspectCard();
+                return;
+            }
+
+            int signature = CardFeedbackSignature(inspectSource);
+            if (signature != inspectSignature)
+            {
+                inspectSignature = signature;
+                inspectCard.Refresh();
+                hud.SetInspectionDetails(inspectSource.Definition.Name, CardDetails(inspectSource, inspectState));
+            }
+
+            Camera cam = Camera.main;
+            Transform root = inspectCard.transform.parent;
+            if (cam == null || root == null || !hud.TryGetReaderCardBox(out Vector2 center, out float height))
+            {
+                return;
+            }
+
+            bool over = IsPointerOverInspect(Input.mousePosition);
+            if (Input.GetMouseButtonDown(0) && over)
+            {
+                inspectDragging = true;
+                inspectPointer = Input.mousePosition;
+            }
+            if (!Input.GetMouseButton(0)) inspectDragging = false;
+            if (inspectDragging)
+            {
+                Vector3 delta = Input.mousePosition - inspectPointer;
+                inspectPointer = Input.mousePosition;
+                inspectRotation.x = Mathf.Clamp(inspectRotation.x - delta.y * 0.3f, -35f, 35f);
+                inspectRotation.y = Mathf.Clamp(inspectRotation.y + delta.x * 0.3f, -50f, 50f);
+            }
+            float scroll = over ? Input.GetAxis("Mouse ScrollWheel") : 0f;
+            if (Mathf.Abs(scroll) > 0.0001f)
+            {
+                inspectZoom = Mathf.Clamp(inspectZoom + scroll * 1.5f, 0.75f, 1.4f);
+                inspectCard.SetSize(InspectSize(cam, root, height) * inspectZoom);
+            }
+            inspectCard.transform.localRotation = Quaternion.Euler(inspectRotation.x, inspectRotation.y, 0f);
+
+            if (Mathf.Abs(height - inspectBoxHeight) > 1f)
+            {
+                inspectBoxHeight = height;
+                inspectCard.SetSize(InspectSize(cam, root, height) * inspectZoom);
+            }
+
+            Vector3 local = root.InverseTransformPoint(
+                cam.ScreenToWorldPoint(new Vector3(center.x, center.y, InspectDepth(cam, root))));
+
+            // Zero, for the reason written in CardFaceView.PixelPosition: the face is one co-planar sheet, and a
+            // depth offset under perspective walks its labels out of their plates.
+            local.z = 0f;
+            inspectCard.transform.localPosition = local;
+        }
+
+        /// <summary>
+        /// The camera-held space previews are drawn in, made once if the scene authored none.
+        /// Recovered by name rather than added again: a domain reload or a board rebuild leaves the previous
+        /// object under the camera, and a second one would stand two cards in the same box.
+        /// </summary>
+        Transform EnsureInspectRoot(Camera cam)
+        {
+            if (inspectRoot != null)
+            {
+                return inspectRoot;
+            }
+
+            Transform existing = cam.transform.Find(InspectRootName);
+            if (existing != null)
+            {
+                inspectRoot = existing;
+                return inspectRoot;
+            }
+
+            var created = new GameObject(InspectRootName);
+            created.transform.SetParent(cam.transform, false);
+            created.transform.localPosition = new Vector3(0f, 0f, Mathf.Max(0.5f, inspectDistance));
+            created.transform.localRotation = Quaternion.identity;
+            created.transform.localScale = Vector3.one;
+            inspectRoot = created.transform;
+            return inspectRoot;
+        }
+
+        /// <summary>
+        /// The plane the preview is measured on: the root's distance in front of the camera along its own view
+        /// axis. Clamped clear of the near plane, because a root authored behind the lens would invert the card.
+        /// </summary>
+        static float InspectDepth(Camera cam, Transform root)
+        {
+            float depth = Vector3.Dot(root.position - cam.transform.position, cam.transform.forward);
+            return depth < 0.5f ? 0.5f : depth;
+        }
+
+        /// <summary>
+        /// Converts the reader's box, measured in screen pixels, into the world size a card has to be built at to
+        /// fill it. Measured through the camera that will actually draw the card, so it holds for either
+        /// projection and for whatever field of view the scene ships.
+        /// </summary>
+        Vector3 InspectSize(Camera cam, Transform root, float boxHeightPixels)
+        {
+            return SizeForReaderBox(cam, InspectDepth(cam, root), boxHeightPixels, Mathf.Clamp01(inspectFill));
+        }
+
+        /// <summary>
+        /// The world size a card must be built at to stand <paramref name="fill"/> of a box
+        /// <paramref name="boxHeightPixels"/> tall at <paramref name="depth"/>.
+        /// <para>
+        /// Public and static because it is the one part of the preview that is arithmetic rather than Unity
+        /// state, and the arithmetic is what decides whether the card fits the reader or overflows it: the box
+        /// arrives from the canvas in pixels and the card is posed in world units, and the only thing bridging
+        /// them is this ratio. It is measured through a camera so that perspective and orthography are both
+        /// honest about it.
+        /// </para>
+        /// </summary>
+        public static Vector3 SizeForReaderBox(Camera cam, float depth, float boxHeightPixels, float fill)
+        {
+            if (cam == null || boxHeightPixels <= 0f || fill <= 0f)
+            {
+                return Vector3.zero;
+            }
+
+            // Any pixel column measures the same vertical span, so the screen centre is used as the reference:
+            // what matters is the distance between two points one half-box apart at the same depth, and that
+            // distance is independent of which column it is read in.
+            float x = Screen.width * 0.5f;
+            float y = Screen.height * 0.5f;
+            Vector3 mid = cam.ScreenToWorldPoint(new Vector3(x, y, depth));
+            Vector3 up = cam.ScreenToWorldPoint(new Vector3(x, y + boxHeightPixels * 0.5f, depth));
+
+            Vector3 card = CardView.CardSize;
+            return card * (Vector3.Distance(mid, up) * 2f * fill / card.y);
+        }
+
+        /// <summary>
+        /// Joins the position line to the one state flag the card's frame cannot carry. Same separator as the
+        /// status lines elsewhere on this layer, so the two read as one sentence rather than two columns.
+        /// </summary>
+        public static string ComposeFooter(string where, string readiness)
+        {
+            if (string.IsNullOrEmpty(where))
+            {
+                return readiness;
+            }
+
+            return string.IsNullOrEmpty(readiness) ? where : $"{where}   •   {readiness}";
+        }
+
+        /// <summary>
+        /// Whether the card can act right now. Deliberately without <see cref="StatusLine"/>'s slot word: the
+        /// position line already names the socket, and "YOUR NODE 2 ACTIVE   •   ACTIVE" reads as a bug.
+        /// <para>
+        /// A Protocol reports nothing, because it is the one card that never leaves <c>Summoned</c>: Upkeep readies
+        /// <c>GetAllUnits</c>, which walks the sockets, and a Protocol is not a socket - it hangs off
+        /// <see cref="Board.Protocol"/>. So the word would sit under it for the whole match promising a state
+        /// change that the engine never makes.
+        /// </para>
+        /// </summary>
+        public static string ReadinessLine(CardInstance card)
+        {
+            if (card.Definition.Type == CardType.Protocol)
+            {
+                return null;
+            }
+
+            if (card.HasSummoningDelay)
+            {
+                return "SUMMONING DELAY";
+            }
+
+            if (card.State == UnitState.Exhausted)
+            {
+                return "EXHAUSTED";
+            }
+
+            if (card.State == UnitState.Summoned)
+            {
+                return "SUMMONED";
+            }
+
+            return null;
         }
 
         // ---- Notice ---------------------------------------------------------------------
@@ -1998,7 +2505,236 @@ namespace Overlink.Match
         float noticeUntil;
         bool hintShowsSetup;
         int deployPulseCardId = -1;
+        int deployBurstCardId = -1;
         float deployPulseUntil;
+
+        /// <summary>Cards whose live state changed recently receive a short view-only highlight.</summary>
+        void StartCardFeedback(CardInstance card)
+        {
+            if (card == null || !Application.isPlaying)
+            {
+                return;
+            }
+
+            cardFeedbackUntil[card.InstanceId] = Mathf.Max(
+                cardFeedbackUntil.TryGetValue(card.InstanceId, out float until) ? until : 0f,
+                Time.unscaledTime + 0.52f);
+        }
+
+        float CardFeedbackStrength(int instanceId)
+        {
+            if (!Application.isPlaying || !cardFeedbackUntil.TryGetValue(instanceId, out float until)
+                || until <= Time.unscaledTime)
+            {
+                return 0f;
+            }
+
+            float progress = 1f - Mathf.Clamp01((until - Time.unscaledTime) / 0.52f);
+            return Mathf.Sin(progress * Mathf.PI);
+        }
+
+        static int CardFeedbackSignature(CardInstance card)
+        {
+            unchecked
+            {
+                int signature = (int)card.State;
+                signature = signature * 31 + card.CurrentAtk;
+                signature = signature * 31 + card.CurrentHp;
+                signature = signature * 31 + card.CurrentShield;
+                return signature;
+            }
+        }
+
+        void TrackCardFeedback(CardInstance card)
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            int signature = CardFeedbackSignature(card);
+            if (cardFeedbackSignatures.TryGetValue(card.InstanceId, out int previous))
+            {
+                if (previous != signature)
+                {
+                    StartCardFeedback(card);
+                }
+            }
+            cardFeedbackSignatures[card.InstanceId] = signature;
+        }
+
+        CardInstance FindCard(MatchState state, int instanceId)
+        {
+            if (state == null || instanceId < 0)
+            {
+                return null;
+            }
+
+            for (int p = 0; p < state.Players.Length; p++)
+            {
+                PlayerState player = state.Players[p];
+                CardInstance found = FindCard(player.Hand, instanceId)
+                    ?? FindCard(player.Deck, instanceId)
+                    ?? FindCard(player.Discard, instanceId)
+                    ?? FindCard(player.LineupOffer, instanceId);
+                if (found != null)
+                {
+                    return found;
+                }
+
+                if (player.Board.Protocol != null && player.Board.Protocol.InstanceId == instanceId)
+                {
+                    return player.Board.Protocol;
+                }
+
+                found = FindCard(player.Board.CoreActive, instanceId)
+                    ?? FindCard(player.Board.CoreBench, instanceId);
+                if (found != null)
+                {
+                    return found;
+                }
+
+                for (int node = 0; node < player.Board.NodeActive.Length; node++)
+                {
+                    found = FindCard(player.Board.NodeActive[node], instanceId)
+                        ?? FindCard(player.Board.NodeBench[node], instanceId);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        static CardInstance FindCard(IList<CardInstance> cards, int instanceId)
+        {
+            if (cards == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < cards.Count; i++)
+            {
+                if (cards[i] != null && cards[i].InstanceId == instanceId)
+                {
+                    return cards[i];
+                }
+            }
+
+            return null;
+        }
+
+        static CardInstance FindCard(BoardSlot[] slots, int instanceId)
+        {
+            if (slots == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < slots.Length; i++)
+            {
+                CardInstance card = slots[i] != null ? slots[i].Card : null;
+                if (card != null && card.InstanceId == instanceId)
+                {
+                    return card;
+                }
+            }
+
+            return null;
+        }
+
+        void ProcessBattleEvents(MatchState state)
+        {
+            if (!Application.isPlaying || state == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<BattleEvent> events = state.DrainEvents();
+            for (int i = 0; i < events.Count; i++)
+            {
+                BattleEvent battleEvent = events[i];
+                switch (battleEvent.Kind)
+                {
+                    case BattleEventKind.Attacked: MatchFeedback.Instance?.PlayAttack(); break;
+                    case BattleEventKind.Blocked: MatchFeedback.Instance?.PlayBlock(); break;
+                    case BattleEventKind.Damaged: MatchFeedback.Instance?.PlayDamage(); break;
+                    case BattleEventKind.Destroyed: MatchFeedback.Instance?.PlayDestroyed(); break;
+                    case BattleEventKind.CoreStruck:
+                    case BattleEventKind.CoreTransferred: MatchFeedback.Instance?.PlayCoreImpact(); break;
+                }
+                CardInstance subject = FindCard(state, battleEvent.SubjectId);
+                CardInstance source = FindCard(state, battleEvent.SourceId);
+
+                // The state may already have removed a destroyed unit. The previous paint's tile map still
+                // identifies its last location, so the effect can play without retaining a dead game object.
+                if ((battleEvent.Kind == BattleEventKind.Destroyed || battleEvent.Kind == BattleEventKind.CoreSlotLost)
+                    && tileByCard.TryGetValue(battleEvent.SubjectId, out Tile deadTile))
+                    PlayTileBurst(deadTile, new Color(1f, 0.25f, 0.15f, 0.9f), 0.5f);
+                else if (battleEvent.Kind == BattleEventKind.Attacked
+                    && tileByCard.TryGetValue(battleEvent.SourceId, out Tile attackerTile))
+                    PlayTileBurst(attackerTile, new Color(1f, 0.65f, 0.2f, 0.85f), 0.3f);
+
+                StartCardFeedback(subject);
+                StartCardFeedback(source);
+
+                // A card that dies while it is being read stops being readable. Its preview goes with it rather
+                // than staying on screen as a face frozen at the numbers it died at.
+                if ((battleEvent.Kind == BattleEventKind.Destroyed || battleEvent.Kind == BattleEventKind.CoreSlotLost) && inspectSource != null
+                    && inspectSource.InstanceId == battleEvent.SubjectId)
+                {
+                    ClearDetails();
+                }
+
+                Tile subjectTile = TileOf(subject);
+                if (subjectTile != null && (battleEvent.Kind == BattleEventKind.Attacked
+                    || battleEvent.Kind == BattleEventKind.Damaged
+                    || battleEvent.Kind == BattleEventKind.Destroyed
+                    || battleEvent.Kind == BattleEventKind.Blocked))
+                {
+                    impactPulseTile = subjectTile;
+                    impactPulseUntil = Time.unscaledTime + 0.42f;
+                }
+
+                if (battleEvent.Kind == BattleEventKind.CoreStruck
+                    || battleEvent.Kind == BattleEventKind.CoreTransferred
+                    || battleEvent.Kind == BattleEventKind.CoreSlotLost)
+                {
+                    impactPulseTile = battleEvent.Player == (int)PlayerIndex.Player
+                        ? playerCorePlate : opponentCorePlate;
+                    impactPulseUntil = Time.unscaledTime + 0.42f;
+                }
+
+                if (hud != null)
+                {
+                    string subjectName = subject != null ? subject.Definition.Name : "Core";
+                    string sourceName = source != null ? source.Definition.Name : "Attack";
+                    switch (battleEvent.Kind)
+                    {
+                        case BattleEventKind.Attacked:
+                            ShowNotice($"{sourceName} attacks {subjectName}.");
+                            break;
+                        case BattleEventKind.Blocked:
+                            ShowNotice($"{subjectName} blocks {sourceName}.");
+                            break;
+                        case BattleEventKind.Damaged:
+                            ShowNotice($"{sourceName} hits {subjectName} for {battleEvent.Amount}.");
+                            break;
+                        case BattleEventKind.Destroyed:
+                            ShowNotice($"{subjectName} destroyed.");
+                            break;
+                        case BattleEventKind.CoreStruck:
+                            ShowNotice($"{sourceName} hits the {(battleEvent.Player == (int)PlayerIndex.Player ? "YOU" : "OPPONENT")} Core.");
+                            break;
+                        case BattleEventKind.CoreTransferred:
+                            ShowNotice($"Core damage transferred: {battleEvent.Amount}.");
+                            break;
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Shows a short-lived explanation on the notice line. The play gate routes every rejected drag
@@ -2073,8 +2809,35 @@ namespace Overlink.Match
             }
 
             deployPulseCardId = card.InstanceId;
+            deployBurstCardId = card.InstanceId;
             deployPulseUntil = Time.unscaledTime + 0.55f;
+            StartCardFeedback(card);
+            MatchFeedback.Instance?.PlayDeploy();
             ShowNotice($"Deploying {card.Definition.Name}...");
+        }
+
+        void PlayTileBurst(Tile tile, Color color, float duration)
+        {
+            if (tile != null && tile.Body != null && MatchFeedback.Instance != null)
+                MatchFeedback.Instance.PlaySlotBurst(tile.Body.transform.parent,
+                    new Vector2(tile.Size.x, tile.Size.y), color, duration);
+        }
+
+        /// <summary>
+        /// Adds a short impact cue after a validated attack. The engine has already resolved the command before
+        /// this method is called; it only remembers the affected cards for the next few paints.
+        /// </summary>
+        public void PlayAttackAnimation(CardInstance attacker, CardInstance target)
+        {
+            StartCardFeedback(attacker);
+            StartCardFeedback(target);
+        }
+
+        /// <summary>Highlights a validated block declaration without changing the pending block in the engine.</summary>
+        public void PlayBlockAnimation(CardInstance blocker, CardInstance attacker)
+        {
+            StartCardFeedback(blocker);
+            StartCardFeedback(attacker);
         }
 
         void Refresh()
@@ -2089,10 +2852,19 @@ namespace Overlink.Match
                 SetNotice(string.Empty);
             }
 
+            // Consume addressed combat facts before rebuilding the card map. A destroyed target may already be
+            // absent from the new state, but its previous tile is still available for the impact flash.
+            ProcessBattleEvents(state);
+
             // Rebuilt from the tiles this frame paints, so a unit that moved slots cannot keep an old tile.
             tileByCard.Clear();
             if (state == null)
             {
+                if (lineupGuideShown)
+                {
+                    ClearMarks();
+                    lineupGuideShown = false;
+                }
                 SetBanner("Waiting for the match to initialize...");
                 highlightedTile = null;
                 return;
@@ -2128,10 +2900,16 @@ namespace Overlink.Match
             {
                 // There is no turn worth numbering and no active player worth naming while setup is open, and
                 // the toss is still under the cup, so the header says what the player is actually doing instead.
-                SetBanner("LINEUP SETUP   \u2022   FIELD YOUR OPENING FIVE");
+                SetBanner("LINEUP SETUP   \u2022   DROP UNITS ON GLOWING SLOTS");
+                ShowLineupTargets();
             }
             else
             {
+                if (lineupGuideShown)
+                {
+                    ClearMarks();
+                    lineupGuideShown = false;
+                }
                 string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
                 SetBanner($"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}");
             }
@@ -2197,6 +2975,39 @@ namespace Overlink.Match
         }
 
         /// <summary>
+        /// Marks the five destinations accepted by the opening lineup picker: the player's Core Active and the
+        /// four player-side Node Actives. This is guidance only; GameCoordinator remains the sole authority for
+        /// card type, offer membership and the actual nomination.
+        /// </summary>
+        void ShowLineupTargets()
+        {
+            ClearMarks();
+
+            if (playerCoreActive != null)
+            {
+                for (int i = 0; i < playerCoreActive.Length; i++)
+                {
+                    if (playerCoreActive[i] != null) playerCoreActive[i].Mark = PickMark.LineupTarget;
+                }
+            }
+
+            if (nodePlayerActive != null)
+            {
+                for (int n = 0; n < nodePlayerActive.Length; n++)
+                {
+                    Tile[] active = nodePlayerActive[n];
+                    if (active == null) continue;
+                    for (int i = 0; i < active.Length; i++)
+                    {
+                        if (active[i] != null) active[i].Mark = PickMark.LineupTarget;
+                    }
+                }
+            }
+
+            lineupGuideShown = true;
+        }
+
+        /// <summary>
         /// Writes the live counts onto the two piles and lets an emptied deck read as drained. Deck-Out is a
         /// victory condition, so "how many are left" is information the table should be showing anyway -
         /// previously it lived only in the status strip.
@@ -2215,8 +3026,8 @@ namespace Overlink.Match
                 return;
             }
 
-            SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile,
-                count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f))));
+            SetBodyColor(tile.Body, TintForHover(tile, TintForCombatPulse(tile, TintForMark(tile,
+                count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f)))));
             tile.Label.text = caption + "\n" + count;
             tile.Label.color = count > 0 ? new Color(0.80f, 0.85f, 0.92f) : new Color(0.46f, 0.48f, 0.54f);
         }
@@ -2271,7 +3082,8 @@ namespace Overlink.Match
             // this side's HUD chip, permanently — which is the whole reason it left the table.
             if (plate != null)
             {
-                SetBodyColor(plate.Body, TintForHover(plate, TintForMark(plate, plate.BaseColor)));
+                SetBodyColor(plate.Body, TintForHover(plate, TintForCombatPulse(plate,
+                    TintForMark(plate, plate.BaseColor))));
             }
 
             // The readout moved off the table onto this side's chip. Formatting stays here because the HUD is
@@ -2312,11 +3124,11 @@ namespace Overlink.Match
                 bool pControls = pHolds && !oHolds;
                 bool oControls = oHolds && !pHolds;
 
-                SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForMark(nodePlate[n],
+                SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n], TintForMark(nodePlate[n],
                     pControls && oControls ? nodeFree
                     : pControls ? nodePlayer
                     : oControls ? nodeOpponent
-                    : nodeFree)));
+                    : nodeFree))));
 
                 // The bonus text and the ownership readout, which used to be the plate caption. The plate keeps
                 // only its bare NODE tag now, so this is the one place a player can read what holding a node
@@ -2418,6 +3230,27 @@ namespace Overlink.Match
             renderer.SetPropertyBlock(tintBlock);
         }
 
+        void PaintSlotFrame(Tile tile)
+        {
+            if (tile == null)
+            {
+                return;
+            }
+
+            Color frame = TintForHover(tile, TintForCombatPulse(tile, TintForMark(tile, tile.FrameBaseColor)));
+            if (tile.Frames != null && tile.Frames.Count > 0)
+            {
+                for (int i = 0; i < tile.Frames.Count; i++)
+                {
+                    SetBodyColor(tile.Frames[i], frame);
+                }
+            }
+            else
+            {
+                SetBodyColor(tile.Frame, frame);
+            }
+        }
+
         /// <param name="preview">
         /// True when <paramref name="card"/> is a lineup nomination rather than a body the rules put on this
         /// socket. A preview is washed toward <see cref="PendingMark"/> and stripped of every combat marker:
@@ -2440,6 +3273,11 @@ namespace Overlink.Match
             {
                 tileByCard[card.InstanceId] = tile;
                 cardByTile[tile] = card;
+                if (!preview && card.InstanceId == deployBurstCardId && Time.unscaledTime < deployPulseUntil)
+                {
+                    PlayTileBurst(tile, new Color(0.25f, 0.95f, 1f, 0.9f), 0.4f);
+                    deployBurstCardId = -1;
+                }
             }
             else
             {
@@ -2457,11 +3295,16 @@ namespace Overlink.Match
                 Color empty = highlightedTile == tile
                     ? Color.Lerp(tile.BaseColor, new Color(1f, 0.9f, 0.5f), 0.4f)
                     : tile.BaseColor;
-                SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, empty)));
-                tile.Label.text = tile.EmptyLabel;
+                SetBodyColor(tile.Body, TintForHover(tile, TintForCombatPulse(tile, TintForMark(tile, empty))));
+                PaintSlotFrame(tile);
+                tile.Label.text = tile.Mark == PickMark.LineupTarget
+                    ? (tile.Size.x > 0.9f ? "DROP UNIT\nHERE" : "DROP\nHERE")
+                    : tile.EmptyLabel;
                 tile.Label.color = new Color(0.62f, 0.66f, 0.74f);
                 return;
             }
+
+            TrackCardFeedback(card);
 
             Color baseTint = card.Owner == PlayerIndex.Player ? playerTint : opponentTint;
             if (preview)
@@ -2494,7 +3337,14 @@ namespace Overlink.Match
                 baseTint = Color.Lerp(baseTint, new Color(1f, 0.85f, 0.35f), pulse * 0.62f);
             }
 
-            SetBodyColor(tile.Body, TintForHover(tile, TintForMark(tile, baseTint)));
+            float feedback = CardFeedbackStrength(card.InstanceId);
+            if (feedback > 0f)
+            {
+                baseTint = Color.Lerp(baseTint, new Color(1f, 0.82f, 0.42f), feedback * 0.58f);
+            }
+
+            SetBodyColor(tile.Body, TintForHover(tile, TintForCombatPulse(tile, TintForMark(tile, baseTint))));
+            PaintSlotFrame(tile);
 
             // The tile's own colour is painted first and the card laid over it, which is the order that keeps
             // both jobs done: the cube says what a click here would do (owner, mark, pending block, the gold rim
@@ -2536,17 +3386,39 @@ namespace Overlink.Match
         /// wins over the state shading: the whole point of lighting a socket is that the player can see it
         /// through an exhausted unit's dimming.
         /// </summary>
-        static Color TintForMark(Tile tile, Color baseTint)
+        Color TintForMark(Tile tile, Color baseTint)
         {
+            float pulse = Application.isPlaying
+                ? 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7.5f)
+                : 0.5f;
+            float selectedStrength = Mathf.Lerp(0.55f, 0.70f, pulse);
+            float targetStrength = Mathf.Lerp(0.44f, 0.62f, pulse);
+
             switch (tile.Mark)
             {
-                case PickMark.Selected: return Color.Lerp(baseTint, SelectMark, 0.62f);
-                case PickMark.AttackTarget: return Color.Lerp(baseTint, AttackMark, 0.52f);
+                case PickMark.Selected: return Color.Lerp(baseTint, SelectMark, selectedStrength);
+                case PickMark.AttackTarget: return Color.Lerp(baseTint, AttackMark, targetStrength);
                 case PickMark.Blocker: return Color.Lerp(baseTint, BlockerMark, 0.52f);
-                case PickMark.BlockTarget: return Color.Lerp(baseTint, BlockTargetMark, 0.52f);
-                case PickMark.RetreatTarget: return Color.Lerp(baseTint, RetreatMark, 0.52f);
+                case PickMark.BlockTarget: return Color.Lerp(baseTint, BlockTargetMark, targetStrength);
+                case PickMark.RetreatTarget: return Color.Lerp(baseTint, RetreatMark, targetStrength);
+                case PickMark.LineupTarget:
+                    float placementStrength = Mathf.Lerp(0.38f, 0.72f, pulse);
+                    return Color.Lerp(baseTint, new Color(0.20f, 0.95f, 1.00f), placementStrength);
                 default: return baseTint;
             }
+        }
+
+        Color TintForCombatPulse(Tile tile, Color baseTint)
+        {
+            if (!Application.isPlaying || tile == null || tile != impactPulseTile
+                || impactPulseUntil <= Time.unscaledTime)
+            {
+                return baseTint;
+            }
+
+            float progress = 1f - Mathf.Clamp01((impactPulseUntil - Time.unscaledTime) / 0.42f);
+            float pulse = Mathf.Sin(progress * Mathf.PI);
+            return Color.Lerp(baseTint, new Color(1f, 0.34f, 0.22f), pulse * 0.72f);
         }
 
         /// <summary>
@@ -2651,12 +3523,14 @@ namespace Overlink.Match
                 view = null;
             }
 
+            bool created = false;
             if (view == null)
             {
                 view = CardView.CreateBoard(data, holder, FitSize(tile), frameCatalog, templateCatalog,
                     placeholderFixture, tierMaterials, BoardCardSortBaseline);
                 tile.Card = view;
                 boardCards.Add(view);
+                created = true;
             }
             else
             {
@@ -2664,6 +3538,11 @@ namespace Overlink.Match
             }
 
             PoseBoardCard(tile, view);
+            if (created && Application.isPlaying)
+            {
+                view.transform.localScale = Vector3.one * 0.72f;
+                view.Tween.Play(null, null, Vector3.one, 0.20f, CardEase.OutBack);
+            }
             view.SetShade(ShadeFor(card, engine, preview));
             return true;
         }
@@ -2695,6 +3574,13 @@ namespace Overlink.Match
         /// re-posed in the scene takes its cards with it instead of stranding them face-down, and
         /// <see cref="boardCardExtraRotation"/> is the escape hatch if a future pose ever needs one.
         /// </para>
+        /// <para>
+        /// Both halves therefore ship identical: every caption on this table is authored at the identity, so
+        /// copying them gives all thirty-six sockets the same orientation, and an opponent's card reads upright
+        /// from your seat exactly as your own does. <see cref="opponentCardExtraRotation"/> is the one dial that
+        /// can break that symmetry on purpose, and it is applied in the card's own frame, so turning a half to
+        /// face its owner spins the card in the table plane rather than lifting or tilting it.
+        /// </para>
         /// </summary>
         void PoseBoardCard(Tile tile, CardView view)
         {
@@ -2710,8 +3596,14 @@ namespace Overlink.Match
             view.transform.localPosition = new Vector3(0f, 0f, -tile.Size.z * 0.5f - boardCardLift);
             view.transform.localRotation = (tile.Label != null
                 ? tile.Label.transform.localRotation
-                : Quaternion.identity) * Quaternion.Euler(boardCardExtraRotation);
-            view.transform.localScale = Vector3.one;
+                : Quaternion.identity)
+                * Quaternion.Euler(tile.Owner == PlayerIndex.Opponent
+                    ? boardCardExtraRotation + opponentCardExtraRotation
+                    : boardCardExtraRotation);
+            if (view.Tween == null || !view.Tween.IsPlaying)
+            {
+                view.transform.localScale = Vector3.one;
+            }
         }
 
         /// <summary>
@@ -3007,6 +3899,12 @@ namespace Overlink.Match
 
             Renderer renderer = cube.GetComponent<Renderer>();
             renderer.sharedMaterial = MaterialFor(color, name);
+            // The table is static furniture, not a Tile, so it has no per-frame repaint to apply its tint.
+            // A shared skin typically starts white; without this property block the entire board turns white.
+            if (SurfaceFor(name) == Surface.Table)
+            {
+                SetBodyColor(renderer, color);
+            }
             return renderer;
         }
 
@@ -3076,10 +3974,17 @@ namespace Overlink.Match
                     continue;
                 }
 
-                Material skin = SkinFor(SurfaceFor(renderer.transform.parent.name));
+                Surface surface = SurfaceFor(renderer.transform.parent.name);
+                Material skin = SkinFor(surface);
                 if (skin != null)
                 {
                     renderer.sharedMaterial = skin;
+                }
+                // Unlike the state-driven tiles, the tabletop is not repainted elsewhere. Reapply its tint
+                // after changing the material so both bound prefabs and runtime skin swaps stay consistent.
+                if (surface == Surface.Table)
+                {
+                    SetBodyColor(renderer, tableTint);
                 }
             }
 
@@ -3245,16 +4150,12 @@ namespace Overlink.Match
             // (a tile cube is 0.06 thick in Z, which would flatten a rim authored behind it to nothing).
             Transform holder = body.transform.parent;
 
-            // The gold rim and the caption are children of the tile rather than siblings of it, so picking
-            // one socket in the editor and dragging it moves all three pieces together instead of stranding
-            // the label and the border behind at the old position.
-            if (socketBorder)
+            // Every card socket gets an editable box and the caption is a sibling of that box. Active keeps the
+            // historical Socket name for prefab/test compatibility; Bench and Protocol use SlotFrame so the
+            // hierarchy makes their role explicit. None of these visual children receive a collider.
+            if (socketBorder || IsCardSlotName(name))
             {
-                // Slightly larger cube just behind the tile (larger Z is further from the pitched
-                // camera), so a gold rim peeks out around the Active slot and keeps identifying it even
-                // once a unit is deployed there and the fill turns into an owner tint.
-                MakeBody(holder, "Socket", new Vector3(0f, 0f, 0.05f),
-                    new Vector3(size.x + 0.06f, size.y + 0.06f, 0.04f), activeRim);
+                MakeSlotFrame(holder, name, size, socketBorder);
             }
 
             TextMeshPro label = MakeLabel(holder, "Label", new Vector3(0f, 0f, -size.z * 0.5f - 0.004f),
@@ -3272,6 +4173,9 @@ namespace Overlink.Match
                 Name = name,
                 Size = size,
                 BaseColor = emptyColor,
+                Frame = FindSlotFrame(holder),
+                Frames = FindSlotFrames(holder),
+                FrameBaseColor = FrameColorForSlot(name),
                 EmptyLabel = emptyLabel,
             };
             // Same name-keyed identity as the prefab-bind path, so a board built from scratch and a board
@@ -3290,8 +4194,13 @@ namespace Overlink.Match
         public sealed class Tile
         {
             public Renderer Body;
+            /// <summary>The non-interactable backing box that visually frames this card socket.</summary>
+            public Renderer Frame;
+            /// <summary>All four non-interactable edge renderers that form the visible slot box.</summary>
+            public List<Renderer> Frames;
             public TextMeshPro Label;
             public Color BaseColor;
+            public Color FrameBaseColor;
             public string EmptyLabel;
             public SlotType SlotType;
             public int SlotIndex;
@@ -3396,6 +4305,9 @@ namespace Overlink.Match
             /// <c>Tile.Mark</c> field stays a field.
             /// </summary>
             RetreatTarget,
+
+            /// <summary>The five player-side Active sockets that accept the opening lineup.</summary>
+            LineupTarget,
         }
     }
 }

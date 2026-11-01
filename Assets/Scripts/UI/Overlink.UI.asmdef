@@ -4,6 +4,8 @@
     "references": [
         "Unity.TextMeshPro",
         "UnityEngine.UI",
+        "Overlink.Core",
+        "Overlink.Cards",
         "Overlink.Net",
         "Unity.Services.Lobbies"
     ],

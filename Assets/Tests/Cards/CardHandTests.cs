@@ -734,6 +734,26 @@ public class CardHandTests
     }
 
     [UnityTest]
+    public IEnumerator SetHand_RepeatedRecordCreatesOnlyOneView()
+    {
+        var root = new GameObject("DuplicateHandTest");
+        var hand = root.AddComponent<HandController>();
+        hand.handSizeStart = 0;
+        hand.autoDraw = false;
+        yield return null;
+
+        var first = new CardData("same", "First", 1, "", Color.white);
+        var second = new CardData("same", "Second copy", 1, "", Color.white);
+        hand.SetHand(new[] { first, first, second });
+        Assert.AreEqual(2, hand.CardCount, "Repeated references must not create stacked views; distinct copies remain visible.");
+        hand.SetHand(new[] { first, second });
+        Assert.AreEqual(2, hand.CardCount, "A subsequent sync must not leave duplicate views behind.");
+
+        Object.Destroy(root);
+        yield return null;
+    }
+
+    [UnityTest]
     public IEnumerator HandSpan_ClosesTheRowUpPastTheCorridor_InsteadOfLettingItGrowForever()
     {
         // Nothing in Core caps the hand size, so the view is the only thing that can keep a seven-card

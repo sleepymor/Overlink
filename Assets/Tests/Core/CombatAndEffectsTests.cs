@@ -425,14 +425,14 @@ namespace Overlink.Core.Tests
         public void EffectInterpreter_Repair_IsCappedAndRestoresCore()
         {
             var state = new MatchState();
-            state.Players[0].CoreDurability = 1;
+            state.Players[0].CoreDurability = PlayerState.StartingCoreDurability - 1;
 
             var engine = new MatchEngine(state);
             engine.Effects.ResolveOne(null, PlayerIndex.Player,
                 new EffectDescriptor(EffectType.Repair, TargetKind.Self, CardValidator.MaxRepairAmount),
                 "Test Repair");
 
-            // Repair restores durability but can never exceed the starting maximum of 3 (GDD 2.1.7).
+            // Repair restores durability but can never exceed the starting maximum.
             Assert.AreEqual(PlayerState.StartingCoreDurability, state.Players[0].CoreDurability);
         }
 

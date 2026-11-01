@@ -27,6 +27,10 @@ namespace Overlink.Core.Tests
 
             Assert.AreEqual(PlayerState.StartingNP, player.CurrentNP);
             Assert.AreEqual(PlayerState.StartingCoreDurability, player.CoreDurability);
+            Assert.AreEqual(20, player.CoreDurability);
+            player.TakeDamage(5);
+            player.RepairCore(100);
+            Assert.AreEqual(20, player.CoreDurability, "Repair must not exceed the new Core maximum.");
             Assert.IsNotNull(player.Hand);
             Assert.IsNotNull(player.Deck);
             Assert.IsNotNull(player.Discard);

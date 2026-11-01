@@ -284,6 +284,113 @@ namespace Overlink.Match.Tests
                 "Both panels are display-only: dismissal is a click elsewhere or Escape, never a button.");
         }
 
+        // ---- The reader's two faces --------------------------------------------------------
+
+        /// <summary>
+        /// Clicking a card used to put the same card on screen twice: once as the face the board already draws,
+        /// and once as a sheet of text restating its cost, type, stats and ability. Card mode is the fix, and the
+        /// claim these tests hold is that the sheet is actually <em>gone</em> rather than merely covered - a slab
+        /// left enabled behind a real card would show as a dark halo at the edges of every preview.
+        /// </summary>
+        [Test]
+        public void ShowReaderCard_StandDownTheSheetAndKeepThePositionLine()
+        {
+            BattlefieldHud hud = NewHud();
+
+            hud.ShowReaderCard("YOUR NODE 2 ACTIVE   •   EXHAUSTED");
+
+            Assert.IsTrue(hud.IsReaderVisible, "the panel is open, just not as a sheet of text");
+            Assert.IsTrue(hud.ReaderShowsCard);
+            Assert.IsFalse(hud.ReaderSheetVisible,
+                "nothing of the stats slab may remain on screen: the card the presenter draws is the whole " +
+                "panel's content in this mode.");
+            Assert.AreEqual("YOUR NODE 2 ACTIVE   •   EXHAUSTED", hud.ReaderFoot,
+                "the position line is the one thing a card's own frame cannot say, so it is the one thing kept");
+        }
+
+        /// <summary>
+        /// The two modes share one panel, so the switch has to be complete in both directions. A text read that
+        /// failed to bring the sheet back would render as a title and a body floating over the void with no slab
+        /// behind them.
+        /// </summary>
+        [Test]
+        public void ShowReader_AfterCardModeBringsTheSheetBack()
+        {
+            BattlefieldHud hud = NewHud();
+            hud.ShowReaderCard("DISCARD  3 / 9");
+            Assert.IsFalse(hud.ReaderSheetVisible);
+
+            hud.ShowReader("Deck", "4 cards left.", "DECK  4");
+
+            Assert.IsFalse(hud.ReaderShowsCard);
+            Assert.IsTrue(hud.ReaderSheetVisible, "a Node, a Core or a pile is not a card, so the slab returns");
+            Assert.AreEqual("Deck", hud.ReaderTitle);
+            Assert.AreEqual("4 cards left.", hud.ReaderBody);
+        }
+
+        /// <summary>
+        /// Dismissal is one code path for both faces, so a preview card cannot outlive the panel that was holding
+        /// it and leave the reader flagged as showing a card nobody asked for.
+        /// </summary>
+        [Test]
+        public void HideReader_FromCardMode_ClosesThePanelAndClearsTheFlag()
+        {
+            BattlefieldHud hud = NewHud();
+            hud.ShowReaderCard("YOUR CORE BENCH 1");
+
+            hud.HideReader();
+
+            Assert.IsFalse(hud.IsReaderVisible);
+            Assert.IsFalse(hud.ReaderShowsCard);
+        }
+
+        /// <summary>
+        /// The box a real card is posed into, derived from the reader's own authored slab.
+        /// <para>
+        /// The height is asserted against the slab's arithmetic rather than against a remembered number, because
+        /// the whole point of handing the box over is that <c>readerSize</c>, <c>readerPadding</c> and the two text
+        /// band sizes stay Inspector-authored and the card follows them. The code divides the rect's live scale
+        /// back out, so this holds whatever the entrance animation is doing to the slab at the time.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TryGetReaderCardBox_CarvesTheFootAndHintBandsOffTheSlab()
+        {
+            BattlefieldHud hud = NewHud();
+
+            Assert.IsTrue(hud.TryGetReaderCardBox(out Vector2 center, out float height));
+
+            float expected = hud.readerSize.y
+                - hud.readerPadding * 2f
+                - hud.readerFootSize * 2.4f   // the position line
+                - hud.readerFootSize * 1.8f;  // the close hint
+            Assert.Greater(expected, 0f, "the authored slab has to leave a card somewhere to stand");
+            Assert.AreEqual(expected, height, 1e-2f,
+                "the card box is the slab minus its padding and its two text bands");
+
+            RectTransform slab = (RectTransform)hud.Reader.Find("CardFace");
+            Assert.IsNotNull(slab, "the box is measured off the slab, so the slab has to be there");
+            float slabCentreY = RectTransformUtility.WorldToScreenPoint(null, slab.position).y;
+            Assert.Greater(center.y, slabCentreY,
+                "the bands come off the bottom, so the card sits above the slab's middle rather than across " +
+                "the line under it");
+        }
+
+        /// <summary>
+        /// A panel with no geometry hands back false rather than a zero-height box: the presenter reads that as
+        /// "fall back to the text sheet", which is the difference between a readable card and a card of zero size
+        /// standing in the middle of the board.
+        /// </summary>
+        [Test]
+        public void TryGetReaderCardBox_BeforeAnyBuildIsFalse()
+        {
+            var go = new GameObject(TestRootName, typeof(RectTransform));
+            spawned.Add(go);
+            BattlefieldHud hud = go.AddComponent<BattlefieldHud>();
+
+            Assert.IsFalse(hud.TryGetReaderCardBox(out _, out _));
+        }
+
         // ---- The status layer ------------------------------------------------------------
 
         /// <summary>
@@ -896,7 +1003,7 @@ namespace Overlink.Match.Tests
             // impossible one. The log's four entries are the four SetLog can show at once, each long enough to
             // wrap, which is the tallest the panel can legitimately get.
             Ink(table, problems, hud, "banner/setup", "Banner/BannerText",
-                "LINEUP SETUP   \u2022   FIELD YOUR OPENING FIVE");
+                "LINEUP SETUP   \u2022   DROP UNITS ON GLOWING SLOTS");
             Ink(table, problems, hud, "banner/battle", "Banner/BannerText",
                 "TURN 99   \u2022   CLEANUP   \u2022   ACTIVE: OPPONENT");
             Ink(table, problems, hud, "hint/battle", "ControlsHint/ControlsHintText",

@@ -4,7 +4,8 @@
   "references": [
     "Overlink.Core",
     "Overlink.Cards",
-    "Unity.TextMeshPro"
+    "Unity.TextMeshPro",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

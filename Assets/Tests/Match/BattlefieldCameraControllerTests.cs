@@ -32,6 +32,7 @@ namespace Overlink.Match.Tests
         {
             rig.SnapToTarget();
             Assert.AreEqual(15f, rig.Distance, 1e-4f, "Default distance should be 15.");
+            Assert.AreEqual(8.8f, rig.minDistance, 1e-4f, "The closest view should stop at the requested distance.");
 
             rig.ZoomBy(1000f); // zoom in far past the minimum
             rig.SnapToTarget();

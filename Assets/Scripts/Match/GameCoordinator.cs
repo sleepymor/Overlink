@@ -137,7 +137,8 @@ namespace Overlink.Match
             handController.nominateResolver = NominateLineupCard;
             handController.dropTargetCleared = ClearDropTarget;
             handController.pointerOverControls = position =>
-                battlefieldHud != null && battlefieldHud.IsPointerOverControls(position);
+                (battlefieldHud != null && battlefieldHud.IsPointerOverControls(position))
+                || (presenter != null && presenter.IsPointerOverInspect(position));
             handController.CardPlayed -= OnCardPlayedAnimated;
             handController.CardPlayed += OnCardPlayedAnimated;
             handController.CardNominated -= OnCardNominated;
@@ -1301,6 +1302,10 @@ namespace Overlink.Match
             {
                 string targetName = target != null ? target.Definition.Name : $"{opponent.Index} Core";
                 Debug.Log($"[GameCoordinator] {slot.Card.Definition.Name} ({where}) attacks {targetName}");
+                if (presenter != null)
+                {
+                    presenter.PlayAttackAnimation(slot.Card, target);
+                }
             }
             else
             {
@@ -1472,6 +1477,10 @@ namespace Overlink.Match
 
             string what = target != null ? target.Definition.Name : "the enemy Core";
             Debug.Log($"[GameCoordinator] {attacker.Definition.Name} attacks {what}");
+            if (presenter != null)
+            {
+                presenter.PlayAttackAnimation(attacker, target);
+            }
             SyncHand();
 
             if (matchState.IsMatchOver())
@@ -1584,6 +1593,10 @@ namespace Overlink.Match
             }
 
             Debug.Log($"[GameCoordinator] Player readies {blocker.Definition.Name} to block {attacker.Definition.Name}");
+            if (presenter != null)
+            {
+                presenter.PlayBlockAnimation(blocker, attacker);
+            }
             return true;
         }
 

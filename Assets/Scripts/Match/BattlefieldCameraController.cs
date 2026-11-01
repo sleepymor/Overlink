@@ -64,7 +64,7 @@ namespace Overlink.Match
         public float fieldOfView = 38f;
 
         [Header("Zoom (mouse wheel)")]
-        public float minDistance = 7f;
+        public float minDistance = 8.8f;
         [Tooltip("Deepest zoom-out of the tilted tabletop view, and the point past which the same wheel input " +
                  "starts lifting the camera toward bird's-eye. Deliberately beyond the opening framing: when " +
                  "the opening sat exactly on the ceiling, one stray scroll at the start of a match began " +
@@ -110,6 +110,7 @@ namespace Overlink.Match
         public float groundY = 0f;
 
         Camera cam;
+        BattlefieldPresenter inspectionPresenter;
         Vector3 targetFocus;
         float targetDistance;
         bool initialized;
@@ -266,6 +267,7 @@ namespace Overlink.Match
 
         void HandleZoom()
         {
+            if (PointerOverInspection()) return;
             float scroll = Input.GetAxis("Mouse ScrollWheel");
             if (Mathf.Abs(scroll) > 1e-4f)
             {
@@ -275,6 +277,11 @@ namespace Overlink.Match
 
         void HandleDragPan()
         {
+            if (PointerOverInspection())
+            {
+                dragging = false;
+                return;
+            }
             bool held = Input.GetMouseButton(1) || Input.GetMouseButton(2);
 
             if ((Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2)) && TryGroundPoint(out Vector3 downPoint))
@@ -295,6 +302,12 @@ namespace Overlink.Match
             {
                 dragging = false;
             }
+        }
+
+        bool PointerOverInspection()
+        {
+            if (inspectionPresenter == null) inspectionPresenter = FindObjectOfType<BattlefieldPresenter>();
+            return inspectionPresenter != null && inspectionPresenter.IsPointerOverInspect(Input.mousePosition);
         }
 
         void HandleKeyboardPan(float dt)

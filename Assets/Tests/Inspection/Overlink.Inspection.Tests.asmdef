@@ -1,0 +1,7 @@
+{
+    "name": "Overlink.Inspection.Tests",
+    "references": ["Overlink.Core", "Overlink.Cards", "Overlink.Match", "Unity.TextMeshPro"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+    "autoReferenced": false
+}

@@ -227,7 +227,8 @@ namespace Overlink.Match
             BrowsePile();
             PublishDialogueRail();
 
-            if (Input.GetMouseButtonDown(0) && !IsHandBusy())
+            if (Input.GetMouseButtonDown(0) && !IsHandBusy()
+                && !presenter.IsPointerOverInspect(Input.mousePosition))
             {
                 Click();
             }
@@ -350,7 +351,12 @@ namespace Overlink.Match
 
         void Click()
         {
-            BoardHit hit = presenter.FindHitAt(Camera.main, Input.mousePosition);
+            HandleBoardClick(presenter.FindHitAt(Camera.main, Input.mousePosition));
+        }
+
+        // Also used by runtime tests so they exercise the same action precedence as a pointer click.
+        void HandleBoardClick(BoardHit hit)
+        {
             if (hit == null)
             {
                 // Off the table. Cancel the selection and the reader, but leave the opponent's block window
@@ -367,9 +373,13 @@ namespace Overlink.Match
             //    anything to act on yet - no body is on the board and no turn has been taken.
             if (coordinator.IsSetupInProgress)
             {
-                if (hit.Card != null)
+                if (hit.Card != null && hit.Owner == PlayerIndex.Player)
                 {
                     coordinator.ReturnLineupNomination(hit.Card);
+                }
+                else if (hit.Card != null)
+                {
+                    Inspect(hit);
                 }
                 return;
             }
@@ -389,6 +399,7 @@ namespace Overlink.Match
             // 3. Picking a unit up.
             if (TrySelect(hit))
             {
+                presenter.ShowCard(hit.Card, coordinator.GetMatchState(), hit.Describe());
                 return;
             }
 

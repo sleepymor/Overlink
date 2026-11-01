@@ -161,7 +161,9 @@ namespace Overlink.Cards
         const int InspectSlice = 10200;
         const int PlaySlice = 10300;
 
-        readonly List<CardView> cards = new List<CardView>();
+        // Keep track of the live views through an Editor domain reload: the objects survive it,
+        // and losing this list would make the next authoritative sync create a second fan.
+        [SerializeField, HideInInspector] List<CardView> cards = new List<CardView>();
         CardView hovered;
         CardView dragged;
         CardView pressed;
@@ -843,10 +845,15 @@ namespace Overlink.Cards
                 }
             }
 
+            var retained = new HashSet<CardData>();
             for (int i = cards.Count - 1; i >= 0; i--)
             {
                 CardView card = cards[i];
-                if (card == null || card.Data == null || !wanted.Contains(card.Data))
+                if (card == null)
+                {
+                    cards.RemoveAt(i);
+                }
+                else if (card.Data == null || !wanted.Contains(card.Data) || !retained.Add(card.Data))
                 {
                     RemoveView(card);
                 }
@@ -862,7 +869,7 @@ namespace Overlink.Cards
             {
                 foreach (CardData item in data)
                 {
-                    if (item != null && !present.Contains(item))
+                    if (item != null && present.Add(item))
                     {
                         CreateView(item);
                     }

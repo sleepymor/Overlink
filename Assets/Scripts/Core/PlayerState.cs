@@ -10,8 +10,8 @@ namespace Overlink.Core
         /// <summary>GDD 2.1.1: the NP cap is 10 + the number of controlled Nodes; 10 is the base.</summary>
         public const int MaxNP = 10;
 
-        /// <summary>GDD 2.1.7: a player's Core durability counter starts at 3.</summary>
-        public const int StartingCoreDurability = 3;
+        /// <summary>Starting and maximum Core durability for each player.</summary>
+        public const int StartingCoreDurability = 20;
 
         public PlayerIndex Index { get; }
         public int CurrentNP { get; set; }

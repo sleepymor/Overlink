@@ -14,6 +14,9 @@ namespace Overlink.UI
         const string MasterVolumeKey = "Overlink.Settings.MasterVolume";
         const string FullscreenKey = "Overlink.Settings.Fullscreen";
         const string QualityKey = "Overlink.Settings.Quality";
+        const string PostFxKey = "Overlink.Settings.PostFX";
+        const string ReduceShakeKey = "Overlink.Settings.ReduceShake";
+        const string ReduceFlashKey = "Overlink.Settings.ReduceFlash";
 
         [Header("Controls")]
         [SerializeField] Slider masterVolume;
@@ -22,17 +25,35 @@ namespace Overlink.UI
         [SerializeField] TMP_Dropdown qualityDropdown;
         [SerializeField] Button btnBack;
 
+        [Header("Visual")]
+        [SerializeField] Toggle postFxToggle;
+        [SerializeField] Toggle reduceShakeToggle;
+        [SerializeField] Toggle reduceFlashToggle;
+
+        public static bool PostFxEnabled { get; private set; } = true;
+        public static bool ReduceShake { get; private set; }
+        public static bool ReduceFlash { get; private set; }
+
         void Awake()
         {
             if (!ValidateReferences())
                 return;
 
+            EnsureVisualControls();
             ConfigureQualityOptions();
             LoadSavedValues();
 
             masterVolume.onValueChanged.AddListener(ApplyMasterVolume);
             fullscreenToggle.onValueChanged.AddListener(ApplyFullscreen);
             qualityDropdown.onValueChanged.AddListener(ApplyQuality);
+
+            if (postFxToggle != null)
+                postFxToggle.onValueChanged.AddListener(ApplyPostFx);
+            if (reduceShakeToggle != null)
+                reduceShakeToggle.onValueChanged.AddListener(ApplyReduceShake);
+            if (reduceFlashToggle != null)
+                reduceFlashToggle.onValueChanged.AddListener(ApplyReduceFlash);
+
             btnBack.onClick.AddListener(SceneLoader.LoadMainMenu);
         }
 
@@ -44,6 +65,12 @@ namespace Overlink.UI
                 fullscreenToggle.onValueChanged.RemoveListener(ApplyFullscreen);
             if (qualityDropdown != null)
                 qualityDropdown.onValueChanged.RemoveListener(ApplyQuality);
+            if (postFxToggle != null)
+                postFxToggle.onValueChanged.RemoveListener(ApplyPostFx);
+            if (reduceShakeToggle != null)
+                reduceShakeToggle.onValueChanged.RemoveListener(ApplyReduceShake);
+            if (reduceFlashToggle != null)
+                reduceFlashToggle.onValueChanged.RemoveListener(ApplyReduceFlash);
             if (btnBack != null)
                 btnBack.onClick.RemoveListener(SceneLoader.LoadMainMenu);
         }
@@ -68,6 +95,21 @@ namespace Overlink.UI
             ApplyMasterVolume(savedVolume);
             ApplyFullscreen(savedFullscreen);
             ApplyQuality(savedQuality);
+
+            bool savedPostFx = PlayerPrefs.GetInt(PostFxKey, 1) != 0;
+            bool savedReduceShake = PlayerPrefs.GetInt(ReduceShakeKey, 0) != 0;
+            bool savedReduceFlash = PlayerPrefs.GetInt(ReduceFlashKey, 0) != 0;
+
+            if (postFxToggle != null)
+                postFxToggle.SetIsOnWithoutNotify(savedPostFx);
+            if (reduceShakeToggle != null)
+                reduceShakeToggle.SetIsOnWithoutNotify(savedReduceShake);
+            if (reduceFlashToggle != null)
+                reduceFlashToggle.SetIsOnWithoutNotify(savedReduceFlash);
+
+            ApplyPostFx(savedPostFx);
+            ApplyReduceShake(savedReduceShake);
+            ApplyReduceFlash(savedReduceFlash);
         }
 
         void ApplyMasterVolume(float value)
@@ -98,6 +140,30 @@ namespace Overlink.UI
             PlayerPrefs.Save();
         }
 
+        void ApplyPostFx(bool enabled)
+        {
+            PostFxEnabled = enabled;
+            PlayerPrefs.SetInt(PostFxKey, enabled ? 1 : 0);
+            PlayerPrefs.Save();
+
+            var volumeGo = GameObject.Find("GlobalVolume");
+            if (volumeGo != null) volumeGo.SetActive(enabled);
+        }
+
+        void ApplyReduceShake(bool reduced)
+        {
+            ReduceShake = reduced;
+            PlayerPrefs.SetInt(ReduceShakeKey, reduced ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+
+        void ApplyReduceFlash(bool reduced)
+        {
+            ReduceFlash = reduced;
+            PlayerPrefs.SetInt(ReduceFlashKey, reduced ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+
         bool ValidateReferences()
         {
             bool valid = true;
@@ -107,6 +173,74 @@ namespace Overlink.UI
             valid &= Check(qualityDropdown, nameof(qualityDropdown));
             valid &= Check(btnBack, nameof(btnBack));
             return valid;
+        }
+
+        /// <summary>
+        /// Keeps the accessibility options available even in older Settings scene revisions that do not
+        /// yet contain authored Toggle objects. The controls are scene-local presentation only; their
+        /// values still flow through the same serialized fields and persistence handlers as authored UI.
+        /// </summary>
+        void EnsureVisualControls()
+        {
+            if (postFxToggle != null && reduceShakeToggle != null && reduceFlashToggle != null)
+                return;
+
+            Transform panel = transform.Find("Canvas/SettingsPanel");
+            if (panel == null)
+                return;
+
+            postFxToggle = postFxToggle != null ? postFxToggle : CreateVisualToggle(panel, "PostFxToggle", "POST FX", -190f);
+            reduceShakeToggle = reduceShakeToggle != null ? reduceShakeToggle : CreateVisualToggle(panel, "ReduceShakeToggle", "REDUCE SHAKE", -245f);
+            reduceFlashToggle = reduceFlashToggle != null ? reduceFlashToggle : CreateVisualToggle(panel, "ReduceFlashToggle", "REDUCE FLASH", -300f);
+        }
+
+        Toggle CreateVisualToggle(Transform parent, string name, string label, float y)
+        {
+            GameObject root = new GameObject(name, typeof(RectTransform), typeof(Toggle));
+            root.transform.SetParent(parent, false);
+            RectTransform rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(230f, y);
+            rect.sizeDelta = new Vector2(250f, 38f);
+
+            Image background = root.AddComponent<Image>();
+            background.color = new Color(0.035f, 0.062f, 0.105f, 1f);
+            background.raycastTarget = true;
+
+            GameObject checkObject = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+            checkObject.transform.SetParent(root.transform, false);
+            RectTransform checkRect = checkObject.GetComponent<RectTransform>();
+            checkRect.anchorMin = new Vector2(0f, 0.5f);
+            checkRect.anchorMax = new Vector2(0f, 0.5f);
+            checkRect.pivot = new Vector2(0f, 0.5f);
+            checkRect.anchoredPosition = new Vector2(10f, 0f);
+            checkRect.sizeDelta = new Vector2(16f, 16f);
+            Image check = checkObject.GetComponent<Image>();
+            check.color = new Color(0.435f, 0.690f, 0.970f, 1f);
+
+            GameObject textObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textObject.transform.SetParent(root.transform, false);
+            RectTransform textRect = textObject.GetComponent<RectTransform>();
+            textRect.anchorMin = new Vector2(0f, 0f);
+            textRect.anchorMax = new Vector2(1f, 1f);
+            textRect.offsetMin = new Vector2(38f, 0f);
+            textRect.offsetMax = new Vector2(-8f, 0f);
+            TMP_Text text = textObject.GetComponent<TMP_Text>();
+            text.text = label;
+            text.fontSize = 16f;
+            text.fontStyle = FontStyles.Bold;
+            text.color = new Color(0.925f, 0.941f, 0.965f, 1f);
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.raycastTarget = false;
+
+            Toggle toggle = root.GetComponent<Toggle>();
+            toggle.targetGraphic = background;
+            toggle.graphic = check;
+            toggle.isOn = true;
+            toggle.transition = Selectable.Transition.ColorTint;
+            return toggle;
         }
 
         void OnValidate()

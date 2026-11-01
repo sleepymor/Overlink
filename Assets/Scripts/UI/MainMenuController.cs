@@ -2,6 +2,7 @@
 using Overlink.Net;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Overlink.UI
@@ -45,8 +46,31 @@ namespace Overlink.UI
         {
             if (playerNameText == null) BuildAccountUi();
 
+            BindMenuBackdrop();
+
+            StyleButton(btnPlay, new Color(0.11f, 0.42f, 0.78f), new Color(0.16f, 0.58f, 0.86f));
+            StyleButton(btnDeckbuilder, new Color(0.035f, 0.105f, 0.16f), new Color(0.055f, 0.20f, 0.27f));
+            StyleButton(btnCollection, new Color(0.035f, 0.105f, 0.16f), new Color(0.055f, 0.20f, 0.27f));
+            StyleButton(btnSettings, new Color(0.035f, 0.105f, 0.16f), new Color(0.055f, 0.20f, 0.27f));
+            StyleButton(btnNetDemo, new Color(0.035f, 0.105f, 0.16f), new Color(0.055f, 0.20f, 0.27f));
+            StyleButton(btnQuit, new Color(0.50f, 0.12f, 0.12f), new Color(0.72f, 0.20f, 0.16f));
+
+            UiKit.EnsureButtonFeedback(btnPlay);
+            UiKit.EnsureButtonFeedback(btnDeckbuilder);
+            UiKit.EnsureButtonFeedback(btnCollection);
+            UiKit.EnsureButtonFeedback(btnSettings);
+            UiKit.EnsureButtonFeedback(btnNetDemo);
+            UiKit.EnsureButtonFeedback(btnQuit);
+
+            BuildMenuAtmosphere();
+
+            if (EventSystem.current != null && btnPlay != null)
+                EventSystem.current.SetSelectedGameObject(btnPlay.gameObject);
+
             AddListener(btnPlay,        () => SceneLoader.Load(SceneIndex.Gameplay));
             AddListener(btnDeckbuilder, () => SceneLoader.Load(SceneIndex.Deckbuilder));
+            // The binder and pack-opening prototype are separate destinations. The binder owns the
+            // Collection button; its OPEN PACK action routes to the dedicated Gacha scene.
             AddListener(btnCollection,  () => SceneLoader.Load(SceneIndex.Collection));
             AddListener(btnSettings,    () => SceneLoader.Load(SceneIndex.Settings));
             AddListener(btnNetDemo,     () => SceneLoader.Load(SceneIndex.NetDemo));
@@ -61,6 +85,32 @@ namespace Overlink.UI
             AddOptional(btnCopyID, () => CopyToClipboard(
                 PlayerProfileService.Instance?.CurrentProfile?.Identity.FullId, "Player ID"));
             AddOptional(btnCloseProfile, HideProfilePanel);
+        }
+
+        /// <summary>
+        /// Keeps the authored renderer as the replaceable art slot, while also binding that same material to
+        /// the full-screen UI surface. The latter is a deliberate fallback for URP camera/quad combinations
+        /// where a background mesh can be skipped by a scene camera or render feature; it cannot affect input
+        /// or match state and guarantees the procedural backdrop is visible behind the menu.
+        /// </summary>
+        static void BindMenuBackdrop()
+        {
+            GameObject backdrop = GameObject.Find("MenuBackdrop");
+            Renderer backdropRenderer = backdrop != null ? backdrop.GetComponent<Renderer>() : null;
+            if (backdropRenderer == null || backdropRenderer.sharedMaterial == null) return;
+
+            Canvas canvas = UiKit.FindOverlayCanvas();
+            if (canvas == null) return;
+
+            Transform backgroundTransform = canvas.transform.Find("Background");
+            Image background = backgroundTransform != null
+                ? backgroundTransform.GetComponent<Image>()
+                : null;
+            if (background == null) return;
+
+            background.material = backdropRenderer.sharedMaterial;
+            background.color = Color.white;
+            background.raycastTarget = false;
         }
 
         void Start()
@@ -177,6 +227,61 @@ namespace Overlink.UI
         void AddOptional(Button button, UnityEngine.Events.UnityAction action)
         {
             if (button != null) button.onClick.AddListener(action);
+        }
+
+        static void StyleButton(Button button, Color normal, Color highlighted)
+        {
+            if (button == null) return;
+
+            Graphic graphic = button.targetGraphic != null
+                ? button.targetGraphic
+                : button.GetComponent<Graphic>();
+            if (graphic != null) graphic.color = normal;
+
+            button.transition = Selectable.Transition.ColorTint;
+            button.colors = new ColorBlock
+            {
+                normalColor = normal,
+                highlightedColor = highlighted,
+                pressedColor = UiKit.Tint(normal, 0.72f),
+                selectedColor = UiKit.Tint(highlighted, 0.88f),
+                disabledColor = new Color(normal.r, normal.g, normal.b, 0.35f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.10f
+            };
+        }
+
+        /// <summary>
+        /// Adds a small screen-space identity line without replacing authored menu geometry. The label is
+        /// deliberately non-interactable and is safe to rebuild in a scene that already has the account UI.
+        /// </summary>
+        void BuildMenuAtmosphere()
+        {
+            Canvas canvas = UiKit.FindOverlayCanvas();
+            if (canvas == null || canvas.transform.Find("Menu Atmosphere") != null) return;
+
+            GameObject root = UiKit.Child("Menu Atmosphere", canvas.transform);
+            RectTransform rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = rootRect.anchorMax = new Vector2(0.5f, 0.5f);
+            rootRect.pivot = new Vector2(0.5f, 0.5f);
+            rootRect.anchoredPosition = new Vector2(0f, 272f);
+            rootRect.sizeDelta = new Vector2(520f, 54f);
+
+            TextMeshProUGUI status = UiKit.Text("Status", root.transform,
+                "TACTICAL NETWORK  //  LINK ESTABLISHED", 13f, UiKit.Accent,
+                TextAlignmentOptions.Center, FontStyles.Bold, 22f);
+            status.characterSpacing = 8f;
+
+            GameObject rule = UiKit.Child("Signal Rule", root.transform);
+            RectTransform ruleRect = rule.GetComponent<RectTransform>();
+            ruleRect.anchorMin = new Vector2(0.5f, 0f);
+            ruleRect.anchorMax = new Vector2(0.5f, 0f);
+            ruleRect.pivot = new Vector2(0.5f, 0f);
+            ruleRect.anchoredPosition = new Vector2(0f, -2f);
+            ruleRect.sizeDelta = new Vector2(190f, 1f);
+            Image ruleImage = rule.AddComponent<Image>();
+            ruleImage.color = new Color(UiKit.Accent.r, UiKit.Accent.g, UiKit.Accent.b, 0.55f);
+            ruleImage.raycastTarget = false;
         }
 
         void OnValidate()

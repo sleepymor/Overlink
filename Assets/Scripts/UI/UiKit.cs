@@ -22,17 +22,18 @@ namespace Overlink.UI
         public const float ButtonHeight = 48f;
 
         public static readonly Color Background = new Color(0.035f, 0.043f, 0.070f);
-        public static readonly Color Card = new Color(0.086f, 0.102f, 0.157f);
-        public static readonly Color Scrim = new Color(0f, 0f, 0f, 0.62f);
-        public static readonly Color InputBackground = new Color(0.043f, 0.051f, 0.082f);
+        public static readonly Color Card = new Color(0.055f, 0.070f, 0.115f);
+        public static readonly Color Scrim = new Color(0f, 0f, 0f, 0.72f);
+        public static readonly Color InputBackground = new Color(0.035f, 0.043f, 0.072f);
         public static readonly Color Primary = new Color(0.180f, 0.478f, 0.831f);
         public static readonly Color Google = new Color(0.953f, 0.953f, 0.953f);
-        public static readonly Color Ghost = new Color(1f, 1f, 1f, 0.07f);
-        public static readonly Color Danger = new Color(0.784f, 0.290f, 0.267f);
+        public static readonly Color Ghost = new Color(1f, 1f, 1f, 0.06f);
+        public static readonly Color Danger = new Color(0.784f, 0.250f, 0.230f);
         public static readonly Color TextBright = new Color(0.925f, 0.941f, 0.965f);
-        public static readonly Color TextDim = new Color(0.612f, 0.655f, 0.722f);
+        public static readonly Color TextDim = new Color(0.520f, 0.570f, 0.650f);
         public static readonly Color TextError = new Color(0.949f, 0.494f, 0.443f);
-        public static readonly Color Accent = new Color(0.478f, 0.706f, 0.976f);
+        public static readonly Color Accent = new Color(0.435f, 0.690f, 0.970f);
+        public static readonly Color CardBorder = new Color(0.180f, 0.220f, 0.300f, 0.35f);
 
         public enum Style { Primary, Google, Ghost, Danger }
 
@@ -147,9 +148,6 @@ namespace Overlink.UI
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.sizeDelta = new Vector2(0f, ButtonHeight);
-            // See Text(): a layout group sizes children from their preferred width, which a button has
-            // no intrinsic claim to, so the flexible axis is claimed explicitly. Callers that want a
-            // fixed-width button (inside a horizontal row) clear it again via FlexibleWidth.
             var element = go.AddComponent<LayoutElement>();
             element.preferredHeight = ButtonHeight;
             element.flexibleWidth = 1f;
@@ -168,26 +166,53 @@ namespace Overlink.UI
                 _ => TextBright
             };
 
+            // Accent top-edge stripe: 2 px signal line that reads as a "notch".
+            Color accentEdge = style switch
+            {
+                Style.Primary => Accent,
+                Style.Danger => new Color(1f, 0.55f, 0.45f, 0.7f),
+                Style.Ghost => new Color(Accent.r, Accent.g, Accent.b, 0.3f),
+                _ => Color.clear
+            };
+            if (accentEdge.a > 0f)
+            {
+                var edge = Child("AccentEdge", go.transform);
+                var edgeRect = edge.GetComponent<RectTransform>();
+                edgeRect.anchorMin = new Vector2(0f, 1f);
+                edgeRect.anchorMax = Vector2.one;
+                edgeRect.pivot = new Vector2(0.5f, 1f);
+                edgeRect.sizeDelta = new Vector2(0f, 2f);
+                var edgeImage = edge.AddComponent<Image>();
+                edgeImage.color = accentEdge;
+                edgeImage.raycastTarget = false;
+            }
+
             var image = go.AddComponent<Image>();
             var button = go.AddComponent<Button>();
+            go.AddComponent<UiButtonFeedback>();
             button.transition = Selectable.Transition.ColorTint;
             button.targetGraphic = image;
-            // ColorTint writes the state colour straight onto the graphic, so per-state brightness
-            // belongs here and not on image.color — Selectable overwrites that the moment it enables.
             button.colors = new ColorBlock
             {
                 normalColor = normal,
-                highlightedColor = Tint(normal, 1.14f),
-                pressedColor = Tint(normal, 0.82f),
-                selectedColor = normal,
+                highlightedColor = Tint(normal, 1.22f),
+                pressedColor = Tint(normal, 0.78f),
+                selectedColor = Tint(normal, 1.10f),
                 disabledColor = new Color(normal.r, normal.g, normal.b, normal.a * 0.45f),
                 colorMultiplier = 1f,
-                fadeDuration = 0.06f
+                fadeDuration = 0.08f
             };
 
             Label(go.transform, "Label", label, style == Style.Ghost ? 14f : fontSize, foreground)
                 .fontStyle = FontStyles.Bold;
             return go;
+        }
+
+        /// <summary>Installs the shared response on authored buttons without changing their serialized layout.</summary>
+        public static void EnsureButtonFeedback(Button button)
+        {
+            if (button != null && button.GetComponent<UiButtonFeedback>() == null)
+                button.gameObject.AddComponent<UiButtonFeedback>();
         }
 
         /// <summary>
@@ -292,15 +317,36 @@ namespace Overlink.UI
                 color.a);
         }
 
+        /// <summary>Adds a subtle 1 px border outline to a card/dialog panel.</summary>
+        public static void ApplyCardBorder(GameObject cardGo)
+        {
+            var outline = cardGo.AddComponent<Outline>();
+            outline.effectColor = CardBorder;
+            outline.effectDistance = new Vector2(1f, -1f);
+        }
+
         static TextMeshProUGUI ConfigureText(TextMeshProUGUI tmp, string value, float size, Color color)
         {
             tmp.text = value;
             tmp.fontSize = size;
             tmp.color = color;
+            tmp.font = DisplayFont;
             tmp.richText = false;
             tmp.overflowMode = TextOverflowModes.Overflow;
             tmp.outlineWidth = 0f;
             return tmp;
         }
+
+        static TMP_FontAsset DisplayFont
+        {
+            get
+            {
+                if (displayFont == null)
+                    displayFont = Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+                return displayFont;
+            }
+        }
+
+        static TMP_FontAsset displayFont;
     }
 }

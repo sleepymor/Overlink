@@ -49,6 +49,13 @@ namespace Overlink.EditorTools
         private SerializedObject serializedCard;
         private CardAsset serializedCardAsset;
 
+        // The manager preview deliberately uses the same template/frame/catalog path as runtime cards. Keep the
+        // preview instance out of the scene and rebuild it only when the selected card's presentation inputs change.
+        private PreviewRenderUtility previewUtility;
+        private GameObject previewObject;
+        private CardAsset previewAsset;
+        private string previewKey;
+
         [MenuItem("Overlink/Cards/Card Manager", false, 20)]
         public static void Open()
         {
@@ -62,6 +69,11 @@ namespace Overlink.EditorTools
         private void OnEnable()
         {
             Refresh();
+        }
+
+        private void OnDisable()
+        {
+            ClearPreview();
         }
 
         private void Refresh()
@@ -314,6 +326,18 @@ namespace Overlink.EditorTools
                 saveRequested = true;
             }
 
+            Color previousBackground = GUI.backgroundColor;
+            GUI.backgroundColor = new Color(1f, 0.65f, 0.65f);
+            if (GUILayout.Button("Delete", GUILayout.Width(70f)))
+            {
+                GUI.backgroundColor = previousBackground;
+                DeleteSelected(asset);
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.EndVertical();
+                return;
+            }
+            GUI.backgroundColor = previousBackground;
+
             EditorGUILayout.EndHorizontal();
 
             // SaveSelected calls Refresh, which drops the cached SerializedObject; bail out of this pass so the
@@ -370,7 +394,7 @@ namespace Overlink.EditorTools
             }
 
             EditorGUILayout.Space();
-            DrawPresentationTemplateSection(definition);
+            DrawPresentationTemplateSection(asset, definition);
 
             EditorGUILayout.Space();
             DrawValidation(results[selected]);
@@ -384,10 +408,13 @@ namespace Overlink.EditorTools
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawPresentationTemplateSection(CardDefinition definition)
+        private void DrawPresentationTemplateSection(CardAsset asset, CardDefinition definition)
         {
             EditorGUILayout.LabelField("Presentation Template", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox("PLACEHOLDER FIXTURE — presentation values are temporary and are not written to CardAsset gameplay data or export.", MessageType.Info);
+
+            DrawVisualCardPreview(asset);
+
             EditorGUILayout.LabelField("Type / Rarity / Faction", definition.Type + " / " + definition.Rarity + " / " + definition.Faction);
             EditorGUILayout.LabelField("Template", "Card_" + definition.Type + "_" + definition.Rarity);
             EditorGUILayout.LabelField("Frame key", definition.Type + " / " + definition.Faction + " / " + definition.Rarity);
@@ -404,6 +431,173 @@ namespace Overlink.EditorTools
             {
                 EditorGUILayout.LabelField("Shader rule", "No custom tier shader");
             }
+        }
+
+        /// <summary>
+        /// Renders the selected CardAsset through the actual CardFaceView prefab, frame catalog and placeholder
+        /// fixture catalog. This is an editor-only render target; no preview object is added to an open scene.
+        /// </summary>
+        private void DrawVisualCardPreview(CardAsset asset)
+        {
+            const float previewHeight = 300f;
+            Rect previewRect = GUILayoutUtility.GetAspectRect(832f / 1216f, GUILayout.Height(previewHeight));
+            EditorGUI.DrawRect(previewRect, new Color(0.055f, 0.07f, 0.10f, 1f));
+
+            if (!EnsurePreview(asset))
+            {
+                EditorGUI.HelpBox(previewRect, "Card preview unavailable. Check the presentation catalogs and template prefabs.", MessageType.Warning);
+                return;
+            }
+
+            previewUtility.BeginPreview(previewRect, GUIStyle.none);
+            previewUtility.camera.aspect = previewRect.width / Mathf.Max(1f, previewRect.height);
+            previewUtility.camera.Render();
+            Texture previewTexture = previewUtility.EndPreview();
+            if (previewTexture != null)
+            {
+                GUI.DrawTexture(previewRect, previewTexture, ScaleMode.ScaleToFit, true);
+            }
+        }
+
+        private bool EnsurePreview(CardAsset asset)
+        {
+            if (asset == null)
+            {
+                ClearPreview();
+                return false;
+            }
+
+            string key = BuildPreviewKey(asset);
+            if (previewAsset == asset && previewKey == key && previewUtility != null && previewObject != null)
+            {
+                return true;
+            }
+
+            ClearPreview();
+
+            CardFrameCatalog frameCatalog = AssetDatabase.LoadAssetAtPath<CardFrameCatalog>(
+                "Assets/Cards/Presentation/CardFrameCatalog.asset");
+            CardTemplateCatalog templateCatalog = AssetDatabase.LoadAssetAtPath<CardTemplateCatalog>(
+                "Assets/Cards/Presentation/CardTemplateCatalog.asset");
+            CardTierMaterialSet tierMaterials = AssetDatabase.LoadAssetAtPath<CardTierMaterialSet>(
+                "Assets/Cards/Presentation/CardTierMaterialSet.asset");
+            if (frameCatalog == null || templateCatalog == null)
+            {
+                return false;
+            }
+
+            CardPresentationFixture fixture = AssetDatabase.LoadAssetAtPath<CardPresentationFixture>(
+                CardPresentationEditor.FixturePathFor(asset.rarity, asset.faction, asset.type));
+            if (fixture == null)
+            {
+                fixture = AssetDatabase.LoadAssetAtPath<CardPresentationFixture>(
+                    "Assets/Cards/PlaceholderFixtures/CardPresentationFixture.asset");
+            }
+
+            Sprite art = LoadPreviewArt(asset.artPath);
+            if (art == null && fixture != null)
+            {
+                art = fixture.artSprite;
+            }
+
+            bool unit = asset.type == CardType.Unit;
+            CardFaceData face = new CardFaceData(
+                asset.id,
+                asset.cardName,
+                asset.type,
+                asset.faction,
+                asset.rarity,
+                asset.cost,
+                art,
+                unit ? (int?)asset.atk : null,
+                unit ? (int?)asset.hp : null,
+                unit ? (int?)asset.shield : null,
+                string.IsNullOrEmpty(asset.abilityText) && fixture != null ? fixture.abilityText : asset.abilityText);
+
+            CardFaceView template = templateCatalog.Get(asset.type, asset.rarity);
+            if (template == null)
+            {
+                return false;
+            }
+
+            previewObject = Object.Instantiate(template.gameObject);
+            previewObject.name = "CardManagerPreview";
+            previewObject.hideFlags = HideFlags.HideAndDontSave;
+
+            CardFaceView faceView = previewObject.GetComponent<CardFaceView>();
+            if (faceView == null)
+            {
+                ClearPreview();
+                return false;
+            }
+
+            faceView.PreviewRarity = asset.rarity;
+            faceView.Bind(face, frameCatalog, tierMaterials);
+            faceView.SetSize(new Vector3(2f, 2f * 1.4615f, 0.01f));
+
+            previewUtility = new PreviewRenderUtility();
+            previewUtility.camera.clearFlags = CameraClearFlags.Color;
+            previewUtility.camera.backgroundColor = new Color(0.055f, 0.07f, 0.10f, 1f);
+            previewUtility.camera.orthographic = true;
+            previewUtility.camera.orthographicSize = 1.68f;
+            previewUtility.camera.transform.position = new Vector3(0f, 0f, -5f);
+            previewUtility.camera.transform.rotation = Quaternion.identity;
+            previewUtility.AddSingleGO(previewObject);
+
+            previewAsset = asset;
+            previewKey = key;
+            return true;
+        }
+
+        private static Sprite LoadPreviewArt(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            path = path.Replace("\\", "/");
+            if (!path.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
+        private static string BuildPreviewKey(CardAsset asset)
+        {
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}",
+                asset.id ?? string.Empty,
+                asset.cardName ?? string.Empty,
+                asset.faction,
+                asset.rarity,
+                asset.type,
+                asset.cost,
+                asset.atk,
+                asset.hp,
+                asset.shield,
+                asset.abilityText ?? string.Empty,
+                asset.artPath ?? string.Empty);
+        }
+
+        private void ClearPreview()
+        {
+            if (previewUtility != null)
+            {
+                previewUtility.Cleanup();
+                previewUtility = null;
+            }
+
+            if (previewObject != null)
+            {
+                Object.DestroyImmediate(previewObject);
+                previewObject = null;
+            }
+
+            previewAsset = null;
+            previewKey = null;
         }
 
         private void DrawKeywordsEditor(SerializedProperty keywords)
@@ -555,13 +749,53 @@ namespace Overlink.EditorTools
             Refresh();
         }
 
+        private void DeleteSelected(CardAsset asset)
+        {
+            if (asset == null)
+            {
+                return;
+            }
+
+            string path = AssetDatabase.GetAssetPath(asset);
+            if (string.IsNullOrEmpty(path))
+            {
+                EditorUtility.DisplayDialog("Delete Card", "The selected card is not a project asset and cannot be deleted.", "OK");
+                return;
+            }
+
+            string label = string.IsNullOrEmpty(asset.cardName) ? asset.id : asset.cardName;
+            bool confirmed = EditorUtility.DisplayDialog(
+                "Delete Card",
+                "Delete '" + (string.IsNullOrEmpty(label) ? "(unnamed card)" : label) + "'?\n\nThis removes the CardAsset from the project and cannot be undone through the Card Manager.",
+                "Delete",
+                "Cancel");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            ClearPreview();
+            Selection.activeObject = null;
+            if (!AssetDatabase.DeleteAsset(path))
+            {
+                EditorUtility.DisplayDialog("Delete Card", "Unity could not delete the selected card asset.", "OK");
+                Refresh();
+                return;
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            selected = Mathf.Clamp(selected, 0, Mathf.Max(0, cards.Count - 2));
+            Refresh();
+        }
+
         private void CreateNewCard()
         {
             EnsureFolder(CardFolder);
             string path = AssetDatabase.GenerateUniqueAssetPath(CardFolder + "/card_new.asset");
 
             var card = CreateInstance<CardAsset>();
-            card.id = string.Empty;
+            card.id = NextCardId(Faction.Fsti);
             card.cardName = "New Card";
             card.faction = Faction.Fsti;
             card.rarity = Rarity.Common;
@@ -591,6 +825,48 @@ namespace Overlink.EditorTools
             Selection.activeObject = card;
             EditorGUIUtility.PingObject(card);
             Repaint();
+        }
+
+        /// <summary>
+        /// Creates a valid starter ID instead of leaving a newly authored asset in an immediately
+        /// blocking validation state. IDs remain deterministic and human-readable while still
+        /// respecting existing authored cards and assets created in earlier sessions.
+        /// </summary>
+        private static string NextCardId(Faction faction)
+        {
+            string token = CardJson.FactionToken(faction);
+            int next = 1;
+            var existing = CardExporter.FindAllCards();
+            for (int i = 0; i < existing.Count; i++)
+            {
+                CardAsset existingCard = existing[i];
+                if (existingCard == null || string.IsNullOrEmpty(existingCard.id))
+                {
+                    continue;
+                }
+
+                string prefix = "card_" + token + "_";
+                if (!existingCard.id.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string suffix = existingCard.id.Substring(prefix.Length);
+                if (int.TryParse(suffix, out int number))
+                {
+                    next = Mathf.Max(next, number + 1);
+                }
+            }
+
+            string candidate;
+            do
+            {
+                candidate = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "card_{0}_{1:000}", token, next++);
+            }
+            while (existing.Exists(cardAsset => cardAsset != null && cardAsset.id == candidate));
+
+            return candidate;
         }
 
         private static void EnsureFolder(string folder)

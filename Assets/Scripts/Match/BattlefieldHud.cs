@@ -34,6 +34,14 @@ namespace Overlink.Match
         /// <summary>The name the scene ships this object under, and the name <see cref="Ensure"/> looks for.</summary>
         public const string RootName = "Battlefield HUD";
 
+        // Everything from here to the RailKey enum is a CREATION DEFAULT: the number a panel is laid out
+        // with when this build has to invent it. A panel the scene already ships keeps whatever somebody
+        // typed into its Inspector, and these fields never touch it again. They stay here, rather than in
+        // a scriptable default set, because the first HUD in a scene - and every HUD in an EditMode test -
+        // is built by this component alone, with nothing above it but these numbers.
+        //
+        // The one exception is maxLines below, which is runtime state and is read on every paint.
+
         [Header("Log")]
         [Tooltip("How many of the most recent events the panel keeps. Older lines scroll off the top. " +
                  "Four, not the six the tabletop column held: the panel now lives in the band above the " +
@@ -73,6 +81,15 @@ namespace Overlink.Match
         public float readerFootSize = 16f;
         public Color readerTitleColor = new Color(0.95f, 0.97f, 1f);
         public Color readerFootColor = new Color(0.58f, 0.66f, 0.80f);
+
+        // The two bands the reader spends under its text blocks. One source of truth, because card mode has to
+        // carve them out of the box the real card is posed into: if the presenter guessed, the card would
+        // overlap the line under it at some resolution and nobody would see it until a player did.
+        /// <summary>Height of the position line under the reader's text (or under the card).</summary>
+        float ReaderFootBand => readerFootSize * 2.4f;
+
+        /// <summary>Height of the "ESC / CLICK ELSEWHERE TO CLOSE" strip at the very bottom.</summary>
+        float ReaderHintBand => readerFootSize * 1.8f;
 
         [Header("Status panels")]
         [Tooltip("Everything that used to be painted onto the tabletop: the turn banner, the two player chips, " +
@@ -269,6 +286,10 @@ namespace Overlink.Match
         // the cache, so it is rebuilt only when the rail is built.
         Button[] railButtons = new Button[0];
         Coroutine readerMotion;
+        Coroutine bannerMotion;
+        Coroutine noticeMotion;
+        Coroutine resultMotion;
+        Coroutine logMotion;
 
         [SerializeField] RectTransform banner;
         [SerializeField] TextMeshProUGUI bannerText;
@@ -301,10 +322,11 @@ namespace Overlink.Match
         /// </summary>
         public event Action<RailKey> RailPressed;
 
-        // Serialized rather than plain private: the scene ships this object already built, and a reference
-        // that is not serialized arrives null from disk. That would make every Ensure() call rewrite the
-        // layout from its defaults - harmless in play mode, but in the editor it dirties the scene the tests
-        // happen to have open.
+        // Serialized rather than plain private: the bind half of Build writes these references from the
+        // objects the scene ships, and a reference that is not serialized cannot be filled in from disk -
+        // it would arrive null, get re-resolved every time the scene loads, and be lost again on the next
+        // domain reload. It also means the Inspector shows exactly which object each panel is talking to,
+        // so a rename in the scene is a visible break rather than a silent one.
         [SerializeField] RectTransform panel;
         [SerializeField] TextMeshProUGUI header;
         [SerializeField] TextMeshProUGUI body;
@@ -324,24 +346,24 @@ namespace Overlink.Match
         public RectTransform Reader => reader;
 
         /// <summary>
-        /// True once the canvas has its panel and text objects resolved. A HUD loaded from the scene is not
-        /// built until something calls <see cref="Build"/>, because the references below are private and
-        /// therefore not serialized.
+        /// True once the log slab and its body are resolved. These read the serialized references, so a
+        /// scene-loaded HUD reports true from disk before anything has run - which is precisely why no caller
+        /// may treat it as "wired". The rail store is not serialized, and it is the part that makes a HUD
+        /// interactive.
         /// </summary>
         public bool IsBuilt => panel != null && body != null;
 
         /// <summary>
-        /// True once the details panel exists too. A HUD loaded from the scene has its log references
-        /// serialized and therefore reports <see cref="IsBuilt"/>, but the reader is newer than the shipped
-        /// scene file, so <see cref="Ensure"/> checks this separately rather than assuming a built log means
-        /// a built reader.
+        /// True once the details panel is resolved too. Kept apart from <see cref="IsBuilt"/> because the two
+        /// were authored into the scene at different times, so a file can legitimately carry one and not the
+        /// other; <see cref="Build"/> authors whichever is missing.
         /// </summary>
         public bool IsReaderBuilt => reader != null && readerTitle != null && readerBody != null;
 
         /// <summary>
-        /// True once the panels that moved off the tabletop exist. Separated from <see cref="IsBuilt"/> for
-        /// the same reason the reader is: the shipped scene file has a log panel serialized but predates the
-        /// status layer, so <see cref="Ensure"/> has to be able to tell the two apart and upgrade in place.
+        /// True once the panels that moved off the tabletop are resolved. Same history as
+        /// <see cref="IsReaderBuilt"/>: the shipped scene file has a log panel serialized and predates the
+        /// status layer entirely.
         /// </summary>
         public bool IsStatusBuilt => banner != null && bannerText != null && playerBody != null
             && hint != null && hintText != null
@@ -364,24 +386,22 @@ namespace Overlink.Match
         public static BattlefieldHud Ensure()
         {
             BattlefieldHud existing = Find();
-            if (existing != null)
+            if (existing == null)
             {
-                // The scene's copy arrives unbuilt. The panel and text references are private fields, so they
-                // are not serialized, and only Awake wires them - which never runs in the editor. An EditMode
-                // test (or an editor script) asking for the HUD would get an object with no panel and no way
-                // to show anything, so Ensure completes it instead of assuming play mode.
-                if (!existing.IsBuilt || !existing.IsReaderBuilt || !existing.IsStatusBuilt)
-                {
-                    existing.Build();
-                }
-
-                return existing;
+                var go = new GameObject(RootName, typeof(RectTransform));
+                var hud = go.AddComponent<BattlefieldHud>();
+                hud.Build();
+                return hud;
             }
 
-            var go = new GameObject(RootName, typeof(RectTransform));
-            var hud = go.AddComponent<BattlefieldHud>();
-            hud.Build();
-            return hud;
+            // Unconditional, and the reason is the trap this used to spring: the three Is*Built properties
+            // read the serialized references, so a scene-loaded HUD reports all three true from disk while
+            // its rail store - which is not serialized - is empty and not one button has a listener. Guarded,
+            // that meant "nothing to do", and the HUD's own Awake was the only other caller, so an EditMode
+            // test or an editor script asking for the HUD got a beautiful inert panel. Build's bind half
+            // writes no appearance, so running it here costs a handful of Transform.Find calls.
+            existing.Build();
+            return existing;
         }
 
         /// <summary>
@@ -408,28 +428,44 @@ namespace Overlink.Match
 
         void Awake()
         {
-            if (panel == null)
-            {
-                Build();
-            }
+            // Bind always, build what is missing. The old guard here was `if (panel == null)`, which is true
+            // for a bare object and false for a scene-loaded one - so the scene's HUD woke with its
+            // references pointed at its own objects and nothing whatsoever wired: no rail store, no onClick,
+            // and SetRail returning at its first null test. Build's bind half is idempotent and reads the
+            // objects rather than writing them, so running it on an already-authored HUD costs a handful of
+            // Transform.Find calls and is the only way that HUD ever works.
+            Build();
         }
 
         /// <summary>
-        /// Builds the canvas, the scaler and the panel, or re-applies them to an object the scene already
-        /// ships. Idempotent, and deliberately authoritative: the serialized fields on this component are the
-        /// layout's source of truth, so moving the <c>RectTransform</c> by hand in the Inspector is undone on
-        /// the next build - change <see cref="panelSize"/> and <see cref="panelOffset"/> instead.
+        /// Binds this component to the objects the scene ships, and authors the ones it does not ship.
+        /// <para>
+        /// The two halves answer different questions and neither is skippable. <b>Bind</b> resolves every
+        /// child by name into a serialized reference, rebuilds the rail store, attaches the button
+        /// listeners and seeds the store from what the objects actually are; it writes no appearance at
+        /// all. <b>Author</b> constructs whatever bind could not find, and only then lays it out from the
+        /// creation defaults at the top of this file.
+        /// </para>
+        /// <para>
+        /// So the scene owns geometry, colour, font and static words, and this component owns visibility,
+        /// interactability, dynamic strings and wiring. Idempotent in both directions: rebuilding an
+        /// authored HUD leaves it pixel-identical, and rebuilding a bare one produces the same HUD the
+        /// code always drew.
+        /// </para>
         /// </summary>
         public void Build()
         {
+            // The canvas and the scaler are the coordinate system every measurement in this file is quoted
+            // in, not appearance: the reference resolution is what makes "162 pixels" mean something, and an
+            // overlay canvas is what keeps the panels off the tabletop's 90-degree tilt. Authoritative on
+            // purpose - a scene that re-wrote them would leave the creation defaults describing a layout
+            // nothing on screen matches. Everything below this point honours the scene's own values.
             canvas = GetComponent<Canvas>();
             if (canvas == null)
             {
                 canvas = gameObject.AddComponent<Canvas>();
             }
 
-            // An overlay canvas is laid out in pixels against the viewport and is unaffected by the Match
-            // root's 90-degree tilt, which is the whole point of moving the log off the tabletop.
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 10;
 
@@ -457,16 +493,28 @@ namespace Overlink.Match
 
         void EnsurePhaseControls()
         {
-            if (rail[(int)RailKey.EndPhase] != null) return;
-
+            // No early return. The guard used to be `if (rail[(int)RailKey.EndPhase] != null) return;`, which is
+            // exactly the shape of the bug this method now has to avoid: the store is non-serialized, so on a
+            // scene-loaded HUD the first bind fills it and every later bind would skip - but the *listeners*
+            // are attached here too, and a HUD whose Awake ran before an explicit Build() would wire nothing at
+            // all if this returned on the store alone. Binding is cheap and idempotent; take the whole path.
             Transform existing = transform.Find("PhaseControls");
-            GameObject root = existing != null ? existing.gameObject
-                : new GameObject("PhaseControls", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
-            if (existing == null) root.transform.SetParent(transform, false);
+            bool created = existing == null;
+            GameObject root = created
+                ? new GameObject("PhaseControls", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster))
+                : existing.gameObject;
+            if (created) root.transform.SetParent(transform, false);
+
+            // Structural, like the root canvas: without a nested canvas that overrides sorting the rail
+            // draws under the slabs hanging off the same canvas, and a GraphicRaycaster is the only reason a
+            // button can be clicked at all. Both are re-asserted on bind, so a hand-added PhaseControls
+            // object becomes a real one rather than a silent dead zone.
             var nestedCanvas = root.GetComponent<Canvas>();
+            if (nestedCanvas == null) nestedCanvas = root.AddComponent<Canvas>();
             nestedCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
             nestedCanvas.overrideSorting = true;
             nestedCanvas.sortingOrder = 11;
+            if (root.GetComponent<GraphicRaycaster>() == null) root.AddComponent<GraphicRaycaster>();
 
             // Stretched to the parent, and the one line in the rail that nothing on screen would have revealed
             // as missing. A root overlay canvas is resized to the viewport by Unity and ignores the size it was
@@ -558,18 +606,24 @@ namespace Overlink.Match
         }
 
         /// <summary>
-        /// Finds or creates one rail button in its corridor slot and registers it under its key.
+        /// Binds one rail button to its key, authoring it first if the scene has no such object.
         /// <para>
-        /// The find-by-name half is what keeps this scene the tuning surface: a button somebody added to the
-        /// <c>PhaseControls</c> canvas in the editor gets bound rather than duplicated. Layout, fill and text
-        /// stay code-owned — the scene authors <em>that an object exists and is called this</em>, not where it
-        /// sits, so a hand-nudged transform is rewritten on the next build the same way EndPhaseButton's
-        /// always was.
+        /// <b>Bind</b> always runs: the button and its label are resolved, the click listener is attached, and
+        /// the store is seeded from what the objects actually are. <b>Author</b> - the geometry, the fill, the
+        /// label's size and word - runs only when this call had to create the button, so a rail somebody laid
+        /// out in the scene stays where they put it. The <paramref name="fill"/>, <paramref name="fontSize"/>
+        /// and <paramref name="text"/> arguments are therefore creation defaults, and the
+        /// <paramref name="slot"/>-derived position is one too: it is how a strip stacks itself when the code
+        /// is drawing it for the first time, not a claim on a button the scene already placed.
         /// </para>
         /// <para>
-        /// Position is derived from the band and the slot rather than written per button, because the corridors
-        /// are 280 reference pixels tall and twelve buttons have to share two of them without covering a socket:
-        /// reorder the rail by changing a slot number and the strip re-stacks itself inside the gap.
+        /// The listener is attached on every bind, and attached once, because a button whose object came from
+        /// the scene arrives with an empty <c>onClick</c>: the scene owns what a button looks like and code
+        /// owns what it does, and there is no path by which an authored HUD learns to end the phase other than
+        /// this one. That is also the boundary to respect in the Inspector - a persistent <c>onClick</c> entry
+        /// added by hand survives here and fires <em>alongside</em> the code's, so a click would end the phase
+        /// twice. Nothing in this method clears it, because clearing somebody's wiring is worse than the
+        /// double-fire it prevents.
         /// </para>
         /// </summary>
         void EnsureRail(RailKey key, string objectName, RailBand band, int slot, Color fill, float fontSize,
@@ -582,16 +636,21 @@ namespace Overlink.Match
             if (found == null) buttonObject.transform.SetParent(parent, false);
 
             var rect = buttonObject.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.sizeDelta = size ?? railButtonSize;
-            rect.anchoredPosition = new Vector2(
-                (band == RailBand.Left ? -railBandOffset.x : railBandOffset.x) + xNudge,
-                railBandOffset.y + slot * railPitch);
-            buttonObject.GetComponent<Image>().color = fill;
+            if (found == null)
+            {
+                rect.anchorMin = new Vector2(0.5f, 0f);
+                rect.anchorMax = new Vector2(0.5f, 0f);
+                rect.pivot = new Vector2(0.5f, 0f);
+                rect.sizeDelta = size ?? railButtonSize;
+                rect.anchoredPosition = new Vector2(
+                    (band == RailBand.Left ? -railBandOffset.x : railBandOffset.x) + xNudge,
+                    railBandOffset.y + slot * railPitch);
+                buttonObject.GetComponent<Image>().color = fill;
+            }
 
             Button button = buttonObject.GetComponent<Button>();
+            if (button == null) button = buttonObject.AddComponent<Button>();
+            button.onClick.RemoveAllListeners();
             button.onClick.AddListener(() => onClick?.Invoke());
 
             Transform labelTransform = rect.Find("Label");
@@ -599,23 +658,33 @@ namespace Overlink.Match
                 : new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
             if (labelTransform == null) labelObject.transform.SetParent(rect, false);
             var labelRect = labelObject.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
 
             TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
-            label.alignment = TextAlignmentOptions.Center;
-            label.fontSize = fontSize;
-            label.fontStyle = FontStyles.Bold;
-            label.raycastTarget = false;
-            label.text = text;
+            if (label == null) label = labelObject.AddComponent<TextMeshProUGUI>();
+
+            if (labelTransform == null)
+            {
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = Vector2.zero;
+                labelRect.offsetMax = Vector2.zero;
+
+                label.alignment = TextAlignmentOptions.Center;
+                label.fontSize = fontSize;
+                label.fontStyle = FontStyles.Bold;
+                label.raycastTarget = false;
+                label.text = text;
+            }
 
             // Seeded from what the objects actually are, not from what we hope they are. The store is a cache of
             // the last state written, and SetRail writes only on a difference - so seeding a freshly constructed
             // (therefore active, therefore interactable) button as hidden/disabled plants a permanent "already
             // off" lie, and the HideRail() that closes the build becomes a no-op comparing cache to cache. That
             // is how a fifteen-button wall survived a build whose whole point was to show none of them.
+            //
+            // The same reasoning is why Text comes from the label rather than from the argument: an authored
+            // button's word is the scene's, and a store that disagreed with it would let the first SetRail
+            // carrying the code's default overwrite whatever somebody typed here.
             rail[(int)key] = new RailSlot
             {
                 Object = buttonObject,
@@ -623,7 +692,7 @@ namespace Overlink.Match
                 Label = label,
                 Visible = buttonObject.activeSelf,
                 Enabled = button.interactable,
-                Text = text
+                Text = label.text
             };
         }
 
@@ -724,22 +793,29 @@ namespace Overlink.Match
             // ---- Turn banner, top centre. Was a 32pt bold label at table y 5.35, which is the furthest
             // thing from a 52 degree camera and therefore the most foreshortened text on the board.
             banner = EnsureBox("Banner", bannerSize, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                bannerOffset, Color.clear, out bannerText);
-            bannerText.fontSize = bannerFontSize;
-            bannerText.fontStyle = FontStyles.Bold;
-            bannerText.alignment = TextAlignmentOptions.Center;
-            bannerText.color = new Color(0.95f, 0.97f, 1f);
+                bannerOffset, Color.clear, out bannerText, out bool bannerCreated);
+            if (bannerCreated)
+            {
+                bannerText.fontSize = bannerFontSize;
+                bannerText.fontStyle = FontStyles.Bold;
+                bannerText.alignment = TextAlignmentOptions.Center;
+                bannerText.color = new Color(0.95f, 0.97f, 1f);
+            }
 
             // ---- Key legend, directly under the banner. It is centred rather than left-pinned so it reads as
             // part of the banner it explains, and so its horizontal edges are predictable: the node list and the
             // log now flank it in the two top corners, and the gap between a centred box and an edge-pinned one
             // is the only measurement that survives an aspect change.
             hint = EnsureBox("ControlsHint", hintSize, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(bannerOffset.x, bannerOffset.y - bannerSize.y), Color.clear, out hintText);
-            hintText.fontSize = hintFontSize;
-            hintText.alignment = TextAlignmentOptions.Top;
-            hintText.color = hintColor;
-            hintText.enableWordWrapping = true;
+                new Vector2(bannerOffset.x, bannerOffset.y - bannerSize.y), Color.clear,
+                out hintText, out bool hintCreated);
+            if (hintCreated)
+            {
+                hintText.fontSize = hintFontSize;
+                hintText.alignment = TextAlignmentOptions.Top;
+                hintText.color = hintColor;
+                hintText.enableWordWrapping = true;
+            }
 
             // ---- Player chips, both in the near corners, mirrored left for right.
             // The opponent's used to hang in the top-left band under the banner and the legend, which is the
@@ -748,52 +824,79 @@ namespace Overlink.Match
             // 62 pixel banner and its legend lands at exactly that band at 16:9, hiding one of them outright.
             // The near corners are clear of every socket at every aspect, because the nearest thing to them is
             // the near Node Bench rank at 0.185 of the frame and the chips' top edge is at 0.106 even at 4:3.
+            //
+            // "OPPONENT" and "YOU" are static words and therefore the scene's: they are written once, on the
+            // chip this call had to invent, and an authored chip keeps whatever it was labelled. Nothing in
+            // the paint pass ever overwrites them, so a rename here would be the only way to change the word
+            // and the only thing that would stop working if the scene owned it.
             opponentChip = EnsureBox("OpponentChip", chipSize, new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-chipMargin.x, chipMargin.y), chipColor, out opponentTitle);
-            opponentBody = EnsureChipBody(opponentChip, opponentTitle, opponentAccent);
-            opponentTitle.text = "OPPONENT";
-            opponentTitle.color = opponentAccent;
+                new Vector2(-chipMargin.x, chipMargin.y), chipColor, out opponentTitle, out bool opponentTitleCreated);
+            opponentBody = EnsureChipBody(opponentChip, opponentTitle, opponentTitleCreated, opponentAccent);
+            if (opponentTitleCreated)
+            {
+                opponentTitle.text = "OPPONENT";
+                opponentTitle.color = opponentAccent;
+            }
 
             playerChip = EnsureBox("PlayerChip", chipSize, new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(chipMargin.x, chipMargin.y), chipColor, out playerTitle);
-            playerBody = EnsureChipBody(playerChip, playerTitle, playerAccent);
-            playerTitle.text = "YOU";
-            playerTitle.color = playerAccent;
+                new Vector2(chipMargin.x, chipMargin.y), chipColor, out playerTitle, out bool playerTitleCreated);
+            playerBody = EnsureChipBody(playerChip, playerTitle, playerTitleCreated, playerAccent);
+            if (playerTitleCreated)
+            {
+                playerTitle.text = "YOU";
+                playerTitle.color = playerAccent;
+            }
 
             // ---- Node list, top-left corner; the log mirrors it top-right. Both live in the band above the
             // board's far rank - see the nodeListSize tooltip for why that band is the only one that is
             // socket-free at every aspect, and why its 170 pixel height is the ceiling rather than a preference.
             nodeList = EnsureBox("NodeList", nodeListSize, new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(chipMargin.x, -chipMargin.y), chipColor, out TextMeshProUGUI nodeHeader);
-            nodeHeader.text = "BATTLEFIELDS";
+                new Vector2(chipMargin.x, -chipMargin.y), chipColor, out TextMeshProUGUI nodeHeader,
+                out bool nodeHeaderCreated);
+
             // The chips can afford an 18 point title; this panel cannot. Its header shares the 170 pixel slab
             // with four rows, so it takes the log's convention instead — one point above the body it heads.
             float nodeHeaderSize = nodeListFontSize + 1f;
-            nodeHeader.fontSize = nodeHeaderSize;
-            nodeHeader.fontStyle = FontStyles.Bold;
-            nodeHeader.color = headerColor;
-            nodeHeader.alignment = TextAlignmentOptions.TopLeft;
+            if (nodeHeaderCreated)
+            {
+                nodeHeader.text = "BATTLEFIELDS";
+                nodeHeader.fontSize = nodeHeaderSize;
+                nodeHeader.fontStyle = FontStyles.Bold;
+                nodeHeader.color = headerColor;
+                nodeHeader.alignment = TextAlignmentOptions.TopLeft;
+                SetRect(nodeHeader.rectTransform, panelPadding, panelPadding, panelPadding, panelPadding);
+            }
+
             nodeHeader.raycastTarget = false;
-            SetRect(nodeHeader.rectTransform, panelPadding, panelPadding, panelPadding, panelPadding);
 
             // One row per Node, in board order, so the list reads top-to-bottom against the four plates. The
             // Core's numbers are not repeated here — both chips already carry CORE x/y.
             // 12 + 16 * 2.1 + 4 * (15 * 2.05) = 168.6 of the slab's 170 pixels: the rows fill the panel exactly.
-            nodeRows = new TextMeshProUGUI[Board.NodeCount];
+            //
+            // The row array is rebuilt on every bind, authored or not, because SetNodeRow indexes it and a
+            // stale array from a previous build would write into objects the scene no longer has. Only the
+            // layout of a row this call invented is written; the words in an authored row belong to whoever
+            // typed them until the first paint replaces them, which is the next frame in play mode.
+            var rows = new TextMeshProUGUI[Board.NodeCount];
             for (int n = 0; n < Board.NodeCount; n++)
             {
-                float rowTop = panelPadding + nodeHeaderSize * 2.1f + n * (nodeListFontSize * 2.05f);
-                nodeRows[n] = EnsureText($"NodeRow{n}", nodeList, nodeListFontSize, FontStyles.Normal,
-                    textColor, TextAlignmentOptions.MidlineLeft, out RectTransform rowRect);
-                rowRect.anchorMin = new Vector2(0f, 1f);
-                rowRect.anchorMax = new Vector2(1f, 1f);
-                rowRect.pivot = new Vector2(0f, 1f);
-                rowRect.sizeDelta = new Vector2(-panelPadding * 2f, nodeListFontSize * 2.05f);
-                rowRect.anchoredPosition = new Vector2(panelPadding, -rowTop);
-                nodeRows[n].text = string.Empty;
+                rows[n] = EnsureText($"NodeRow{n}", nodeList, nodeListFontSize, FontStyles.Normal,
+                    textColor, TextAlignmentOptions.MidlineLeft, out RectTransform rowRect, out bool rowCreated);
+                if (rowCreated)
+                {
+                    float rowTop = panelPadding + nodeHeaderSize * 2.1f + n * (nodeListFontSize * 2.05f);
+                    rowRect.anchorMin = new Vector2(0f, 1f);
+                    rowRect.anchorMax = new Vector2(1f, 1f);
+                    rowRect.pivot = new Vector2(0f, 1f);
+                    rowRect.sizeDelta = new Vector2(-panelPadding * 2f, nodeListFontSize * 2.05f);
+                    rowRect.anchoredPosition = new Vector2(panelPadding, -rowTop);
+                    rows[n].text = string.Empty;
+                }
             }
 
-                        // ---- Notice line, in the far half's dead band. Fractionally anchored, and 640 rather than the
+            nodeRows = rows;
+
+            // ---- Notice line, in the far half's dead band. Fractionally anchored, and 640 rather than the
             // 1100 it was: the wide box reached x 410..1510 at the reference resolution, which put it straight
             // over both far Node columns at every aspect. The binding case is the widest aspect in the sweep,
             // where the frame is under 930 reference pixels tall and the far Node Bench ranks come up to meet
@@ -806,12 +909,15 @@ namespace Overlink.Match
             // the noticeAnchorY tooltip for why the height is a fraction rather than a rise.
             notice = EnsureBox("Notice", new Vector2(640f, noticeFontSize * 2.8f),
                 new Vector2(0.5f, noticeAnchorY), new Vector2(0.5f, 0.5f), Vector2.zero,
-                Color.clear, out noticeText);
-            noticeText.enableWordWrapping = true;
-            noticeText.fontSize = noticeFontSize;
-            noticeText.fontStyle = FontStyles.Bold;
-            noticeText.alignment = TextAlignmentOptions.Center;
-            noticeText.color = noticeColor;
+                Color.clear, out noticeText, out bool noticeCreated);
+            if (noticeCreated)
+            {
+                noticeText.enableWordWrapping = true;
+                noticeText.fontSize = noticeFontSize;
+                noticeText.fontStyle = FontStyles.Bold;
+                noticeText.alignment = TextAlignmentOptions.Center;
+                noticeText.color = noticeColor;
+            }
 
             // ---- Result overlay, dead centre, hidden until the match is over.
             // Authored in reference pixels, and the CanvasScaler turns those into whatever the window is, so
@@ -821,25 +927,44 @@ namespace Overlink.Match
             // game does not support in the first place. BattlefieldHudTests sweeps the aspects.
             result = EnsureBox("Result", new Vector2(1500f, resultFontSize * 2.6f),
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 120f),
-                Color.clear, out resultText);
-            resultText.fontSize = resultFontSize;
-            resultText.fontStyle = FontStyles.Bold;
-            resultText.alignment = TextAlignmentOptions.Center;
-            resultText.color = resultColor;
+                Color.clear, out resultText, out bool resultCreated);
+            if (resultCreated)
+            {
+                resultText.fontSize = resultFontSize;
+                resultText.fontStyle = FontStyles.Bold;
+                resultText.alignment = TextAlignmentOptions.Center;
+                resultText.color = resultColor;
+            }
+
+            // Visibility is code's, not the scene's: an overlay that a player has not won yet has to be off,
+            // whatever the file said. This is the one SetActive in the status layer that a rebuild is
+            // responsible for, and it is why an authored Result object left switched on in the scene does not
+            // greet the player with a victory screen on frame one.
             result.gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// A named full-colour slab on the overlay canvas with a single text child filling it, found rather
-        /// than rebuilt so a scene-authored HUD keeps its objects (and its Inspector tweaks to anything not
-        /// set here) across a reload.
+        /// Resolves a named full-colour slab on the overlay canvas and the single label filling it,
+        /// constructing either if the scene has none.
+        /// <para>
+        /// The size, anchor, pivot, position and colour are creation defaults: an authored slab keeps
+        /// everything the Inspector says about it, and only a slab this call had to invent is laid out.
+        /// The text child reports its own creation separately, because a slab somebody kept while deleting
+        /// its label still needs that label styled before it is usable.
+        /// </para>
+        /// <para>
+        /// <c>raycastTarget</c> is the one appearance-adjacent setting re-asserted on every bind, and it is
+        /// structural: a slab that claims to intercept input is the only way this panel could swallow a
+        /// mouse-down aimed at a socket, which is the contract the whole HUD is built on.
+        /// </para>
         /// </summary>
         RectTransform EnsureBox(string name, Vector2 size, Vector2 anchor, Vector2 pivot,
-            Vector2 anchoredPosition, Color color, out TextMeshProUGUI text)
+            Vector2 anchoredPosition, Color color, out TextMeshProUGUI text, out bool textCreated)
         {
             Transform existing = transform.Find(name);
             RectTransform rect = existing as RectTransform;
-            if (rect == null)
+            bool created = rect == null;
+            if (created)
             {
                 var go = new GameObject(name, typeof(RectTransform), typeof(Image));
                 go.transform.SetParent(transform, false);
@@ -848,69 +973,96 @@ namespace Overlink.Match
 
             var image = rect.GetComponent<Image>();
             if (image == null) image = rect.gameObject.AddComponent<Image>();
-            image.color = color;
             image.raycastTarget = false;
 
-            rect.anchorMin = anchor;
-            rect.anchorMax = anchor;
-            rect.pivot = pivot;
-            rect.sizeDelta = size;
-            rect.anchoredPosition = anchoredPosition;
+            if (created)
+            {
+                image.color = color;
+                rect.anchorMin = anchor;
+                rect.anchorMax = anchor;
+                rect.pivot = pivot;
+                rect.sizeDelta = size;
+                rect.anchoredPosition = anchoredPosition;
+            }
 
             text = EnsureText(name + "Text", rect, 20f, FontStyles.Normal, textColor,
-                TextAlignmentOptions.TopLeft, out RectTransform textRect);
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
+                TextAlignmentOptions.TopLeft, out RectTransform textRect, out textCreated);
+            if (textCreated)
+            {
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = Vector2.zero;
+                textRect.offsetMax = Vector2.zero;
+            }
+
             text.raycastTarget = false;
             return rect;
         }
 
         /// <summary>
-        /// Lays out a chip's interior: the title band across the top, a four-pixel accent rule at the foot,
-        /// and the stat line filling what is left. The <paramref name="title"/> is the text <see cref="EnsureBox"/>
-        /// made for the chip, styled here rather than rebuilt, so a scene-authored chip survives a reload.
+        /// Resolves a chip's interior: the title band across the top, a four-pixel accent rule at the foot,
+        /// and the stat line filling what is left.
+        /// <para>
+        /// <paramref name="titleCreated"/> is what <see cref="EnsureBox"/> reported for the title, and it
+        /// gates every write here: an authored chip keeps its title's size and its rule's colour, and only
+        /// the parts this call constructed are laid out. The body and the rule each report their own
+        /// creation, since any of the three can be missing from an otherwise complete chip.
+        /// </para>
         /// </summary>
-        TextMeshProUGUI EnsureChipBody(RectTransform chip, TextMeshProUGUI title, Color accent)
+        TextMeshProUGUI EnsureChipBody(RectTransform chip, TextMeshProUGUI title, bool titleCreated, Color accent)
         {
-            title.fontSize = chipTitleSize;
-            title.fontStyle = FontStyles.Bold;
-            title.alignment = TextAlignmentOptions.TopLeft;
+            if (titleCreated)
+            {
+                title.fontSize = chipTitleSize;
+                title.fontStyle = FontStyles.Bold;
+                title.alignment = TextAlignmentOptions.TopLeft;
+                title.rectTransform.anchorMin = new Vector2(0f, 1f);
+                title.rectTransform.anchorMax = new Vector2(1f, 1f);
+                title.rectTransform.pivot = new Vector2(0f, 1f);
+                title.rectTransform.sizeDelta = new Vector2(-panelPadding * 2f, chipTitleSize * 1.9f);
+                title.rectTransform.anchoredPosition = new Vector2(panelPadding, -panelPadding * 0.6f);
+            }
+
             title.raycastTarget = false;
-            title.rectTransform.anchorMin = new Vector2(0f, 1f);
-            title.rectTransform.anchorMax = new Vector2(1f, 1f);
-            title.rectTransform.pivot = new Vector2(0f, 1f);
-            title.rectTransform.sizeDelta = new Vector2(-panelPadding * 2f, chipTitleSize * 1.9f);
-            title.rectTransform.anchoredPosition = new Vector2(panelPadding, -panelPadding * 0.6f);
 
             // The chip is a slab with an accent rule, not a bordered box: a border is what made this read
             // as a button on a panel that cannot be clicked.
             Transform rule = chip.Find("Accent");
-            if (rule == null)
+            bool ruleCreated = rule == null;
+            if (ruleCreated)
             {
                 var ruleGo = new GameObject("Accent", typeof(RectTransform), typeof(Image));
                 ruleGo.transform.SetParent(chip, false);
                 rule = ruleGo.transform;
             }
+
             var ruleImage = rule.GetComponent<Image>();
-            ruleImage.color = accent;
+            if (ruleImage == null) ruleImage = rule.gameObject.AddComponent<Image>();
             ruleImage.raycastTarget = false;
-            var ruleRect = rule.GetComponent<RectTransform>();
-            ruleRect.anchorMin = new Vector2(0f, 0f);
-            ruleRect.anchorMax = new Vector2(1f, 0f);
-            ruleRect.pivot = new Vector2(0.5f, 0f);
-            ruleRect.sizeDelta = new Vector2(0f, 4f);
-            ruleRect.anchoredPosition = Vector2.zero;
+            if (ruleCreated)
+            {
+                ruleImage.color = accent;
+                var ruleRect = rule.GetComponent<RectTransform>();
+                ruleRect.anchorMin = new Vector2(0f, 0f);
+                ruleRect.anchorMax = new Vector2(1f, 0f);
+                ruleRect.pivot = new Vector2(0.5f, 0f);
+                ruleRect.sizeDelta = new Vector2(0f, 4f);
+                ruleRect.anchoredPosition = Vector2.zero;
+            }
 
             TextMeshProUGUI body = EnsureText("Body", chip, chipBodySize, FontStyles.Bold,
-                new Color(0.93f, 0.96f, 1f), TextAlignmentOptions.BottomLeft, out RectTransform bodyRect);
-            bodyRect.anchorMin = new Vector2(0f, 0f);
-            bodyRect.anchorMax = new Vector2(1f, 1f);
-            bodyRect.pivot = new Vector2(0f, 0f);
-            bodyRect.anchoredPosition = Vector2.zero;
-            bodyRect.offsetMin = new Vector2(panelPadding, panelPadding * 0.7f);
-            bodyRect.offsetMax = new Vector2(-panelPadding, -chipTitleSize * 1.9f);
+                new Color(0.93f, 0.96f, 1f), TextAlignmentOptions.BottomLeft,
+                out RectTransform bodyRect, out bool bodyCreated);
+            if (bodyCreated)
+            {
+                bodyRect.anchorMin = new Vector2(0f, 0f);
+                bodyRect.anchorMax = new Vector2(1f, 1f);
+                bodyRect.pivot = new Vector2(0f, 0f);
+                bodyRect.anchoredPosition = Vector2.zero;
+                bodyRect.offsetMin = new Vector2(panelPadding, panelPadding * 0.7f);
+                bodyRect.offsetMax = new Vector2(-panelPadding, -chipTitleSize * 1.9f);
+            }
+
             body.raycastTarget = false;
             return body;
         }
@@ -921,7 +1073,16 @@ namespace Overlink.Match
         /// <summary>The turn banner: turn number, phase, and whose turn it is.</summary>
         public void SetBanner(string text)
         {
-            if (bannerText != null) bannerText.text = text ?? string.Empty;
+            if (bannerText == null) return;
+
+            string next = text ?? string.Empty;
+            if (bannerText.text == next) return;
+
+            bannerText.text = next;
+            if (Application.isPlaying && banner != null)
+            {
+                bannerMotion = StartPulse(bannerMotion, banner, 1.045f, 0.20f);
+            }
         }
 
         /// <summary>The key legend under the banner.</summary>
@@ -956,6 +1117,7 @@ namespace Overlink.Match
                 var image = rule.GetComponent<Image>();
                 if (image != null) image.color = marked ? new Color(1f, 0.55f, 0.35f) : accent;
             }
+
         }
 
         /// <summary>One row of the node list, tinted by who holds it. Null or empty hides the row.</summary>
@@ -970,7 +1132,16 @@ namespace Overlink.Match
         /// <summary>The transient instruction line ("Ready to block? Click one of your ...").</summary>
         public void SetNotice(string message)
         {
-            if (noticeText != null) noticeText.text = message ?? string.Empty;
+            if (noticeText == null) return;
+
+            string next = message ?? string.Empty;
+            if (noticeText.text == next) return;
+
+            noticeText.text = next;
+            if (Application.isPlaying && notice != null && !string.IsNullOrEmpty(next))
+            {
+                noticeMotion = StartPulse(noticeMotion, notice, 1.06f, 0.22f);
+            }
         }
 
         /// <summary>The win/loss overlay. Empty clears it.</summary>
@@ -978,10 +1149,20 @@ namespace Overlink.Match
         {
             if (resultText == null || result == null) return;
             bool show = !string.IsNullOrEmpty(text);
+            bool changed = resultText.text != (text ?? string.Empty);
             result.gameObject.SetActive(show);
-            if (!show) return;
+            if (!show)
+            {
+                resultText.text = string.Empty;
+                return;
+            }
+
             resultText.text = text;
             resultText.color = tint;
+            if (changed && Application.isPlaying)
+            {
+                resultMotion = StartPulse(resultMotion, result, 1.08f, 0.30f);
+            }
         }
 
         /// <summary>Read-only view of the banner, for tests.</summary>
@@ -1011,67 +1192,79 @@ namespace Overlink.Match
         /// <summary>Read-only view of the result overlay, for tests.</summary>
         public string ResultText => resultText != null ? resultText.text : string.Empty;
 
+        /// <summary>
+        /// Resolves the log slab, its title band and its body, constructing and laying out whichever the scene
+        /// does not carry. The panel's rect, colour and the words "MATCH LOG" are creation defaults; the
+        /// body's contents belong to <see cref="SetLog"/> and are written on every paint.
+        /// </summary>
         RectTransform EnsurePanel()
         {
             Transform existing = transform.Find("LogPanel");
-            if (existing != null)
-            {
-                panel = existing as RectTransform;
-
-                // The serialized fields are the layout's source of truth, so a recoloured panel survives a
-                // reload the same way a moved one does.
-                var existingImage = existing.GetComponent<Image>();
-                if (existingImage != null)
-                {
-                    existingImage.color = panelColor;
-                    existingImage.raycastTarget = false;
-                }
-            }
-            else
+            bool created = existing == null;
+            if (created)
             {
                 // A RectTransform must be part of the GameObject's construction: a plain GameObject carries a
                 // Transform, and Unity refuses to add a RectTransform alongside one.
                 var panelGo = new GameObject("LogPanel", typeof(RectTransform));
                 panelGo.transform.SetParent(transform, false);
                 panel = panelGo.GetComponent<RectTransform>();
-
-                // Nothing here intercepts pointer input, but a Graphic would still claim to; switching it off
-                // states the intent rather than relying on the missing raycaster.
-                var image = panelGo.AddComponent<Image>();
-                image.color = panelColor;
-                image.raycastTarget = false;
+            }
+            else
+            {
+                panel = existing as RectTransform;
             }
 
-            // Top-right corner, hanging off the same bezel the node list hangs off on the left. Anchored
-            // rather than free-positioned so the panel stays glued to the corner at any window size instead of
-            // drifting into the board.
-            panel.anchorMin = new Vector2(1f, 1f);
-            panel.anchorMax = new Vector2(1f, 1f);
-            panel.pivot = new Vector2(1f, 1f);
-            panel.sizeDelta = panelSize;
-            panel.anchoredPosition = panelOffset;
+            var image = panel.GetComponent<Image>();
+            if (image == null) image = panel.gameObject.AddComponent<Image>();
+
+            // Nothing here intercepts pointer input, but a Graphic would still claim to; switching it off
+            // states the intent rather than relying on the missing raycaster. Structural, so re-asserted on
+            // a bind - a slab somebody left as a raycast target would eat mouse-downs aimed at the board.
+            image.raycastTarget = false;
+
+            if (created)
+            {
+                // Top-right corner, hanging off the same bezel the node list hangs off on the left. Anchored
+                // rather than free-positioned so the panel stays glued to the corner at any window size instead
+                // of drifting into the board.
+                image.color = panelColor;
+                panel.anchorMin = new Vector2(1f, 1f);
+                panel.anchorMax = new Vector2(1f, 1f);
+                panel.pivot = new Vector2(1f, 1f);
+                panel.sizeDelta = panelSize;
+                panel.anchoredPosition = panelOffset;
+            }
 
             float headerHeight = fontSize * 2.2f;
 
             // The title band hugs the top of the panel and stretches across its full width.
             header = EnsureText("LogHeader", panel, fontSize + 1f, FontStyles.Bold, headerColor,
-                TextAlignmentOptions.TopLeft, out RectTransform headerRect);
-            header.text = "MATCH LOG";
-            headerRect.anchorMin = new Vector2(0f, 1f);
-            headerRect.anchorMax = new Vector2(1f, 1f);
-            headerRect.pivot = new Vector2(0f, 1f);
-            headerRect.sizeDelta = new Vector2(0f, headerHeight);
-            headerRect.anchoredPosition = new Vector2(panelPadding, -panelPadding);
+                TextAlignmentOptions.TopLeft, out RectTransform headerRect, out bool headerCreated);
+            if (headerCreated)
+            {
+                header.text = "MATCH LOG";
+                headerRect.anchorMin = new Vector2(0f, 1f);
+                headerRect.anchorMax = new Vector2(1f, 1f);
+                headerRect.pivot = new Vector2(0f, 1f);
+                headerRect.sizeDelta = new Vector2(0f, headerHeight);
+                headerRect.anchoredPosition = new Vector2(panelPadding, -panelPadding);
+            }
 
             // The body fills whatever the header leaves, reading downward from it. Bottom-alignment was tried
             // and rejected: with a short log it stranded the newest line at the foot of the panel under a
             // band of empty slab, which reads as a layout bug rather than as a log.
             body = EnsureText("LogText", panel, fontSize, FontStyles.Normal, textColor,
-                TextAlignmentOptions.TopLeft, out RectTransform bodyRect);
-            bodyRect.anchorMin = Vector2.zero;
-            bodyRect.anchorMax = Vector2.one;
-            SetRect(bodyRect, panelPadding, panelPadding, panelPadding, panelPadding + headerHeight);
+                TextAlignmentOptions.TopLeft, out RectTransform bodyRect, out bool bodyCreated);
+            if (bodyCreated)
+            {
+                bodyRect.anchorMin = Vector2.zero;
+                bodyRect.anchorMax = Vector2.one;
+                SetRect(bodyRect, panelPadding, panelPadding, panelPadding, panelPadding + headerHeight);
+            }
 
+            // The fit measurement in SetLog depends on this box's real size, and an authored panel that
+            // somebody widened is entitled to more lines: MaxLines is the scene's knob, the shrink loop is
+            // the guard, and neither is touched here.
             return panel;
         }
 
@@ -1080,82 +1273,108 @@ namespace Overlink.Match
         /// but kept hidden until something is clicked, because an empty slab over the player's own Bench
         /// rank would hide sockets for no reason.
         /// </summary>
+        /// <summary>
+        /// Resolves the floating card preview: the full-screen root, the card face hanging off its centre,
+        /// the gold band, the three text slots and the close hint. Every rect, colour, size and static word
+        /// here is a creation default; the root's visibility is code's, because a preview nobody has clicked
+        /// has to be off.
+        /// </summary>
         RectTransform EnsureReader()
         {
             Transform existing = transform.Find("ReaderPanel");
-            if (existing != null)
-            {
-                reader = existing as RectTransform;
-                var image = existing.GetComponent<Image>();
-                if (image != null)
-                {
-                    // ReaderPanel is now a transparent full-screen overlay. The visible card is its centered
-                    // CardFace child, which lets the preview float over the table without tinting the whole view.
-                    image.color = Color.clear;
-                    image.raycastTarget = false;
-                }
-            }
-            else
+            bool created = existing == null;
+            if (created)
             {
                 var go = new GameObject("ReaderPanel", typeof(RectTransform));
                 go.transform.SetParent(transform, false);
                 reader = go.GetComponent<RectTransform>();
-                var image = go.AddComponent<Image>();
-                image.color = Color.clear;
-                image.raycastTarget = false;
-            }
-
-            // The root covers the screen but does not intercept input. This keeps the child card responsive to
-            // any resolution while the board, hand, and the transparent area around the card remain clickable.
-            reader.anchorMin = Vector2.zero;
-            reader.anchorMax = Vector2.one;
-            reader.pivot = new Vector2(0.5f, 0.5f);
-            reader.sizeDelta = Vector2.zero;
-            reader.anchoredPosition = Vector2.zero;
-
-            Transform existingCard = reader.Find("CardFace");
-            if (existingCard != null)
-            {
-                readerCard = existingCard as RectTransform;
             }
             else
+            {
+                reader = existing as RectTransform;
+            }
+
+            var rootImage = reader.GetComponent<Image>();
+            if (rootImage == null) rootImage = reader.gameObject.AddComponent<Image>();
+
+            // ReaderPanel is a transparent full-screen overlay: the visible card is its centred CardFace
+            // child, which lets the preview float over the table without tinting the whole view. The clear
+            // colour is therefore structural rather than cosmetic - a reader root that somebody painted opaque
+            // would hide the board it is supposed to be previewing a card over - so it is re-asserted on bind,
+            // while the root's rect stays wherever the scene put it.
+            rootImage.color = Color.clear;
+            rootImage.raycastTarget = false;
+
+            if (created)
+            {
+                // The root covers the screen but does not intercept input. This keeps the child card responsive
+                // to any resolution while the board, hand, and the transparent area around the card remain
+                // clickable.
+                reader.anchorMin = Vector2.zero;
+                reader.anchorMax = Vector2.one;
+                reader.pivot = new Vector2(0.5f, 0.5f);
+                reader.sizeDelta = Vector2.zero;
+                reader.anchoredPosition = Vector2.zero;
+            }
+
+            Transform existingCard = reader.Find("CardFace");
+            bool cardCreated = existingCard == null;
+            if (cardCreated)
             {
                 var cardGo = new GameObject("CardFace", typeof(RectTransform), typeof(Image), typeof(Outline));
                 cardGo.transform.SetParent(reader, false);
                 readerCard = cardGo.GetComponent<RectTransform>();
             }
+            else
+            {
+                readerCard = existingCard as RectTransform;
+            }
 
             var cardImage = readerCard.GetComponent<Image>();
-            cardImage.color = readerColor;
+            if (cardImage == null) cardImage = readerCard.gameObject.AddComponent<Image>();
             cardImage.raycastTarget = false;
-            var outline = readerCard.GetComponent<Outline>();
-            outline.effectColor = new Color(1f, 0.82f, 0.35f, 0.78f);
-            outline.effectDistance = new Vector2(5f, 5f);
-            outline.useGraphicAlpha = true;
 
-            readerCard.anchorMin = new Vector2(0.5f, 0.5f);
-            readerCard.anchorMax = new Vector2(0.5f, 0.5f);
-            readerCard.pivot = new Vector2(0.5f, 0.5f);
-            readerCard.sizeDelta = readerSize;
-            readerCard.anchoredPosition = readerOffset;
+            if (cardCreated)
+            {
+                cardImage.color = readerColor;
+                var outline = readerCard.GetComponent<Outline>();
+                if (outline == null) outline = readerCard.gameObject.AddComponent<Outline>();
+                outline.effectColor = new Color(1f, 0.82f, 0.35f, 0.78f);
+                outline.effectDistance = new Vector2(5f, 5f);
+                outline.useGraphicAlpha = true;
+
+                readerCard.anchorMin = new Vector2(0.5f, 0.5f);
+                readerCard.anchorMax = new Vector2(0.5f, 0.5f);
+                readerCard.pivot = new Vector2(0.5f, 0.5f);
+                readerCard.sizeDelta = readerSize;
+                readerCard.anchoredPosition = readerOffset;
+            }
 
             // A slim gold band gives the preview the visual language of a physical trading card before the
             // title and rules text are read.
             Transform accentTransform = readerCard.Find("Accent");
-            GameObject accent = accentTransform != null ? accentTransform.gameObject
-                : new GameObject("Accent", typeof(RectTransform), typeof(Image));
-            if (accentTransform == null) accent.transform.SetParent(readerCard, false);
-            var accentRect = accent.GetComponent<RectTransform>();
-            accentRect.anchorMin = new Vector2(0f, 1f);
-            accentRect.anchorMax = new Vector2(1f, 1f);
-            accentRect.pivot = new Vector2(0.5f, 1f);
-            accentRect.sizeDelta = new Vector2(-readerPadding * 2f, 10f);
-            accentRect.anchoredPosition = new Vector2(0f, -readerPadding + 4f);
-            accent.GetComponent<Image>().color = readerAccentColor;
-            accent.GetComponent<Image>().raycastTarget = false;
+            bool accentCreated = accentTransform == null;
+            GameObject accent = accentCreated
+                ? new GameObject("Accent", typeof(RectTransform), typeof(Image))
+                : accentTransform.gameObject;
+            if (accentCreated) accent.transform.SetParent(readerCard, false);
+
+            var accentImage = accent.GetComponent<Image>();
+            if (accentImage == null) accentImage = accent.AddComponent<Image>();
+            accentImage.raycastTarget = false;
+            if (accentCreated)
+            {
+                var accentRect = accent.GetComponent<RectTransform>();
+                accentRect.anchorMin = new Vector2(0f, 1f);
+                accentRect.anchorMax = new Vector2(1f, 1f);
+                accentRect.pivot = new Vector2(0.5f, 1f);
+                accentRect.sizeDelta = new Vector2(-readerPadding * 2f, 10f);
+                accentRect.anchoredPosition = new Vector2(0f, -readerPadding + 4f);
+                accentImage.color = readerAccentColor;
+            }
 
             float titleHeight = readerTitleSize * 2.4f;
-            float footHeight = readerFootSize * 2.4f;
+            float footHeight = ReaderFootBand;
 
             // Older scene files put these text objects directly under ReaderPanel. Move them into CardFace so
             // the same serialized HUD upgrades in place instead of creating duplicate labels.
@@ -1164,46 +1383,65 @@ namespace Overlink.Match
             MoveReaderTextIntoCard("ReaderFoot");
 
             readerTitle = EnsureText("ReaderTitle", readerCard, readerTitleSize, FontStyles.Bold, readerTitleColor,
-                TextAlignmentOptions.TopLeft, out RectTransform titleRect);
-            titleRect.anchorMin = new Vector2(0f, 1f);
-            titleRect.anchorMax = new Vector2(1f, 1f);
-            titleRect.pivot = new Vector2(0f, 1f);
-            titleRect.sizeDelta = new Vector2(0f, titleHeight);
-            titleRect.anchoredPosition = new Vector2(readerPadding, -readerPadding);
+                TextAlignmentOptions.TopLeft, out RectTransform titleRect, out bool titleCreated);
+            if (titleCreated)
+            {
+                titleRect.anchorMin = new Vector2(0f, 1f);
+                titleRect.anchorMax = new Vector2(1f, 1f);
+                titleRect.pivot = new Vector2(0f, 1f);
+                titleRect.sizeDelta = new Vector2(0f, titleHeight);
+                titleRect.anchoredPosition = new Vector2(readerPadding, -readerPadding);
+            }
 
             readerBody = EnsureText("ReaderBody", readerCard, readerBodySize, FontStyles.Normal, textColor,
-                TextAlignmentOptions.TopLeft, out RectTransform bodyRect);
-            bodyRect.anchorMin = Vector2.zero;
-            bodyRect.anchorMax = Vector2.one;
-            SetRect(bodyRect, readerPadding, readerPadding + footHeight, readerPadding,
-                readerPadding + titleHeight);
+                TextAlignmentOptions.TopLeft, out RectTransform bodyRect, out bool bodyCreated);
+            if (bodyCreated)
+            {
+                bodyRect.anchorMin = Vector2.zero;
+                bodyRect.anchorMax = Vector2.one;
+                SetRect(bodyRect, readerPadding, readerPadding + footHeight, readerPadding,
+                    readerPadding + titleHeight);
+            }
 
             // The footer carries the browsing affordance ("◄ ►" for a pile, "ESC to close" for a card), which
             // is the only way to advertise a control on a panel that cannot hold a button.
             readerFoot = EnsureText("ReaderFoot", readerCard, readerFootSize, FontStyles.Normal, readerFootColor,
-                TextAlignmentOptions.BottomLeft, out RectTransform footRect);
-            footRect.anchorMin = new Vector2(0f, 0f);
-            footRect.anchorMax = new Vector2(1f, 0f);
-            footRect.pivot = new Vector2(0f, 0f);
-            footRect.sizeDelta = new Vector2(0f, footHeight);
-            footRect.anchoredPosition = new Vector2(readerPadding, readerPadding);
+                TextAlignmentOptions.BottomLeft, out RectTransform footRect, out bool footCreated);
+            if (footCreated)
+            {
+                footRect.anchorMin = new Vector2(0f, 0f);
+                footRect.anchorMax = new Vector2(1f, 0f);
+                footRect.pivot = new Vector2(0f, 0f);
+                footRect.sizeDelta = new Vector2(0f, footHeight);
+                footRect.anchoredPosition = new Vector2(readerPadding, readerPadding);
+            }
 
             Transform hintTransform = readerCard.Find("ReaderHint");
-            GameObject hint = hintTransform != null ? hintTransform.gameObject
-                : new GameObject("ReaderHint", typeof(RectTransform), typeof(TextMeshProUGUI));
-            if (hintTransform == null) hint.transform.SetParent(readerCard, false);
-            var hintText = hint.GetComponent<TextMeshProUGUI>();
-            hintText.text = "ESC  /  CLICK ELSEWHERE  TO CLOSE";
-            hintText.fontSize = Mathf.Max(11f, readerFootSize * 0.72f);
-            hintText.color = new Color(0.62f, 0.69f, 0.82f, 0.9f);
-            hintText.alignment = TextAlignmentOptions.Center;
+            bool hintCreated = hintTransform == null;
+            GameObject hintObject = hintCreated
+                ? new GameObject("ReaderHint", typeof(RectTransform), typeof(TextMeshProUGUI))
+                : hintTransform.gameObject;
+            if (hintCreated) hintObject.transform.SetParent(readerCard, false);
+
+            var hintText = hintObject.GetComponent<TextMeshProUGUI>();
+            if (hintText == null) hintText = hintObject.AddComponent<TextMeshProUGUI>();
             hintText.raycastTarget = false;
-            var hintRect = hint.GetComponent<RectTransform>();
-            hintRect.anchorMin = new Vector2(0f, 0f);
-            hintRect.anchorMax = new Vector2(1f, 0f);
-            hintRect.pivot = new Vector2(0.5f, 0f);
-            hintRect.sizeDelta = new Vector2(-readerPadding * 2f, readerFootSize * 1.8f);
-            hintRect.anchoredPosition = new Vector2(0f, readerPadding * 0.35f);
+
+            // The close hint is a static word and therefore the scene's: an authored ReaderPanel keeps whatever
+            // it says, which is the only reason to relabel it if the key binding ever changes.
+            if (hintCreated)
+            {
+                hintText.text = "ESC  /  CLICK ELSEWHERE  TO CLOSE";
+                hintText.fontSize = Mathf.Max(11f, readerFootSize * 0.72f);
+                hintText.color = new Color(0.62f, 0.69f, 0.82f, 0.9f);
+                hintText.alignment = TextAlignmentOptions.Center;
+                var hintRect = hintObject.GetComponent<RectTransform>();
+                hintRect.anchorMin = new Vector2(0f, 0f);
+                hintRect.anchorMax = new Vector2(1f, 0f);
+                hintRect.pivot = new Vector2(0.5f, 0f);
+                hintRect.sizeDelta = new Vector2(-readerPadding * 2f, ReaderHintBand);
+                hintRect.anchoredPosition = new Vector2(0f, readerPadding * 0.35f);
+            }
 
             reader.gameObject.SetActive(false);
             return reader;
@@ -1218,38 +1456,72 @@ namespace Overlink.Match
             }
         }
 
+        /// <summary>
+        /// Resolves a named label under <paramref name="parent"/>, constructing and laying it out if the scene
+        /// has none.
+        /// <para>
+        /// The size, style, colour, alignment and line spacing arguments are creation defaults. An existing
+        /// label is bound and left alone, which is the whole point of the split: a font asset swapped in on
+        /// the scene's copy, or a size nudged to make a line fit, survives every later build. TMP's own
+        /// defaults on a freshly added component are not what this project ships (wrapping off, overflow not
+        /// Truncate, raycast target on), so every path that makes a label styles it, and no path restyles one
+        /// it found.
+        /// </para>
+        /// </summary>
+        /// <param name="created">False when the scene already carried this label, which is the signal the
+        /// caller needs to skip its own rect writes: a label bound from the scene keeps the anchors somebody
+        /// set in the Inspector exactly as it keeps the font and the colour.</param>
         TextMeshProUGUI EnsureText(string name, RectTransform parent, float size, FontStyles style,
-            Color color, TextAlignmentOptions alignment, out RectTransform rect)
+            Color color, TextAlignmentOptions alignment, out RectTransform rect, out bool created)
         {
             Transform existing = parent.Find(name);
             if (existing != null)
             {
+                created = false;
                 var found = existing.GetComponent<TextMeshProUGUI>();
                 if (found != null)
                 {
-                    found.fontSize = size;
-                    found.fontStyle = style;
-                    found.color = color;
-                    found.alignment = alignment;
-                    found.lineSpacing = lineSpacing;
                     rect = found.rectTransform;
                     return found;
                 }
+
+                // Named object with no label on it: an authored panel whose text somebody stripped, or a
+                // plain GameObject dropped in under the right name. Add the component rather than stacking a
+                // second object beside it, then style it, because a bare TextMeshProUGUI inherits TMP's own
+                // defaults and those are not what this HUD ships (no wrapping, overflow not Truncate, raycast
+                // target on) - but leave its rect alone, since that is the part the scene was describing.
+                found = existing.gameObject.AddComponent<TextMeshProUGUI>();
+                rect = found.rectTransform;
+                StyleText(found, size, style, color, alignment);
+                found.raycastTarget = false;
+                return found;
             }
 
+            created = true;
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var tmp = go.AddComponent<TextMeshProUGUI>();
-            tmp.fontSize = size;
-            tmp.fontStyle = style;
-            tmp.color = color;
-            tmp.alignment = alignment;
-            tmp.lineSpacing = lineSpacing;
-            tmp.enableWordWrapping = true;
-            tmp.overflowMode = TextOverflowModes.Truncate;
-            tmp.raycastTarget = false;
             rect = tmp.rectTransform;
+            StyleText(tmp, size, style, color, alignment);
+            tmp.raycastTarget = false;
             return tmp;
+        }
+
+        /// <summary>
+        /// The settings a label this component just made has to carry to behave like the rest of the HUD.
+        /// Split out so the two create paths above share one definition of "fresh" and a bind path can never
+        /// reach it.
+        /// </summary>
+        void StyleText(TextMeshProUGUI text, float size, FontStyles style, Color color,
+            TextAlignmentOptions alignment)
+        {
+            text.fontSize = size;
+            text.fontStyle = style;
+            text.color = color;
+            text.alignment = alignment;
+            text.lineSpacing = lineSpacing;
+            text.enableWordWrapping = true;
+            text.overflowMode = TextOverflowModes.Truncate;
         }
 
         static void SetRect(RectTransform rect, float left, float bottom, float right, float top)
@@ -1308,6 +1580,10 @@ namespace Overlink.Match
                 body.ForceMeshUpdate();
                 if (body.textInfo.characterCount >= joined.Length)
                 {
+                    if (Application.isPlaying && panel != null)
+                    {
+                        logMotion = StartPulse(logMotion, panel, 1.018f, 0.16f);
+                    }
                     return;
                 }
 
@@ -1317,6 +1593,49 @@ namespace Overlink.Match
 
             logShown = joined;
             body.text = joined;
+            if (Application.isPlaying && panel != null)
+            {
+                logMotion = StartPulse(logMotion, panel, 1.018f, 0.16f);
+            }
+        }
+
+        /// <summary>
+        /// A small unscaled UI pulse used for state changes. This is deliberately view-only: it never blocks input,
+        /// changes a command, or changes the authored resting scale of a panel after the pulse completes.
+        /// </summary>
+        Coroutine StartPulse(Coroutine current, RectTransform target, float peak, float duration)
+        {
+            if (target == null || !Application.isPlaying)
+            {
+                return current;
+            }
+
+            if (current != null)
+            {
+                StopCoroutine(current);
+            }
+
+            return StartCoroutine(Pulse(target, peak, duration));
+        }
+
+        IEnumerator Pulse(RectTransform target, float peak, float duration)
+        {
+            Vector3 startScale = target != null ? target.localScale : Vector3.one;
+            float elapsed = 0f;
+
+            while (elapsed < duration && target != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float wave = Mathf.Sin(t * Mathf.PI);
+                target.localScale = startScale * Mathf.Lerp(1f, peak, wave);
+                yield return null;
+            }
+
+            if (target != null)
+            {
+                target.localScale = startScale;
+            }
         }
 
         /// <summary>The entries from <c>start</c> to <c>count</c>, newline-joined, oldest first.</summary>
@@ -1348,8 +1667,45 @@ namespace Overlink.Match
         public string ReaderFoot => readerFoot != null ? readerFoot.text : string.Empty;
 
         /// <summary>
-        /// Puts a card in front of the player: the title band names it, the body carries its stats and text,
-        /// and the footer says what the panel is being used for (browsing a pile, or nothing at all).
+        /// True while anything of the stats sheet is still on screen: the slab, its gold band, or either text
+        /// block. Card mode owes this false - the point of holding the card up is that a player does not read the
+        /// same card twice, once as art and once as a list of its numbers.
+        /// </summary>
+        public bool ReaderSheetVisible
+        {
+            get
+            {
+                if (readerCard == null)
+                {
+                    return false;
+                }
+
+                Image slab = readerCard.GetComponent<Image>();
+                if (slab != null && slab.enabled)
+                {
+                    return true;
+                }
+
+                Transform accent = readerCard.Find("Accent");
+                if (accent != null && accent.gameObject.activeSelf)
+                {
+                    return true;
+                }
+
+                return (readerTitle != null && readerTitle.gameObject.activeSelf)
+                    || (readerBody != null && readerBody.gameObject.activeSelf);
+            }
+        }
+
+        /// <summary>
+        /// Puts a card in front of the player as a sheet of text: the title band names it, the body carries its
+        /// stats and text, and the footer says what the panel is being used for (browsing a pile, or nothing at
+        /// all).
+        /// <para>
+        /// This is the mode for anything that is not a card - a Node, a Core, an empty socket, the deck - and for
+        /// a card with no face to draw, which outside play mode is every card. A card the player can see gets
+        /// <see cref="ShowReaderCard"/> instead.
+        /// </para>
         /// <para>
         /// A null <paramref name="title"/> or body clears the panel instead, which is the same call path the
         /// dismiss uses - there is no second code path for hiding that can drift from it.
@@ -1373,6 +1729,8 @@ namespace Overlink.Match
                 return;
             }
 
+            SetReaderMode(false);
+
             readerTitle.text = title ?? string.Empty;
             readerBody.text = body ?? string.Empty;
             readerFoot.text = foot ?? string.Empty;
@@ -1391,6 +1749,124 @@ namespace Overlink.Match
                     accentImage.color = accent ?? readerAccentColor;
                 }
             }
+            OpenReader();
+        }
+
+        /// <summary>
+        /// Puts a real card in front of the player. The presenter draws the card itself in the world - this
+        /// panel's only job in card mode is the one line the card's own frame cannot say, where it stands,
+        /// plus the close hint.
+        /// <para>
+        /// It exists because the stats slab duplicated the face: cost, name, type, attack, health, shield and
+        /// the ability text are all printed on the card, so a player who clicked a card read the same facts
+        /// twice, once on the art and once as a wall of text under it.
+        /// </para>
+        /// </summary>
+        /// <param name="foot">The position line under the card, e.g. <c>NODE 2 ACTIVE</c>. Null clears it.</param>
+        public void ShowReaderCard(string foot)
+        {
+            if (readerTitle == null || readerBody == null)
+            {
+                Build();
+            }
+
+            if (reader == null)
+            {
+                return;
+            }
+
+            SetReaderMode(true);
+            readerFoot.text = foot ?? string.Empty;
+            OpenReader();
+        }
+
+        /// <summary>True while the reader is standing down so the world-space card can be read.</summary>
+        public bool ReaderShowsCard { get; private set; }
+
+        TextMeshProUGUI inspectionDetails;
+
+        /// <summary>Companion text for the 3D preview, including the full unabridged ability.</summary>
+        public void SetInspectionDetails(string title, string details)
+        {
+            if (reader == null) return;
+            if (inspectionDetails == null && !string.IsNullOrEmpty(title))
+            {
+                Transform existing = reader.Find("InspectionDetails");
+                GameObject panel = existing != null ? existing.gameObject
+                    : new GameObject("InspectionDetails", typeof(RectTransform), typeof(Image));
+                if (existing == null)
+                {
+                    panel.transform.SetParent(reader, false);
+                    RectTransform rect = panel.GetComponent<RectTransform>();
+                    rect.anchorMin = new Vector2(0.73f, 0.25f);
+                    rect.anchorMax = new Vector2(0.98f, 0.75f);
+                    rect.offsetMin = Vector2.zero;
+                    rect.offsetMax = Vector2.zero;
+                    Image image = panel.GetComponent<Image>();
+                    image.color = readerColor;
+                    image.raycastTarget = false;
+                }
+                inspectionDetails = EnsureText("Text", panel.GetComponent<RectTransform>(), readerBodySize,
+                    FontStyles.Normal, textColor, TextAlignmentOptions.TopLeft, out RectTransform textRect, out bool created);
+                if (created)
+                {
+                    textRect.anchorMin = Vector2.zero;
+                    textRect.anchorMax = Vector2.one;
+                    SetRect(textRect, 18f, 18f, 18f, 18f);
+                    inspectionDetails.enableAutoSizing = true;
+                    inspectionDetails.fontSizeMin = 12f;
+                    inspectionDetails.fontSizeMax = readerBodySize;
+                }
+            }
+            if (inspectionDetails == null) return;
+            inspectionDetails.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(title));
+            inspectionDetails.text = string.IsNullOrEmpty(title) ? string.Empty : "<b>" + title + "</b>\n\n" + details;
+        }
+
+        /// <summary>
+        /// Swaps the reader between its two faces. Text mode is the slab and its three bands; card mode strikes
+        /// the slab, the gold accent and the two text blocks that the card already prints better, and leaves the
+        /// position line and the close hint standing.
+        /// <para>
+        /// Hiding rather than moving is deliberate: the foot and the hint are children of the slab, so they keep
+        /// the layout the scene authored and the entrance animation still has something to carry.
+        /// </para>
+        /// </summary>
+        void SetReaderMode(bool cardMode)
+        {
+            ReaderShowsCard = cardMode;
+
+            if (readerCard == null)
+            {
+                return;
+            }
+
+            Image slab = readerCard.GetComponent<Image>();
+            if (slab != null)
+            {
+                slab.enabled = !cardMode;
+            }
+
+            Transform accent = readerCard.Find("Accent");
+            if (accent != null)
+            {
+                accent.gameObject.SetActive(!cardMode);
+            }
+
+            if (readerTitle != null)
+            {
+                readerTitle.gameObject.SetActive(!cardMode);
+            }
+
+            if (readerBody != null)
+            {
+                readerBody.gameObject.SetActive(!cardMode);
+            }
+        }
+
+        /// <summary>Brings the panel up and restarts its entrance, from either face.</summary>
+        void OpenReader()
+        {
             reader.gameObject.SetActive(true);
 
             if (Application.isPlaying && readerCard != null)
@@ -1402,6 +1878,57 @@ namespace Overlink.Match
 
                 readerMotion = StartCoroutine(FloatReaderIn());
             }
+        }
+
+        /// <summary>
+        /// The box a real card should fill while the reader is in card mode, in screen pixels: its centre and
+        /// its full height.
+        /// <para>
+        /// The panel hands this over instead of the presenter guessing. The card is drawn in the world and has
+        /// to land inside the slab the scene already reserved for it, and the only geometry that can promise
+        /// that across every resolution is the slab's own. The foot and hint bands come off the bottom of the
+        /// box because an overlay canvas draws over every world sprite, and text sharing the card's space
+        /// would print across its attack plate.
+        /// </para>
+        /// </summary>
+        /// <returns>False when the reader has no geometry to measure, so the caller should not show a card.</returns>
+        public bool TryGetReaderCardBox(out Vector2 screenCenter, out float screenHeightPixels)
+        {
+            screenCenter = Vector2.zero;
+            screenHeightPixels = 0f;
+
+            if (readerCard == null)
+            {
+                return false;
+            }
+
+            float half = readerSize.y * 0.5f;
+            float top = half - readerPadding;
+            float bottom = -half + readerPadding + ReaderFootBand + ReaderHintBand;
+            if (bottom >= top)
+            {
+                return false;
+            }
+
+            // Measured through the rect's own matrix rather than from readerSize, so a scene that rescales or
+            // offsets the slab is reflected in the box the card is posed into. The rect's live scale is
+            // divided back out: the entrance animation scales the slab, and a box that breathed with it would
+            // make the card fight its own way in.
+            Camera uiCamera = canvas != null ? canvas.worldCamera : null;
+            float sy = Mathf.Abs(readerCard.localScale.y) < 0.001f ? 1f : Mathf.Abs(readerCard.localScale.y);
+            Vector2 mid = RectTransformUtility.WorldToScreenPoint(uiCamera,
+                readerCard.TransformPoint(new Vector3(0f, (top + bottom) * 0.5f / sy, 0f)));
+            Vector2 up = RectTransformUtility.WorldToScreenPoint(uiCamera,
+                readerCard.TransformPoint(new Vector3(0f, top / sy, 0f)));
+
+            screenHeightPixels = Vector2.Distance(mid, up) * 2f;
+            if (screenHeightPixels < 2f)
+            {
+                return false;
+            }
+
+            screenCenter = mid;
+            return true;
         }
 
         IEnumerator FloatReaderIn()
@@ -1434,6 +1961,8 @@ namespace Overlink.Match
         /// <summary>Takes the details panel off screen. Safe when it was never shown.</summary>
         public void HideReader()
         {
+            ReaderShowsCard = false;
+
             if (reader != null)
             {
                 if (readerMotion != null)

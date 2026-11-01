@@ -5,6 +5,7 @@
         "Overlink.Cards",
         "Overlink.Core",
         "Overlink.Match",
+        "Overlink.UI",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [

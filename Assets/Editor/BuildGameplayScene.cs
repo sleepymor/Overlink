@@ -128,7 +128,7 @@ namespace Overlink.EditorTools
             // the ceiling. This used to seed maxDistance from the opening constant, which made the two the same
             // number and left no zoom-out at all: the first scroll notch out of a fresh match went straight into
             // the crane toward bird's-eye, so an accidental scroll lifted the camera off the board.
-            const float minDistance = 7f;
+            const float minDistance = 8.8f;
             const float maxDistance = 17f;
             const float zoomStep = 1.5f;
             const float birdDistance = 18f;

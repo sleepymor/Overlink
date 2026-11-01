@@ -75,6 +75,11 @@ namespace Overlink.Net
             "CardPresentation",
             "CardCollectionPreview",
             "CardFrameMatrixPreview",
+            // Gacha hosts the deterministic offline pack-opening prototype. Keep it directly testable
+            // from the Editor until its future account-backed economy service is wired.
+            "Gacha",
+            // Collection hosts the offline binder prototype that shares Gacha's deterministic data.
+            "Collection",
         };
 
         static bool IsCardPreviewScene(string sceneName)

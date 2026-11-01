@@ -18,6 +18,9 @@ EditorBuildSettings:
     path: Assets/Scenes/Deckbuilder.unity
     guid: e2713f658499c644d846febfbcfe0b07
   - enabled: 1
+    path: Assets/Scenes/Gacha.unity
+    guid: 0009069eb2351024d98192877effc945
+  - enabled: 1
     path: Assets/Scenes/Collection.unity
     guid: 64895fc379c25cf4885829e4b38eaafa
   - enabled: 1

@@ -506,6 +506,359 @@ namespace Overlink.Match.Tests
         }
 
         /// <summary>
+        /// The two halves of this table ship with one card orientation, and only the scene can break that.
+        /// <para>
+        /// Every caption on the board is authored at the identity, so inheriting the caption's pose gives all
+        /// thirty-six sockets the same rotation - which is why an opponent's card reads upright from your seat
+        /// exactly as your own does. <c>opponentCardExtraRotation</c> exists to turn that on purpose for the
+        /// real-table convention, and this test holds it to three things: it moves their cards, it does not move
+        /// yours, and it does not move a single caption, because SPENT and SUMMONING are the words that have to
+        /// stay readable whichever way the card beneath them lies.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void BoardCard_OpponentDialTurnsTheirCardsOnlyAndNoCaption()
+        {
+            BattlefieldPresenter presenter = CardBoard();
+            MatchState state = NewMatch();
+            CardInstance mine = Place(state, PlayerIndex.Player, SlotType.CoreActive, 0, -1, "Near Post");
+            CardInstance theirs = Place(state, PlayerIndex.Opponent, SlotType.CoreActive, 0, -1, "Far Post");
+
+            presenter.Repaint(state);
+
+            BattlefieldPresenter.Tile mineTile = presenter.TileOf(mine);
+            BattlefieldPresenter.Tile theirTile = presenter.TileOf(theirs);
+            Assert.IsNotNull(mineTile.Card, "the near card must be on the board");
+            Assert.IsNotNull(theirTile.Card, "and the far card too, or there is no second half to measure");
+
+            Assert.AreEqual(mineTile.Card.transform.localRotation, theirTile.Card.transform.localRotation,
+                "By default one card orientation serves the whole table. A half that reads differently from the " +
+                "other is a change somebody has to ask for in the scene, not something the pose drifts into.");
+
+            // The captions are the board's voice and they belong to the seat reading the screen, not to the card
+            // they describe. A dial that turned them with the card would put SPENT upside down. Read before the
+            // dial is set, because the claim is "unchanged", not "identity" - a board re-posed in the scene would
+            // still be owed that guarantee.
+            Quaternion captionBefore = theirTile.Label.transform.localRotation;
+
+            presenter.opponentCardExtraRotation = new Vector3(0f, 0f, 180f);
+            presenter.Repaint(state);
+
+            Assert.AreEqual(Quaternion.Euler(0f, 0f, 180f), theirTile.Card.transform.localRotation,
+                "Turning the opponent's half about the card's own normal is the whole dial: their card must come " +
+                "round to face its owner.");
+            Assert.AreEqual(mineTile.Label.transform.localRotation, mineTile.Card.transform.localRotation,
+                "and the near half is untouched by a dial that names the opponent, or the knob would be a " +
+                "whole-board rotation wearing an owner's label.");
+            Assert.AreEqual(captionBefore, theirTile.Label.transform.localRotation,
+                "A state word turns with nothing: the dial is the card's business alone.");
+        }
+
+        /// <summary>
+        /// The opponent dial is a half-turn about the card's own centre, and that is the whole reason it is safe
+        /// to ship: a rect spun about its centre maps onto itself, so their cards cannot leave their sockets.
+        /// <para>
+        /// <c>BoardCard_FitsInsideItsSocketOnTheTighterAxis</c> measures <see cref="CardView.Size"/>, which no
+        /// rotation changes, so it would keep passing over a card hung from a socket's edge instead of centred on
+        /// it - and a spun card hanging from an edge sweeps a full diameter of table, straight into the neighbour
+        /// beside it. This measures the corners in the socket's own frame, which is the claim a screenshot of the
+        /// far half would actually be making.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void BoardCard_OpponentDialSpinsAboutTheCardCentreAndNotItsSocket()
+        {
+            BattlefieldPresenter presenter = CardBoard();
+            MatchState state = NewMatch();
+            CardInstance theirs = Place(state, PlayerIndex.Opponent, SlotType.CoreActive, 0, -1, "Far Post");
+
+            presenter.Repaint(state);
+            BattlefieldPresenter.Tile tile = presenter.TileOf(theirs);
+            Assert.IsNotNull(tile.Card, "no card means no corners, and this test would pass over nothing");
+
+            Rect before = CardFootprintInSocketSpace(tile.Card);
+            Vector2 upBefore = UpInSocketSpace(tile.Card);
+
+            presenter.opponentCardExtraRotation = new Vector3(0f, 0f, 180f);
+            presenter.Repaint(state);
+
+            Vector2 upAfter = UpInSocketSpace(tile.Card);
+            Assert.AreEqual(-1f, upAfter.y, 1e-3f,
+                "the dial has to actually turn the card, or every assertion below is measuring the pose it " +
+                "already had");
+            Assert.AreEqual(0f, upAfter.x, 1e-3f, "and in the table plane only: no tilt, no lift");
+
+            Rect after = CardFootprintInSocketSpace(tile.Card);
+            // Compared edge by edge with a tolerance rather than as Rect.Equals, which is exact over floats. A
+            // half-turn is carried as a quaternion whose sine is not quite zero (about 8.7e-8 at 180 degrees), so
+            // the corners come back the same to within noise and a bit-exact assert would fail on arithmetic no
+            // player can see. The tolerance is a hundredth of a pixel at the table's scale, far below anything
+            // that could let a card reach its neighbour.
+            Assert.That(after.xMin, Is.EqualTo(before.xMin).Within(1e-4f), "the spun card's left edge moved");
+            Assert.That(after.xMax, Is.EqualTo(before.xMax).Within(1e-4f), "and its right edge");
+            Assert.That(after.yMin, Is.EqualTo(before.yMin).Within(1e-4f), "and its bottom edge");
+            Assert.That(after.yMax, Is.EqualTo(before.yMax).Within(1e-4f),
+                "and its top edge - together these say a half-turn about the card's centre leaves its corners " +
+                "exactly where they were, so the far half cannot reach outside the socket it stands on.");
+
+            // The socket itself, as the bound the footprint has to respect. Spelled out rather than trusted to
+            // the comparison above, so a failure says which of the two has moved.
+            Assert.LessOrEqual(Mathf.Max(Mathf.Abs(after.xMin), Mathf.Abs(after.xMax)), tile.Size.x * 0.5f + 1e-4f,
+                "the spun card overhangs its socket in width, so it covers the ring that says whose unit this is.");
+            Assert.LessOrEqual(Mathf.Max(Mathf.Abs(after.yMin), Mathf.Abs(after.yMax)), tile.Size.y * 0.5f + 1e-4f,
+                "and in height.");
+        }
+
+        /// <summary>
+        /// The card's four face corners measured in the space its socket is drawn in. The face is one co-planar
+        /// sheet about the card's own origin, so the corners are simply half a size either way in local space;
+        /// everything else is the transform's business, which is exactly what is being tested.
+        /// </summary>
+        static Rect CardFootprintInSocketSpace(CardView card)
+        {
+            Transform t = card.transform;
+            float hx = card.Size.x * 0.5f;
+            float hy = card.Size.y * 0.5f;
+            Vector2[] locals =
+            {
+                new Vector2(-hx, hy), new Vector2(hx, hy), new Vector2(hx, -hy), new Vector2(-hx, -hy)
+            };
+
+            var box = new Rect();
+            for (int i = 0; i < locals.Length; i++)
+            {
+                Vector3 world = t.TransformPoint(new Vector3(locals[i].x, locals[i].y, 0f));
+                Vector3 inSocket = t.parent.InverseTransformPoint(world);
+                if (i == 0)
+                {
+                    box = new Rect(inSocket.x, inSocket.y, 0f, 0f);
+                }
+                else
+                {
+                    box = Rect.MinMaxRect(Mathf.Min(box.xMin, inSocket.x), Mathf.Min(box.yMin, inSocket.y),
+                        Mathf.Max(box.xMax, inSocket.x), Mathf.Max(box.yMax, inSocket.y));
+                }
+            }
+
+            return box;
+        }
+
+        /// <summary>The card's own up direction, read in the socket's frame so the table's pose cancels out.</summary>
+        static Vector2 UpInSocketSpace(CardView card)
+        {
+            Vector3 up = card.transform.parent.InverseTransformDirection(card.transform.up);
+            return new Vector2(up.x, up.y);
+        }
+
+        // ---- The inspected card --------------------------------------------------------------
+
+        /// <summary>
+        /// A reader HUD the presenter can be wired to, under a name <c>BattlefieldHud.Find</c> cannot match, for
+        /// the reason written in <c>BattlefieldHudTests</c>: an EditMode run happens with the gameplay scene open,
+        /// and a fixture that bound to that HUD would be editing a real scene object.
+        /// </summary>
+        BattlefieldHud NewHud()
+        {
+            var go = new GameObject(BattlefieldHud.RootName + " (Test)", typeof(RectTransform));
+            spawned.Add(go);
+
+            BattlefieldHud hud = go.AddComponent<BattlefieldHud>();
+            hud.Build();
+            return hud;
+        }
+
+        /// <summary>
+        /// The preview is the card the player already has on the table, drawn by the same <c>CardView</c> the
+        /// sockets and the fan use - so it needs a <see cref="CardData"/> behind the instance, and a bare board
+        /// is exactly what does not have one.
+        /// <para>
+        /// The fallback matters because the alternative is a card assembled from the placeholder fixture and
+        /// handed to the player as if it were the one they clicked: a fake card in a real reader, which is the
+        /// failure <c>SyncBoardCard</c> already refuses for the same reason.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ShowCard_WithNoFaceToDraw_KeepsTheTextSheetAndBuildsNoPlaceholder()
+        {
+            BattlefieldPresenter presenter = CardBoard();
+            presenter.hud = NewHud();
+
+            MatchState state = NewMatch();
+            CardInstance card = Place(state, PlayerIndex.Player, SlotType.CoreActive, 0, -1, "Near Post");
+            presenter.Repaint(state);
+
+            // No resolver: the bare-board case, where nothing can project a face.
+            presenter.cardDataResolver = null;
+            presenter.ShowCard(card, state, "YOUR CORE ACTIVE");
+
+            Assert.IsFalse(presenter.hud.ReaderShowsCard,
+                "outside play mode, or with no data behind the instance, the reader stays a sheet of text");
+            Assert.AreEqual("Near Post", presenter.hud.ReaderTitle);
+            Assert.IsNotEmpty(presenter.hud.ReaderBody, "and it still says what the card does");
+        }
+
+        /// <summary>
+        /// The one bridge in the preview: the reader hands over a box in screen pixels and the card is posed in
+        /// world units, so the ratio between them decides whether the card fits the reader or overflows it.
+        /// <para>
+        /// Aspect is asserted first, because every label zone on a face is authored against the 832&times;1216
+        /// frame canvas. A size that kept the height and lost the aspect would put the attack plate outside its
+        /// own plate, and that is a bug no amount of "it is the right height" would catch.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void SizeForReaderBox_KeepsTheFrameAspectAndGrowsWithTheBox()
+        {
+            Camera cam = NewCamera();
+
+            Vector3 size = BattlefieldPresenter.SizeForReaderBox(cam, 5f, 520f, 1f);
+            Assert.Greater(size.y, 0f, "a box of 520 pixels has to produce a card, not nothing");
+            Assert.AreEqual(CardView.CardSize.y / CardView.CardSize.x, size.y / size.x, 1e-3f,
+                "the card keeps the frame canvas aspect the face zones are authored against");
+
+            Vector3 doubled = BattlefieldPresenter.SizeForReaderBox(cam, 5f, 1040f, 1f);
+            Assert.AreEqual(size.y * 2f, doubled.y, 1e-2f,
+                "twice the box is twice the card: the fill is a linear ratio, not a curve somebody guessed");
+
+            Vector3 halved = BattlefieldPresenter.SizeForReaderBox(cam, 5f, 520f, 0.5f);
+            Assert.AreEqual(size.y * 0.5f, halved.y, 1e-2f, "and the fill knob scales it the same way");
+        }
+
+        /// <summary>
+        /// Perspective grows a card with its distance from the lens, so the depth the preview stands at cannot be
+        /// tuned independently of the size it is built at - which is why the size is measured through the camera
+        /// rather than authored. An orthographic lens has no such growth, and the same box must give the same card
+        /// however far the rig pulls back.
+        /// </summary>
+        [Test]
+        public void SizeForReaderBox_TracksTheLensThatWillDrawIt()
+        {
+            var perspective = NewCamera();
+            perspective.orthographic = false;
+            perspective.fieldOfView = 38f;
+
+            Vector3 near = BattlefieldPresenter.SizeForReaderBox(perspective, 4f, 520f, 1f);
+            Vector3 far = BattlefieldPresenter.SizeForReaderBox(perspective, 8f, 520f, 1f);
+            Assert.Greater(far.y, near.y,
+                "the same pixel box is a wider slice of world space further from the lens");
+
+            var ortho = NewCamera();
+            ortho.orthographic = true;
+            ortho.orthographicSize = 5f;
+
+            Vector3 orthoNear = BattlefieldPresenter.SizeForReaderBox(ortho, 4f, 520f, 1f);
+            Vector3 orthoFar = BattlefieldPresenter.SizeForReaderBox(ortho, 8f, 520f, 1f);
+            Assert.AreEqual(orthoNear.y, orthoFar.y, 1e-3f,
+                "and an orthographic lens owes the box the same card at every depth");
+        }
+
+        /// <summary>
+        /// Garbage in, no card out. A zero or negative box would otherwise reach <c>CardView.SetSize</c> and lay a
+        /// face out at nothing, which reads as a preview that opened on an invisible card.
+        /// </summary>
+        [Test]
+        public void SizeForReaderBox_WithNothingToFill_ReturnsNoCard()
+        {
+            Camera cam = NewCamera();
+
+            Assert.AreEqual(Vector3.zero, BattlefieldPresenter.SizeForReaderBox(cam, 5f, 0f, 1f));
+            Assert.AreEqual(Vector3.zero, BattlefieldPresenter.SizeForReaderBox(cam, 5f, -20f, 1f));
+            Assert.AreEqual(Vector3.zero, BattlefieldPresenter.SizeForReaderBox(cam, 5f, 520f, 0f));
+            Assert.AreEqual(Vector3.zero, BattlefieldPresenter.SizeForReaderBox(null, 5f, 520f, 1f));
+        }
+
+        /// <summary>
+        /// The line under the card. It carries the two facts the frame cannot: where the card stands, and whether
+        /// it can act. Both halves are optional, and the separator has to disappear with them - a footer ending in
+        /// a dangling bullet reads as a truncated string.
+        /// </summary>
+        [Test]
+        public void ComposeFooter_JoinsTheTwoHalvesWithoutADanglingSeparator()
+        {
+            Assert.AreEqual("YOUR NODE 2 ACTIVE   •   EXHAUSTED",
+                BattlefieldPresenter.ComposeFooter("YOUR NODE 2 ACTIVE", "EXHAUSTED"));
+            Assert.AreEqual("DISCARD  3 / 9", BattlefieldPresenter.ComposeFooter("DISCARD  3 / 9", null),
+                "a spent card has no state on the table to report");
+            Assert.AreEqual("SUMMONING DELAY", BattlefieldPresenter.ComposeFooter(null, "SUMMONING DELAY"));
+            Assert.IsNull(BattlefieldPresenter.ComposeFooter(null, null));
+        }
+
+        /// <summary>
+        /// Whether a card can act, without the slot word <see cref="BattlefieldPresenter"/> reads off the board.
+        /// <para>
+        /// <c>StatusLine</c> prefixes the socket type because it is the whole body of a text read; here the
+        /// position line already names the socket, and "YOUR NODE 2 ACTIVE • ACTIVE" is the same word twice. A
+        /// ready unit therefore says nothing at all.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ReadinessLine_SaysOnlyWhatTheFrameCannot()
+        {
+            // A card that has been brought up to Ready is the one state with nothing to report: it can act, and
+            // a footnote saying so would be the socket's own colour doing the same job again.
+            var ready = new CardInstance(UnitDef("def_ready", "Ready", 1, 1, 1), PlayerIndex.Player)
+            {
+                State = UnitState.Ready
+            };
+            Assert.IsNull(BattlefieldPresenter.ReadinessLine(ready), "a unit that can act needs no footnote");
+
+            // A fresh instance arrives Summoned rather than Ready - CardInstance's constructor says so - so the
+            // footnote has something to say on the turn it lands, which is exactly the turn a player is most
+            // likely to click it wondering why it will not attack.
+            var justArrived = new CardInstance(UnitDef("def_new", "New", 1, 1, 1), PlayerIndex.Player);
+            Assert.AreEqual("SUMMONED", BattlefieldPresenter.ReadinessLine(justArrived));
+
+            var exhausted = new CardInstance(UnitDef("def_spent", "Spent", 1, 1, 1), PlayerIndex.Player)
+            {
+                State = UnitState.Exhausted
+            };
+            Assert.AreEqual("EXHAUSTED", BattlefieldPresenter.ReadinessLine(exhausted));
+
+            var delaying = new CardInstance(UnitDef("def_delay", "Delayed", 1, 1, 1), PlayerIndex.Player)
+            {
+                HasSummoningDelay = true,
+                State = UnitState.Exhausted
+            };
+            Assert.AreEqual("SUMMONING DELAY", BattlefieldPresenter.ReadinessLine(delaying),
+                "the delay outranks the state, because it is the longer wait and the one that cannot be acted on");
+
+            // A Protocol is not deployed into a socket, so Upkeep never readies it and it stays Summoned for the
+            // whole match. Printing the word would promise a change that never arrives.
+            var protocol = new CardInstance(new CardDefinition
+            {
+                Id = "def_proto",
+                Name = "Uplink",
+                Faction = Faction.Fsti,
+                Rarity = Rarity.Common,
+                Type = CardType.Protocol,
+                Cost = 2,
+                AbilityText = "Hosts one Relay."
+            }, PlayerIndex.Player);
+            Assert.IsNull(BattlefieldPresenter.ReadinessLine(protocol),
+                "a card the engine never readies has no readiness to report");
+        }
+
+        /// <summary>
+        /// A lens to measure the box through. <c>Screen.height</c> is the editor's own game view in an EditMode
+        /// run, and a headless batch has none, so the sizing tests are skipped rather than passed over a number
+        /// that was never there.
+        /// </summary>
+        Camera NewCamera()
+        {
+            if (Screen.height <= 1)
+            {
+                Assert.Ignore("the box is measured in screen pixels, and this run has no viewport to mean them in");
+            }
+
+            var go = new GameObject("SizeForReaderBoxCamera", typeof(Camera));
+            spawned.Add(go);
+
+            var cam = go.GetComponent<Camera>();
+            cam.transform.position = new Vector3(0f, 0f, -10f);
+            return cam;
+        }
+
+        /// <summary>
         /// A card face writes no depth, so where it lands in the pile is sorting order's business alone - and
         /// this tabletop renders through URP's 2D Renderer, which orders <em>meshes</em> by that same key. So a
         /// board card's lane is a gap with two walls: above the socket it stands on, or the player never sees the

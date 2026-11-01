@@ -822,7 +822,7 @@ namespace Overlink.Core
             // what the Upkeep below would have done on its own. Two reasons, and the second is the important one.
             // The first is the rule: the lineup is not a deployment, so [Summoning Delay] has nothing to delay.
             // The second is that a unit which is not Ready cannot block, so if the second seat's lineup had waited
-            // for its own first Upkeep, the first player would have swung five Ready bodies at a 3-durability Core
+            // for its own first Upkeep, the first player would have swung five Ready bodies at the opposing Core
             // with nothing able to intercept - an unavoidable loss dressed up as a tempo disadvantage.
             for (int i = 0; i < Players.Length; i++)
             {
