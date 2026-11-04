@@ -21,6 +21,9 @@ EditorBuildSettings:
     path: Assets/Scenes/Gacha.unity
     guid: 0009069eb2351024d98192877effc945
   - enabled: 1
+    path: Assets/Scenes/RevealGacha.unity
+    guid: a7701969894647147bcbb09cdcee8867
+  - enabled: 1
     path: Assets/Scenes/Collection.unity
     guid: 64895fc379c25cf4885829e4b38eaafa
   - enabled: 1
@@ -29,31 +32,31 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/NetPresenceDemo.unity
     guid: 8cd5b3163fa1c5c40ab58386b2f6663a
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardPresentationPreview.unity
     guid: fd07e8b8987f59e41a90e7b93876f737
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardPresentationLegendaryPreview.unity
     guid: 6e67cbbfcd48ee646b837913f6a290a2
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardCollectionPreview.unity
     guid: 67184098f44259043b55881d83e5e196
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardCollectionPreview_FRTI.unity
     guid: eddfa713727074c46945d49cec8b01e7
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardCollectionPreview_FPB.unity
     guid: edbd391e9fe503243b4995030e90cbcf
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardFrameMatrixPreview_Unit.unity
     guid: 56ef12593a077ed449e2c27c841a9b63
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardFrameMatrixPreview_Ability.unity
     guid: dbc540ff4ace7374888fd9f15774863b
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardFrameMatrixPreview_Relay.unity
     guid: 317817c94c4b31f41965dc2b6f9fe452
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CardFrameMatrixPreview_Protocol.unity
     guid: 9dc6f4aaee081834d917038ece052b96
   - enabled: 0

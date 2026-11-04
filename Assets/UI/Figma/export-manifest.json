@@ -1,0 +1,72 @@
+{
+  "source": "https://www.figma.com/design/pw0k1fW8ql6d1NUwsQEz9p/OverlinkTCG?node-id=1-2&t=EtxSWO4ZETioyDIp-1",
+  "rule": "Component PNGs may skin serialized Unity controls; full-screen reference images may not be active screen composition.",
+  "importDefaults": {
+    "textureType": "Sprite",
+    "spriteMode": "Single",
+    "alphaIsTransparency": true,
+    "sRGBTexture": true,
+    "mipMaps": false,
+    "filterMode": "Bilinear",
+    "compression": "None",
+    "pixelsPerUnit": 100,
+    "preserveDynamicTextAsSeparateTMP": true
+  },
+  "screens": [
+    {
+      "screen": "MainMenu",
+      "reference": "Assets/UI/Example/OVERLINK — Main Menu.png",
+      "components": [
+        { "name": "Command plate", "asset": "Assets/UI/Figma/MainMenu/CommandPlate.png", "states": ["normal", "hover", "pressed", "disabled"], "nineSlice": true, "dynamicText": false },
+        { "name": "Menu icon set", "asset": "Assets/UI/Icons/Menu/", "states": ["normal"], "nineSlice": false, "dynamicText": false },
+        { "name": "Profile panel trim", "asset": "Assets/UI/Figma/MainMenu/ProfilePanelTrim.png", "states": ["normal"], "nineSlice": true, "dynamicText": false },
+        { "name": "Footer and signal rules", "asset": "Assets/UI/Figma/MainMenu/FooterTrim.png", "states": ["normal"], "nineSlice": false, "dynamicText": false }
+      ]
+    },
+    {
+      "screen": "SignalBay",
+      "reference": "Assets/UI/Example/Signal bay.png",
+      "components": [
+        { "name": "Pack choice plate", "asset": "Assets/UI/Figma/SignalBay/PackChoicePlate.png", "states": ["normal", "hover", "selected", "disabled"], "nineSlice": true, "dynamicText": false },
+        { "name": "Purchase button", "asset": "Assets/UI/Figma/SignalBay/PurchaseButton.png", "states": ["normal", "hover", "pressed", "disabled"], "nineSlice": true, "dynamicText": false },
+        { "name": "Loyalty panel trim", "asset": "Assets/UI/Figma/SignalBay/LoyaltyPanelTrim.png", "states": ["normal"], "nineSlice": true, "dynamicText": false },
+        { "name": "Pack aperture frame", "asset": "Assets/UI/Figma/SignalBay/PackApertureFrame.png", "states": ["normal"], "nineSlice": true, "dynamicText": false }
+      ]
+    },
+    {
+      "screen": "Collection",
+      "reference": "Assets/UI/Example/OVERLINK — Card Binder.png",
+      "components": [
+        { "name": "Binder frame", "asset": "Assets/UI/Figma/Collection/BinderFrame.png", "states": ["normal"], "nineSlice": true, "dynamicText": false },
+        { "name": "Filter tab", "asset": "Assets/UI/Figma/Collection/FilterTab.png", "states": ["normal", "selected", "hover"], "nineSlice": true, "dynamicText": false },
+        { "name": "Card slot", "asset": "Assets/UI/Figma/Collection/CardSlot.png", "states": ["normal", "selected", "empty"], "nineSlice": true, "dynamicText": false }
+      ]
+    },
+    {
+      "screen": "Gameplay",
+      "reference": "Assets/UI/Example/OVERLINK — Battle Perspective@2x.png",
+      "components": [
+        { "name": "Core plate", "asset": "Assets/UI/Figma/Battle/CorePlate.png", "states": ["normal", "warning", "disabled"], "nineSlice": true, "dynamicText": false },
+        { "name": "Socket frame", "asset": "Assets/UI/Figma/Battle/SocketFrame.png", "states": ["inactive", "active", "selected"], "nineSlice": true, "dynamicText": false },
+        { "name": "Turn banner", "asset": "Assets/UI/Figma/Battle/TurnBanner.png", "states": ["player", "opponent"], "nineSlice": true, "dynamicText": false }
+      ]
+    },
+    {
+      "screen": "SettingsAuthProfile",
+      "reference": "Assets/UI/Example/OVERLINK — Exportable UI Components.png",
+      "components": [
+        { "name": "Modal panel", "asset": "Assets/UI/Figma/Shared/ModalPanel.png", "states": ["normal"], "nineSlice": true, "dynamicText": false },
+        { "name": "Toggle", "asset": "Assets/UI/Figma/Shared/Toggle.png", "states": ["on", "off", "hover", "disabled"], "nineSlice": true, "dynamicText": false },
+        { "name": "Input field", "asset": "Assets/UI/Figma/Shared/InputField.png", "states": ["normal", "focused", "error", "disabled"], "nineSlice": true, "dynamicText": true }
+      ]
+    }
+  ],
+  "fullScreenReferenceAssets": [
+    "Assets/UI/Sprites/MainMenuBase.png",
+    "Assets/UI/Sprites/SignalBayBase.png",
+    "Assets/UI/Example/OVERLINK — Main Menu.png",
+    "Assets/UI/Example/Signal bay.png",
+    "Assets/UI/Example/OVERLINK — Card Binder.png",
+    "Assets/UI/Example/OVERLINK — Battle Perspective@2x.png"
+  ]
+}

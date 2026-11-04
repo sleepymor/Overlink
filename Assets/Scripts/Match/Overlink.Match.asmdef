@@ -4,6 +4,7 @@
   "references": [
     "Overlink.Core",
     "Overlink.Cards",
+    "Overlink.Vfx",
     "Unity.TextMeshPro",
     "UnityEngine.UI"
   ],

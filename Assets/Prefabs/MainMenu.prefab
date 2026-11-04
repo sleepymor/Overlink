@@ -460,7 +460,7 @@ RectTransform:
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: -24, y: 18}
-  m_SizeDelta: {x: 110, y: 30}
+  m_SizeDelta: {x: 260, y: 30}
   m_Pivot: {x: 1, y: 0}
 --- !u!222 &5623273803688116215
 CanvasRenderer:
@@ -490,7 +490,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: v0.18
+  m_text: "NETWORK STABLE  \u2022  v2026.11.1 Alpha"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
   m_sharedMaterial: {fileID: 0}
@@ -517,14 +517,14 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 18
-  m_fontSizeBase: 18
+  m_fontSize: 12
+  m_fontSizeBase: 12
   m_fontWeight: 400
   m_enableAutoSizing: 0
-  m_fontSizeMin: 18
+  m_fontSizeMin: 12
   m_fontSizeMax: 72
   m_fontStyle: 0
-  m_HorizontalAlignment: 2
+  m_HorizontalAlignment: 4
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0

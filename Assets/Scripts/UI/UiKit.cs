@@ -21,19 +21,20 @@ namespace Overlink.UI
         public const float RowHeight = 44f;
         public const float ButtonHeight = 48f;
 
-        public static readonly Color Background = new Color(0.035f, 0.043f, 0.070f);
-        public static readonly Color Card = new Color(0.055f, 0.070f, 0.115f);
+        // Figma design tokens — Overlink/Color palette
+        public static readonly Color Background = new Color(0.039f, 0.055f, 0.102f); // #0A0E1A
+        public static readonly Color Card = new Color(0.106f, 0.149f, 0.204f);       // #1B2634
         public static readonly Color Scrim = new Color(0f, 0f, 0f, 0.72f);
-        public static readonly Color InputBackground = new Color(0.035f, 0.043f, 0.072f);
-        public static readonly Color Primary = new Color(0.180f, 0.478f, 0.831f);
+        public static readonly Color InputBackground = new Color(0.039f, 0.055f, 0.102f);
+        public static readonly Color Primary = new Color(0.161f, 0.875f, 0.949f);    // #29DFF2 cyan
         public static readonly Color Google = new Color(0.953f, 0.953f, 0.953f);
         public static readonly Color Ghost = new Color(1f, 1f, 1f, 0.06f);
         public static readonly Color Danger = new Color(0.784f, 0.250f, 0.230f);
-        public static readonly Color TextBright = new Color(0.925f, 0.941f, 0.965f);
-        public static readonly Color TextDim = new Color(0.520f, 0.570f, 0.650f);
+        public static readonly Color TextBright = new Color(0.871f, 0.910f, 0.933f); // #DDE8ED
+        public static readonly Color TextDim = new Color(0.510f, 0.588f, 0.663f);    // #8296A9
         public static readonly Color TextError = new Color(0.949f, 0.494f, 0.443f);
-        public static readonly Color Accent = new Color(0.435f, 0.690f, 0.970f);
-        public static readonly Color CardBorder = new Color(0.180f, 0.220f, 0.300f, 0.35f);
+        public static readonly Color Accent = Primary;
+        public static readonly Color CardBorder = new Color(0.149f, 0.227f, 0.290f, 0.35f); // #263A4A
 
         public enum Style { Primary, Google, Ghost, Danger }
 
@@ -189,7 +190,7 @@ namespace Overlink.UI
 
             var image = go.AddComponent<Image>();
             var button = go.AddComponent<Button>();
-            go.AddComponent<UiButtonFeedback>();
+            go.AddComponent<UiFxButton>();
             button.transition = Selectable.Transition.ColorTint;
             button.targetGraphic = image;
             button.colors = new ColorBlock
@@ -206,13 +207,6 @@ namespace Overlink.UI
             Label(go.transform, "Label", label, style == Style.Ghost ? 14f : fontSize, foreground)
                 .fontStyle = FontStyles.Bold;
             return go;
-        }
-
-        /// <summary>Installs the shared response on authored buttons without changing their serialized layout.</summary>
-        public static void EnsureButtonFeedback(Button button)
-        {
-            if (button != null && button.GetComponent<UiButtonFeedback>() == null)
-                button.gameObject.AddComponent<UiButtonFeedback>();
         }
 
         /// <summary>
@@ -337,6 +331,14 @@ namespace Overlink.UI
             return tmp;
         }
 
+        static TextMeshProUGUI ConfigureText(TextMeshProUGUI tmp, string value, float size, Color color,
+            TextAlignmentOptions alignment)
+        {
+            ConfigureText(tmp, value, size, color);
+            tmp.alignment = alignment;
+            return tmp;
+        }
+
         static TMP_FontAsset DisplayFont
         {
             get
@@ -348,5 +350,229 @@ namespace Overlink.UI
         }
 
         static TMP_FontAsset displayFont;
+
+        // ── New shared UI symbols from the revamped Figma design ──────────────────────
+
+        /// <summary>
+        /// Angular command plate: a vector-backed command button used across Main Menu,
+        /// Card Binder deck action, Battle phase commands, and Gacha open commands.
+        /// </summary>
+        public static GameObject AngularCommandPlate(string name, Transform parent,
+            string action, string detail, float height, string iconName = null)
+        {
+            var go = Child(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(0f, height);
+
+            var element = go.AddComponent<LayoutElement>();
+            element.preferredHeight = height;
+            element.flexibleWidth = 1f;
+
+            // Angular plate background
+            var plate = go.AddComponent<Image>();
+            plate.color = Card;
+            plate.raycastTarget = true;
+
+            // Border line
+            var button = go.AddComponent<Button>();
+            button.transition = Selectable.Transition.ColorTint;
+            button.colors = new ColorBlock
+            {
+                normalColor = Card,
+                highlightedColor = Tint(Card, 1.15f),
+                pressedColor = Tint(Card, 0.75f),
+                selectedColor = Tint(Card, 1.05f),
+                disabledColor = new Color(Card.r, Card.g, Card.b, Card.a * 0.45f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.08f
+            };
+            go.AddComponent<UiFxButton>();
+
+            // Caption area
+            var caption = Child("Command caption", go.transform);
+            var captionRect = caption.GetComponent<RectTransform>();
+            captionRect.anchorMin = new Vector2(0f, 0.5f);
+            captionRect.anchorMax = new Vector2(0f, 0.5f);
+            captionRect.pivot = new Vector2(0f, 0.5f);
+            captionRect.anchoredPosition = new Vector2(20f, 0f);
+            captionRect.sizeDelta = new Vector2(height * 0.6f, height * 0.55f);
+
+            var actionText = Child("Action", caption.transform);
+            var actionRect = actionText.GetComponent<RectTransform>();
+            actionRect.anchorMin = Vector2.zero;
+            actionRect.anchorMax = Vector2.one;
+            actionRect.offsetMin = Vector2.zero;
+            actionRect.offsetMax = Vector2.zero;
+            var actionTmp = ConfigureText(actionText.AddComponent<TextMeshProUGUI>(), action, 22f, TextBright,
+                TextAlignmentOptions.MidlineLeft);
+            actionTmp.fontStyle = FontStyles.Bold;
+
+            var detailText = Child("Action detail", caption.transform);
+            var detailRect = detailText.GetComponent<RectTransform>();
+            detailRect.anchorMin = new Vector2(0f, 1f);
+            detailRect.anchorMax = new Vector2(1f, 1f);
+            detailRect.pivot = new Vector2(0f, 1f);
+            detailRect.anchoredPosition = new Vector2(0f, -29f);
+            detailRect.sizeDelta = new Vector2(height * 0.6f, 12f);
+            ConfigureText(detailText.AddComponent<TextMeshProUGUI>(), detail, 10f, TextDim,
+                TextAlignmentOptions.MidlineLeft);
+
+            // Icon on right edge
+            if (!string.IsNullOrEmpty(iconName))
+            {
+                var icon = Child(iconName, go.transform);
+                var iconRect = icon.GetComponent<RectTransform>();
+                iconRect.anchorMin = new Vector2(1f, 0.5f);
+                iconRect.anchorMax = new Vector2(1f, 0.5f);
+                iconRect.pivot = new Vector2(0.5f, 0.5f);
+                iconRect.anchoredPosition = new Vector2(-22f, 0f);
+                iconRect.sizeDelta = new Vector2(22f, 22f);
+                icon.AddComponent<Image>().color = Primary;
+            }
+
+            return go;
+        }
+
+        /// <summary>
+        /// Link signature: Overlink insignia + link text, used in Main Menu and Battle headers.
+        /// </summary>
+        public static GameObject LinkSignature(string name, Transform parent, string linkText)
+        {
+            var go = Child(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+            rect.sizeDelta = new Vector2(254f, 36f);
+
+            var insignia = Child("Overlink insignia", go.transform);
+            var insigniaRect = insignia.GetComponent<RectTransform>();
+            insigniaRect.anchorMin = Vector2.zero;
+            insigniaRect.anchorMax = Vector2.zero;
+            insigniaRect.pivot = new Vector2(0f, 0f);
+            insigniaRect.anchoredPosition = Vector2.zero;
+            insigniaRect.sizeDelta = new Vector2(36f, 36f);
+            insignia.AddComponent<Image>().color = Primary;
+
+            var label = Child("Tactical label", go.transform);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = new Vector2(0f, 0.5f);
+            labelRect.anchorMax = new Vector2(0f, 0.5f);
+            labelRect.pivot = new Vector2(0f, 0.5f);
+            labelRect.anchoredPosition = new Vector2(48f, 0f);
+            labelRect.sizeDelta = new Vector2(206f, 13f);
+            ConfigureText(label.AddComponent<TextMeshProUGUI>(), linkText, 13f, TextBright,
+                TextAlignmentOptions.MidlineLeft);
+
+            return go;
+        }
+
+        /// <summary>
+        /// Account bar: player identity + profile/sign-out actions, shared across screens.
+        /// </summary>
+        public static GameObject AccountBar(string name, Transform parent)
+        {
+            var go = Child(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(1f, 0f);
+            rect.sizeDelta = new Vector2(259f, 40f);
+
+            var identity = Child("Identity", go.transform);
+            var identityRect = identity.GetComponent<RectTransform>();
+            identityRect.anchorMin = Vector2.zero;
+            identityRect.anchorMax = Vector2.zero;
+            identityRect.pivot = new Vector2(0f, 0f);
+            identityRect.sizeDelta = new Vector2(107f, 40f);
+
+            var playerName = Child("Player name", identity.transform);
+            var nameRect = playerName.GetComponent<RectTransform>();
+            nameRect.anchorMin = Vector2.zero;
+            nameRect.anchorMax = Vector2.zero;
+            nameRect.pivot = new Vector2(0f, 0f);
+            nameRect.anchoredPosition = Vector2.zero;
+            nameRect.sizeDelta = new Vector2(59f, 26f);
+            ConfigureText(playerName.AddComponent<TextMeshProUGUI>(), "Player", 16f, TextBright,
+                TextAlignmentOptions.MidlineLeft);
+
+            var tacticalLabel = Child("Tactical label", identity.transform);
+            var labelRect = tacticalLabel.GetComponent<RectTransform>();
+            labelRect.anchorMin = new Vector2(0f, 1f);
+            labelRect.anchorMax = new Vector2(0f, 1f);
+            labelRect.pivot = new Vector2(0f, 1f);
+            labelRect.anchoredPosition = new Vector2(0f, -11f);
+            labelRect.sizeDelta = new Vector2(107f, 11f);
+            ConfigureText(tacticalLabel.AddComponent<TextMeshProUGUI>(), "TACTICAL LABEL", 8f, TextDim,
+                TextAlignmentOptions.MidlineLeft);
+
+            var profileAction = Child("Profile action", go.transform);
+            var profileRect = profileAction.GetComponent<RectTransform>();
+            profileRect.anchorMin = new Vector2(0f, 0.5f);
+            profileRect.anchorMax = new Vector2(0f, 0.5f);
+            profileRect.pivot = new Vector2(0f, 0.5f);
+            profileRect.anchoredPosition = new Vector2(123f, 0f);
+            profileRect.sizeDelta = new Vector2(39f, 18f);
+            ConfigureText(profileAction.AddComponent<TextMeshProUGUI>(), "PROFILE", 13f, TextBright,
+                TextAlignmentOptions.MidlineLeft);
+
+            var logout = Child("log-out", go.transform);
+            var logoutRect = logout.GetComponent<RectTransform>();
+            logoutRect.anchorMin = new Vector2(0f, 0.5f);
+            logoutRect.anchorMax = new Vector2(0f, 0.5f);
+            logoutRect.pivot = new Vector2(0.5f, 0.5f);
+            logoutRect.anchoredPosition = new Vector2(178f, 0f);
+            logoutRect.sizeDelta = new Vector2(20f, 20f);
+            logout.AddComponent<Image>().color = TextDim;
+
+            var signOut = Child("Sign out action", go.transform);
+            var signOutRect = signOut.GetComponent<RectTransform>();
+            signOutRect.anchorMin = new Vector2(0f, 0.5f);
+            signOutRect.anchorMax = new Vector2(0f, 0.5f);
+            signOutRect.pivot = new Vector2(0f, 0.5f);
+            signOutRect.anchoredPosition = new Vector2(214f, 0f);
+            signOutRect.sizeDelta = new Vector2(45f, 13f);
+            ConfigureText(signOut.AddComponent<TextMeshProUGUI>(), "SIGN OUT", 10f, TextDim,
+                TextAlignmentOptions.MidlineLeft);
+
+            return go;
+        }
+
+        /// <summary>
+        /// Filter chip: dropdown filter with a chevron, used in Card Binder controls row.
+        /// </summary>
+        public static GameObject FilterChip(string name, Transform parent, string filterValue)
+        {
+            var go = Child(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+            rect.sizeDelta = new Vector2(146f, 36f);
+
+            var valueText = Child("Filter value", go.transform);
+            var valueRect = valueText.GetComponent<RectTransform>();
+            valueRect.anchorMin = new Vector2(0f, 0.5f);
+            valueRect.anchorMax = new Vector2(0f, 0.5f);
+            valueRect.pivot = new Vector2(0f, 0.5f);
+            valueRect.anchoredPosition = new Vector2(11f, 0f);
+            valueRect.sizeDelta = new Vector2(99f, 16f);
+            ConfigureText(valueText.AddComponent<TextMeshProUGUI>(), filterValue, 12f, TextBright,
+                TextAlignmentOptions.MidlineLeft);
+
+            var chevron = Child("chevron-down", go.transform);
+            var chevronRect = chevron.GetComponent<RectTransform>();
+            chevronRect.anchorMin = new Vector2(1f, 0.5f);
+            chevronRect.anchorMax = new Vector2(1f, 0.5f);
+            chevronRect.pivot = new Vector2(0.5f, 0.5f);
+            chevronRect.anchoredPosition = new Vector2(-13f, 0f);
+            chevronRect.sizeDelta = new Vector2(12f, 12f);
+            chevron.AddComponent<Image>().color = TextDim;
+
+            return go;
+        }
     }
 }

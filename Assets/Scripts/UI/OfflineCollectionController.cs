@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Overlink.Cards;
 using TMPro;
@@ -55,6 +56,15 @@ namespace Overlink.UI
         [SerializeField] Button backButton;
 
         readonly List<GameObject> tiles = new List<GameObject>();
+
+        // The three summary readouts roll through UiCounter (the gacha screens' widget) instead of
+        // snapping: bound once in Awake, refreshed by value so filter clicks that change nothing
+        // stay still while ownership changes animate. The formatters own the surrounding copy, so
+        // the strings can never drift from what the static screen used to print.
+        UiCounter countCounter;
+        UiCounter fragmentCounter;
+        UiCounter deckCounter;
+
         int typeFilter;
         int factionFilter;
         int rarityFilter;
@@ -86,7 +96,24 @@ namespace Overlink.UI
             if (backButton != null) backButton.onClick.AddListener(SceneLoader.LoadMainMenu);
 
             if (tileTemplate != null) tileTemplate.SetActive(false);
+            countCounter = BindCounter(countText,
+                v => "GAMEPLAY CARDS  " + v + " / " + OfflineCollectionData.Catalog.Length + " UNIQUE");
+            fragmentCounter = BindCounter(fragmentText, v => "DATA FRAGMENTS  " + v);
+            deckCounter = BindCounter(deckText,
+                v => "OFFLINE DECK  " + v + " / " + OfflineCollectionData.DeckLimit
+                    + "  •  COPY LIMIT " + OfflineCollectionData.CopyLimit);
             RefreshFilters();
+        }
+
+        /// <summary>Attaches a rolling readout to an authored summary label, seeded at zero so the
+        /// first refresh rolls up to the real value as the screen's arrival beat.</summary>
+        static UiCounter BindCounter(TextMeshProUGUI label, Func<int, string> format)
+        {
+            if (label == null) return null;
+            UiCounter counter = label.GetComponent<UiCounter>();
+            if (counter == null) counter = label.gameObject.AddComponent<UiCounter>();
+            counter.Bind(format, 0);
+            return counter;
         }
 
         void LateUpdate()
@@ -125,10 +152,9 @@ namespace Overlink.UI
                 if (OfflineCollectionData.Owned(OfflineCollectionData.Catalog[i].Id) > 0) ownedUnique++;
             }
 
-            if (countText != null) countText.text = "GAMEPLAY CARDS  " + ownedUnique + " / " + OfflineCollectionData.Catalog.Length + " UNIQUE";
-            if (fragmentText != null) fragmentText.text = "DATA FRAGMENTS  " + OfflineCollectionData.Fragments();
-            if (deckText != null) deckText.text = "OFFLINE DECK  " + OfflineCollectionData.DeckSize() + " / " + OfflineCollectionData.DeckLimit
-                + "  •  COPY LIMIT " + OfflineCollectionData.CopyLimit;
+            if (countCounter != null) countCounter.Set(ownedUnique);
+            if (fragmentCounter != null) fragmentCounter.Set(OfflineCollectionData.Fragments());
+            if (deckCounter != null) deckCounter.Set(OfflineCollectionData.DeckSize());
             UpdateFilterLabels();
             UpdateDeckButton();
         }

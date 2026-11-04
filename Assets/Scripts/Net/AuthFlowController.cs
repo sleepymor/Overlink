@@ -78,6 +78,8 @@ namespace Overlink.Net
             // Gacha hosts the deterministic offline pack-opening prototype. Keep it directly testable
             // from the Editor until its future account-backed economy service is wired.
             "Gacha",
+            // RevealGacha is the pack-opening reveal, split into its own scene; same prototype rule.
+            "RevealGacha",
             // Collection hosts the offline binder prototype that shares Gacha's deterministic data.
             "Collection",
         };
@@ -246,11 +248,17 @@ namespace Overlink.Net
 
         void LoadMainMenu()
         {
-            if (IsCardPreviewScene(SceneManager.GetActiveScene().name)) return;
-            if (SceneManager.GetActiveScene().name != MainMenuSceneName)
-            {
-                SceneManager.LoadScene(MainMenuSceneName);
-            }
+            // Keep-rule: only the Auth scene itself routes onward to MainMenu. The flow controller is
+            // a persistent service — resuming a signed-in session finishes its profile request
+            // wherever the player (or the Editor) happens to be, and routing that continuation to
+            // MainMenu would kick a directly opened protected scene (Settings, Collection,
+            // Gameplay, the card previews) out from under verification. Normal boot starts in Auth
+            // and still reaches MainMenu unchanged; so do sign-in and profile-setup completion,
+            // which the Auth UI only ever calls from the Auth scene. Every other active scene is
+            // left alone, which subsumes the old Gameplay and card-preview special cases.
+            if (SceneManager.GetActiveScene().name != AuthSceneName) return;
+
+            SceneManager.LoadScene(MainMenuSceneName);
         }
 
         /// <summary>
@@ -282,7 +290,8 @@ namespace Overlink.Net
             else
             {
                 Debug.Log("[AuthFlow] Profile complete, loading main menu.");
-                AccountManager.Instance.ApplyIdentity(profile.username, profile.tag);
+                AccountManager account = AccountManager.Instance ?? AccountManager.EnsureInstance();
+                account.ApplyIdentity(profile.username, profile.tag);
                 ChangeState(AuthState.Ready, "");
                 LoadMainMenu();
             }

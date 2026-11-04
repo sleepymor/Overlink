@@ -22,6 +22,7 @@ namespace Overlink.Editor
             ("Assets/Scenes/Gameplay.unity",       true, false),
             ("Assets/Scenes/Deckbuilder.unity",    true, false),
             ("Assets/Scenes/Gacha.unity",          true, false),
+            ("Assets/Scenes/RevealGacha.unity",    true, false),
             ("Assets/Scenes/Collection.unity",     true, false),
             ("Assets/Scenes/Settings.unity",       true, false),
             ("Assets/Scenes/NetPresenceDemo.unity",true, false),

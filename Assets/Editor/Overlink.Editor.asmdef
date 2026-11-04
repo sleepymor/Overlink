@@ -6,6 +6,7 @@
         "Overlink.Core",
         "Overlink.Match",
         "Overlink.UI",
+        "Overlink.Vfx",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [

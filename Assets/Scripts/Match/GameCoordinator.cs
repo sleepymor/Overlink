@@ -89,7 +89,31 @@ namespace Overlink.Match
         /// </summary>
         void WireHud()
         {
-            battlefieldHud = BattlefieldHud.Ensure();
+            // Some isolated board/inspection fixtures add the coordinator before the presenter and disable
+            // both components immediately afterward. There is no authored Gameplay HUD contract to bind in
+            // that fixture; production Gameplay always places the presenter beside the coordinator.
+            if (presenter == null)
+            {
+                return;
+            }
+
+            if (battlefieldHud == null)
+            {
+                battlefieldHud = BattlefieldHud.Find();
+            }
+
+            if (battlefieldHud == null)
+            {
+                Debug.LogError("[GameCoordinator] Gameplay scene is missing the authored Battlefield HUD.", this);
+                return;
+            }
+
+            if (!battlefieldHud.BindSerialized())
+            {
+                Debug.LogError("[GameCoordinator] Authored Battlefield HUD is incomplete; match controls are disabled.", battlefieldHud);
+                return;
+            }
+
             if (battlefieldHud != null)
             {
                 battlefieldHud.EndPhaseRequested -= EndPlayerPhase;

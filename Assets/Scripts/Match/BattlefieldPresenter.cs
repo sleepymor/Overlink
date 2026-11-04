@@ -350,12 +350,20 @@ namespace Overlink.Match
             "SETUP: Drag a UNIT from your hand to a glowing ACTIVE slot on your side - CORE or NODE 1-4\n" +
             "Do not use BENCH or PROTOCOL   \u2022   Click a fielded card to return it   \u2022   Press CONFIRM when ready";
 
-        static readonly string[] NodeCaption =
+        static readonly string[] NodeLabel =
         {
-            "NODE 1  +1 ATK",
-            "NODE 2  +1 HP",
-            "NODE 3  FIRST STRIKE",
-            "NODE 4  DRAW ON KILL",
+            "NODE 1",
+            "NODE 2",
+            "NODE 3",
+            "NODE 4",
+        };
+
+        static readonly string[] NodeBonus =
+        {
+            "+1 ATK",
+            "+1 HP",
+            "FIRST STRIKE",
+            "DRAW ON KILL",
         };
 
         // The board's palette - owner tints, empty-slot fills, plate and pile albedos - is serialized in the
@@ -372,8 +380,16 @@ namespace Overlink.Match
         // nodeOpponent are cube colours meant to sit under the board light, and as 21pt text on a dark slab
         // they read as mud.
         static readonly Color RowNeutral = new Color(0.58f, 0.65f, 0.77f);
-        static readonly Color RowPlayer = new Color(0.45f, 0.95f, 0.62f);
-        static readonly Color RowOpponent = new Color(1f, 0.72f, 0.35f);
+        static readonly Color RowPlayer = new Color(0.16f, 0.85f, 0.96f);
+        static readonly Color RowOpponent = new Color(0.90f, 0.64f, 0.22f);
+
+        // The reference gives every line of a chip and of a node row its own size and role - a large Core
+        // figure, an accent-coloured NP line, small dim stock counts - and the HUD's contract is one text
+        // object per box, so the hierarchy travels inside the string as TMP rich text. DimHex is UiKit's
+        // TextDim; the accent halves take their side's row colour through Hex.
+        const string DimHex = "#8296A9";
+        static string Hex(Color c) =>
+            $"#{Mathf.RoundToInt(c.r * 255f):X2}{Mathf.RoundToInt(c.g * 255f):X2}{Mathf.RoundToInt(c.b * 255f):X2}";
 
         // Pointer marks. Chosen to be distinguishable from the owner tints they are drawn over - blue for the
         // player's own units, warm red/orange for the enemy's - so "I picked this" and "I could hit this"
@@ -438,12 +454,7 @@ namespace Overlink.Match
             BuildBoard();
         }
 
-        /// <summary>
-        /// Binds the screen-space HUD. The gameplay scene ships one as an editable root object; when
-        /// it is missing (the legacy standalone hand, a bare test scene) one is created &mdash; but only in play
-        /// mode, because <see cref="BuildBoard"/> also runs from the editor prefab build, where creating a
-        /// scene root would leave a stray object behind.
-        /// </summary>
+        /// <summary>Resolves and validates the screen-space HUD shipped by Gameplay.unity.</summary>
         void ResolveHud()
         {
             if (hud == null)
@@ -451,19 +462,16 @@ namespace Overlink.Match
                 hud = BattlefieldHud.Find();
             }
 
-            if (hud == null && Application.isPlaying)
+            if (hud == null)
             {
-                hud = BattlefieldHud.Ensure();
+                Debug.LogError("[BattlefieldPresenter] Gameplay scene is missing the authored Battlefield HUD.", this);
+                return;
             }
 
-            // Unconditional. The guard here used to be `!IsBuilt || !IsReaderBuilt || !IsStatusBuilt`, and
-            // every one of those reads a serialized reference that a scene-authored HUD fills in from disk
-            // before anything has run - so on the HUD this scene actually ships the guard reported "done"
-            // while the rail store sat empty and not one button had a listener. Build is bind plus author,
-            // and the bind half is what makes a complete-looking panel work.
-            if (hud != null && Application.isPlaying)
+            if (!hud.BindSerialized())
             {
-                hud.Build();
+                Debug.LogError("[BattlefieldPresenter] Authored Battlefield HUD is incomplete; presentation will remain inert.", hud);
+                return;
             }
 
             // The legend is code-owned, not authored: a key binding added to GameCoordinator has to reach the
@@ -2866,6 +2874,7 @@ namespace Overlink.Match
                     lineupGuideShown = false;
                 }
                 SetBanner("Waiting for the match to initialize...");
+                SetBannerTags(string.Empty, string.Empty);
                 highlightedTile = null;
                 return;
             }
@@ -2889,18 +2898,16 @@ namespace Overlink.Match
                 SetHint(hintShowsSetup ? SetupHintText : ControlsHintText);
             }
 
-            // The banner is 32pt rather than the 38 it shipped with, and the reason is a number rather than a
-            // taste: its longest line - TURN 99, CLEANUP, ACTIVE: OPPONENT, bullet separators and all - lays out
-            // 819 reference pixels at 32pt inside a 900 pixel box, which is about 973 at the 38 it used to be,
-            // and TMP's Truncate overflow eats the surplus without complaint. The shipped setup banner rendered
-            // as "FIELD YOUR OPENING F". Tightening the bullet spacing was the other candidate fix and it is the
-            // worse one: the airy separator is how this HUD reads as one family, and 32pt still stands 1.9x over
-            // the legend it sits above.
+            // The banner title carries the phase name alone; the turn number and the actor moved out to the
+            // cyan side tags (SetBannerTags), which is how the reference art composes the header - a short
+            // embossed title flanked by two small truths. The 32pt title size stays: it stands 1.9x over the
+            // legend below, and the 13pt tags read as its family rather than as rivals.
             if (hintShowsSetup)
             {
                 // There is no turn worth numbering and no active player worth naming while setup is open, and
                 // the toss is still under the cup, so the header says what the player is actually doing instead.
-                SetBanner("LINEUP SETUP   \u2022   DROP UNITS ON GLOWING SLOTS");
+                SetBanner("LINEUP SETUP");
+                SetBannerTags("PRE-COMBAT", "YOUR ACTION");
                 ShowLineupTargets();
             }
             else
@@ -2910,8 +2917,9 @@ namespace Overlink.Match
                     ClearMarks();
                     lineupGuideShown = false;
                 }
-                string active = state.ActivePlayer == PlayerIndex.Player ? "YOU" : "OPPONENT";
-                SetBanner($"TURN {state.TurnNumber}   \u2022   {state.CurrentPhase.ToString().ToUpper()}   \u2022   ACTIVE: {active}");
+                SetBanner(state.CurrentPhase.ToString().ToUpper());
+                SetBannerTags($"TURN {state.TurnNumber}",
+                    state.ActivePlayer == PlayerIndex.Player ? "YOUR ACTION" : "THEIR ACTION");
             }
 
             PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench,
@@ -2957,6 +2965,11 @@ namespace Overlink.Match
         void SetBanner(string text)
         {
             if (hud != null) hud.SetBanner(text);
+        }
+
+        void SetBannerTags(string left, string right)
+        {
+            if (hud != null) hud.SetBannerTags(left, right);
         }
 
         void SetHint(string text)
@@ -3026,6 +3039,8 @@ namespace Overlink.Match
                 return;
             }
 
+            // An empty pile reads as a darker slab of its own tint: the deck and the discard are furniture
+            // the eye should rest on, not notice, until a card lands in them.
             SetBodyColor(tile.Body, TintForHover(tile, TintForCombatPulse(tile, TintForMark(tile,
                 count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f)))));
             tile.Label.text = caption + "\n" + count;
@@ -3091,19 +3106,22 @@ namespace Overlink.Match
             int nodes = state.CountControlledNodes(who);
             if (hud != null)
             {
+                string accent = Hex(who == PlayerIndex.Player ? RowPlayer : RowOpponent);
                 hud.SetStatus(who,
-                    // Five counters on one line need 732 reference pixels at 26pt and the chip's text rect is 446
-                    // wide, so the readout either breaks or loses HAND and DECK to Truncate - which is exactly
-                    // what it was doing, silently, in the shipped scene. It breaks after NP, because that is the
-                    // seam that leaves both halves comfortable: the two numbers that tick down through a turn on
-                    // the first line, the three stock counts on the second. Breaking after NODES - the other
-                    // obvious seam, and the first one tried here - lays its top line out at 442 of 446 pixels,
-                    // four pixels of slack on a figure the player grows by holding ground. Widening the slab is
-                    // not on the table: the chips live in the fan's corners and 470 already touches the fan's
+                    // Three lines carrying the reference's typographic hierarchy in rich text: the Core alone
+                    // and large under the accent rule, NP in the side's accent colour sharing its line with
+                    // the dim node count, the two stock counts small and dim on the third. Uniform 26pt lines
+                    // made every figure shout at the same volume, which is not what the reference's chip says.
+                    // Two lines used to force the second to 442 of the text rect's 446 pixels, and any longer
+                    // figure wrapped DECK onto a fourth line of its own. Widening the slab is not on the
+                    // table: the chips live in the fan's corners and 470 already touches the fan's
                     // maximum-span envelope.
-                    $"CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}   " +
-                    $"NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}\n" +
-                    $"NODES {nodes}/{Board.NodeCount}   HAND {p.Hand.Count}   DECK {p.Deck.Count}");
+                    $"<size=36>CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}</size>\n" +
+                    $"<size=24><color={accent}>NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}</color></size>" +
+                    $"<size=15><color={DimHex}>  NODES {nodes}/{Board.NodeCount}</color></size>\n" +
+                    $"<size=16><color={DimHex}>HAND {p.Hand.Count}   DECK {p.Deck.Count}</color></size>");
+                hud.SetStatusMeters(who, p.CoreDurability, PlayerState.StartingCoreDurability,
+                    p.CurrentNP, PlayerState.NpCap(nodes));
             }
         }
 
@@ -3136,9 +3154,15 @@ namespace Overlink.Match
                 if (hud != null)
                 {
                     bool contested = pControls && oControls;
+                    // Two lines, as the reference composes a battlefield row: the node's name and who holds
+                    // it on the first - the label dim, the owner untagged so it takes the row's owner colour
+                    // - and what holding it pays alone and larger on the second, with the accent rule
+                    // closing the block. Bonus and owner on one line could not both stay legible: the
+                    // longest pair walked past the row's width and wrapped.
                     hud.SetNodeRow(n,
-                        $"{NodeCaption[n % NodeCaption.Length]}   \u2022   " +
-                        (contested ? "CONTESTED" : pControls ? "YOURS" : oControls ? "THEIRS" : "OPEN"),
+                        $"<size=13><color={DimHex}>{NodeLabel[n % NodeLabel.Length]}   \u2022   </color>" +
+                        (contested ? "CONTESTED" : pControls ? "YOURS" : oControls ? "THEIRS" : "OPEN") +
+                        $"</size>\n<size=19>{NodeBonus[n % NodeBonus.Length]}</size>",
                         contested || (!pControls && !oControls) ? RowNeutral
                         : pControls ? RowPlayer : RowOpponent);
                 }

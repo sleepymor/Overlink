@@ -1003,18 +1003,19 @@ namespace Overlink.Match.Tests
             // impossible one. The log's four entries are the four SetLog can show at once, each long enough to
             // wrap, which is the tallest the panel can legitimately get.
             Ink(table, problems, hud, "banner/setup", "Banner/BannerText",
-                "LINEUP SETUP   \u2022   DROP UNITS ON GLOWING SLOTS");
+                "LINEUP SETUP");
             Ink(table, problems, hud, "banner/battle", "Banner/BannerText",
-                "TURN 99   \u2022   CLEANUP   \u2022   ACTIVE: OPPONENT");
+                "CLEANUP");
             Ink(table, problems, hud, "hint/battle", "ControlsHint/ControlsHintText",
                 BattlefieldPresenter.ControlsHintText);
             Ink(table, problems, hud, "hint/setup", "ControlsHint/ControlsHintText",
                 BattlefieldPresenter.SetupHintText);
             Ink(table, problems, hud, "chip/body", "PlayerChip/Body",
-                "CORE 3/3   NP 14/14\nNODES 4/4   HAND 10   DECK 30");
+                "<size=36>CORE 3/3</size>\n<size=24><color=#29D9F5>NP 14/14</color></size>" +
+                "<size=15><color=#8296A9>  NODES 4/4</color></size>\n<size=16><color=#8296A9>HAND 10   DECK 30</color></size>");
             Ink(table, problems, hud, "chip/title", "OpponentChip/OpponentChipText", "OPPONENT");
             Ink(table, problems, hud, "nodeRow", "NodeList/NodeRow3",
-                "NODE 4  DRAW ON KILL   \u2022   CONTESTED");
+                "<size=13><color=#8296A9>NODE 4   \u2022   </color>CONTESTED</size>\n<size=19>DRAW ON KILL</size>");
             // The longest rejection the coordinator can issue, with a card name at twenty-four characters. The
             // line is 640 wide and two lines tall at 20pt, which is about 200 characters of headroom, so this
             // fits with room - and a third line is exactly what the box cannot show, which is why its height is

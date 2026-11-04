@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Overlink.Core;
+using Overlink.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -126,7 +127,7 @@ namespace Overlink.Match
                  "four pixels by the ink guard. The opponent's belongs at the bottom rather than " +
                  "the top because the far half of the frame is the board's, and the top band it used to share " +
                  "with the banner is where the node list and the log now live.")]
-        public Vector2 chipSize = new Vector2(470f, 112f);
+        public Vector2 chipSize = new Vector2(470f, 150f);
         public Vector2 chipMargin = new Vector2(22f, 18f);
         public float chipTitleSize = 18f;
         public float chipBodySize = 26f;
@@ -281,6 +282,13 @@ namespace Overlink.Match
 
         readonly RailSlot[] rail = new RailSlot[(int)RailKey.Count];
 
+        // The shipped Gameplay scene owns these objects.  They are serialized so the Inspector exposes the
+        // contract and a domain reload cannot turn a complete-looking HUD into an inert set of controls.
+        // Build() remains the explicit procedural fixture/authoring path used by tests and the editor bootstrap.
+        [SerializeField] RectTransform phaseControls;
+        [SerializeField] Button[] railButtonRefs;
+        [SerializeField] TextMeshProUGUI[] railLabelRefs;
+
         // Every button on the rail, cached because the pointer test walks it on every frame a card is held and
         // a GetComponentsInChildren there would allocate. Toggling a button's availability does not invalidate
         // the cache, so it is rebuilt only when the rail is built.
@@ -293,6 +301,15 @@ namespace Overlink.Match
 
         [SerializeField] RectTransform banner;
         [SerializeField] TextMeshProUGUI bannerText;
+        [SerializeField] TextMeshProUGUI bannerTagLeft;
+        [SerializeField] TextMeshProUGUI bannerTagRight;
+        Color playerBodyBase = new Color(0.93f, 0.96f, 1f);
+        Color opponentBodyBase = new Color(0.93f, 0.96f, 1f);
+
+        // The two animated meters hanging under each chip (VFX pass): Core durability in the side's
+        // accent with a damage-trail ghost, NP in the banner's cyan.  The Gameplay scene serializes these
+        // widgets; the procedural Build() path may still author them for isolated tests.
+        [SerializeField] UiBar coreMeterPlayer, coreMeterOpponent, npMeterPlayer, npMeterOpponent;
         [SerializeField] RectTransform hint;
         [SerializeField] TextMeshProUGUI hintText;
         [SerializeField] RectTransform opponentChip;
@@ -394,13 +411,17 @@ namespace Overlink.Match
                 return hud;
             }
 
-            // Unconditional, and the reason is the trap this used to spring: the three Is*Built properties
-            // read the serialized references, so a scene-loaded HUD reports all three true from disk while
-            // its rail store - which is not serialized - is empty and not one button has a listener. Guarded,
-            // that meant "nothing to do", and the HUD's own Awake was the only other caller, so an EditMode
-            // test or an editor script asking for the HUD got a beautiful inert panel. Build's bind half
-            // writes no appearance, so running it here costs a handful of Transform.Find calls.
-            existing.Build();
+            // A complete shipped HUD is bind-only.  An incomplete object is retained here solely for the
+            // explicit procedural/edit-mode compatibility path; production Gameplay callers do not call
+            // Ensure and therefore cannot silently author a missing runtime HUD.
+            if (existing.HasSerializedBindings)
+            {
+                existing.BindSerialized();
+            }
+            else
+            {
+                existing.Build();
+            }
             return existing;
         }
 
@@ -428,13 +449,153 @@ namespace Overlink.Match
 
         void Awake()
         {
-            // Bind always, build what is missing. The old guard here was `if (panel == null)`, which is true
-            // for a bare object and false for a scene-loaded one - so the scene's HUD woke with its
-            // references pointed at its own objects and nothing whatsoever wired: no rail store, no onClick,
-            // and SetRail returning at its first null test. Build's bind half is idempotent and reads the
-            // objects rather than writing them, so running it on an already-authored HUD costs a handful of
-            // Transform.Find calls and is the only way that HUD ever works.
-            Build();
+            // A shipped HUD is already authored. Binding is the only runtime operation allowed here; a missing
+            // hierarchy is an authoring error and must not be silently repaired while the player is running.
+            if (HasSerializedBindings || phaseControls != null || panel != null || transform.Find("PhaseControls") != null)
+            {
+                BindSerialized();
+            }
+        }
+
+        // Build() is also used by isolated edit/play-mode fixtures. Keep this bit separate from the presence
+        // of authored children: a procedural HUD has PhaseControls too, but it is allowed to author its own
+        // compatibility widgets while a serialized Gameplay HUD must fail loudly instead.
+        bool serializedMode;
+
+        /// <summary>True when this component has the complete shipped-scene contract.</summary>
+        public bool HasSerializedBindings
+        {
+            get
+            {
+                return phaseControls != null
+                    && railButtonRefs != null && railButtonRefs.Length == (int)RailKey.Count
+                    && railLabelRefs != null && railLabelRefs.Length == (int)RailKey.Count
+                    && panel != null && header != null && body != null
+                    && reader != null && readerCard != null && readerTitle != null
+                    && readerBody != null && readerFoot != null
+                    && banner != null && bannerText != null && hint != null && hintText != null
+                    && opponentChip != null && opponentTitle != null && opponentBody != null
+                    && playerChip != null && playerTitle != null && playerBody != null
+                    && coreMeterPlayer != null && coreMeterOpponent != null
+                    && npMeterPlayer != null && npMeterOpponent != null
+                    && nodeList != null && nodeRows != null && nodeRows.Length == Board.NodeCount
+                    && notice != null && noticeText != null && result != null && resultText != null
+                    && bannerTagLeft != null && bannerTagRight != null && inspectionDetails != null;
+            }
+        }
+
+        /// <summary>
+        /// Binds the serialized Gameplay HUD without creating, adding, or laying out any UI object. Missing
+        /// references are reported explicitly so a broken scene fails loudly instead of growing a hidden fallback.
+        /// </summary>
+        public bool BindSerialized()
+        {
+            serializedMode = true;
+            int errors = 0;
+            if (GetComponent<Canvas>() == null) { Debug.LogError("[BattlefieldHud] Gameplay HUD requires an authored Canvas.", this); errors++; }
+            if (phaseControls == null) { Debug.LogError("[BattlefieldHud] Missing serialized PhaseControls.", this); errors++; }
+
+            if (railButtonRefs == null || railButtonRefs.Length != (int)RailKey.Count)
+            {
+                Debug.LogError("[BattlefieldHud] Serialized railButtonRefs must contain one button for every RailKey.", this);
+                errors++;
+            }
+            if (railLabelRefs == null || railLabelRefs.Length != (int)RailKey.Count)
+            {
+                Debug.LogError("[BattlefieldHud] Serialized railLabelRefs must contain one label for every RailKey.", this);
+                errors++;
+            }
+
+            errors += ValidateSerialized("panel", panel);
+            errors += ValidateSerialized("header", header);
+            errors += ValidateSerialized("body", body);
+            errors += ValidateSerialized("reader", reader);
+            errors += ValidateSerialized("readerCard", readerCard);
+            errors += ValidateSerialized("readerTitle", readerTitle);
+            errors += ValidateSerialized("readerBody", readerBody);
+            errors += ValidateSerialized("readerFoot", readerFoot);
+            errors += ValidateSerialized("banner", banner);
+            errors += ValidateSerialized("bannerText", bannerText);
+            errors += ValidateSerialized("hint", hint);
+            errors += ValidateSerialized("hintText", hintText);
+            errors += ValidateSerialized("opponentChip", opponentChip);
+            errors += ValidateSerialized("opponentTitle", opponentTitle);
+            errors += ValidateSerialized("opponentBody", opponentBody);
+            errors += ValidateSerialized("playerChip", playerChip);
+            errors += ValidateSerialized("playerTitle", playerTitle);
+            errors += ValidateSerialized("playerBody", playerBody);
+            errors += ValidateSerialized("coreMeterPlayer", coreMeterPlayer);
+            errors += ValidateSerialized("coreMeterOpponent", coreMeterOpponent);
+            errors += ValidateSerialized("npMeterPlayer", npMeterPlayer);
+            errors += ValidateSerialized("npMeterOpponent", npMeterOpponent);
+            errors += ValidateSerialized("bannerTagLeft", bannerTagLeft);
+            errors += ValidateSerialized("bannerTagRight", bannerTagRight);
+            errors += ValidateSerialized("inspectionDetails", inspectionDetails);
+            errors += ValidateSerialized("nodeList", nodeList);
+            errors += ValidateSerialized("notice", notice);
+            errors += ValidateSerialized("noticeText", noticeText);
+            errors += ValidateSerialized("result", result);
+            errors += ValidateSerialized("resultText", resultText);
+            if (nodeRows == null || nodeRows.Length != Board.NodeCount)
+            {
+                Debug.LogError("[BattlefieldHud] Serialized nodeRows must contain one row per board node.", this);
+                errors++;
+            }
+            else
+            {
+                for (int i = 0; i < nodeRows.Length; i++) errors += ValidateSerialized("nodeRows[" + i + "]", nodeRows[i]);
+            }
+
+            if (errors > 0)
+            {
+                railButtons = new Button[0];
+                return false;
+            }
+
+            canvas = GetComponent<Canvas>();
+            for (int i = 0; i < (int)RailKey.Count; i++)
+            {
+                BindRail((RailKey)i, railButtonRefs[i], railLabelRefs[i], RailAction((RailKey)i));
+            }
+            railButtons = railButtonRefs;
+            opponentBodyBase = opponentBody.color;
+            playerBodyBase = playerBody.color;
+            HideRail();
+            result.gameObject.SetActive(false);
+            return true;
+        }
+
+        static int ValidateSerialized(string name, UnityEngine.Object value)
+        {
+            if (value != null) return 0;
+            Debug.LogError("[BattlefieldHud] Missing serialized Gameplay HUD reference: " + name);
+            return 1;
+        }
+
+        Action RailAction(RailKey key)
+        {
+            switch (key)
+            {
+                case RailKey.EndPhase: return () => EndPhaseRequested?.Invoke();
+                case RailKey.Reroll: return () => RerollLineupRequested?.Invoke();
+                case RailKey.Confirm: return () => ConfirmLineupRequested?.Invoke();
+                default: return () => RailPressed?.Invoke(key);
+            }
+        }
+
+        void BindRail(RailKey key, Button button, TextMeshProUGUI label, Action action)
+        {
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
+            rail[(int)key] = new RailSlot
+            {
+                Object = button.gameObject,
+                Button = button,
+                Label = label,
+                Visible = button.gameObject.activeSelf,
+                Enabled = button.interactable,
+                Text = label.text
+            };
         }
 
         /// <summary>
@@ -455,6 +616,7 @@ namespace Overlink.Match
         /// </summary>
         public void Build()
         {
+            serializedMode = false;
             // The canvas and the scaler are the coordinate system every measurement in this file is quoted
             // in, not appearance: the reference resolution is what makes "162 pixels" mean something, and an
             // overlay canvas is what keeps the panels off the tabletop's 90-degree tilt. Authoritative on
@@ -476,7 +638,10 @@ namespace Overlink.Match
             }
 
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            // The combat overlay is authored against the supplied Figma frame (1600x900).
+            // ScaleWithScreenSize preserves those measurements at 1920x1080 and keeps the
+            // scene-authored positions stable instead of forcing a second coordinate system.
+            scaler.referenceResolution = new Vector2(1600f, 900f);
             scaler.matchWidthOrHeight = 0.5f;
 
             EnsurePanel();
@@ -847,6 +1012,17 @@ namespace Overlink.Match
                 playerTitle.color = playerAccent;
             }
 
+            // The mark toggle restores these: SetStatusMarked paints a body orange while its Core is a click
+            // target, and handing back the colour the bind found is what keeps an authored slate body slate
+            // on the light board instead of snapping to the near-white the dark board used to wear.
+            if (opponentBody != null) opponentBodyBase = opponentBody.color;
+            if (playerBody != null) playerBodyBase = playerBody.color;
+
+            // ---- Chip meters, hanging in the corner margin under each slab. See EnsureChipMeters
+            // for why they live below the chip rather than inside it.
+            EnsureChipMeters(opponentChip, opponentAccent, out coreMeterOpponent, out npMeterOpponent);
+            EnsureChipMeters(playerChip, playerAccent, out coreMeterPlayer, out npMeterPlayer);
+
             // ---- Node list, top-left corner; the log mirrors it top-right. Both live in the band above the
             // board's far rank - see the nodeListSize tooltip for why that band is the only one that is
             // socket-free at every aspect, and why its 170 pixel height is the ceiling rather than a preference.
@@ -871,7 +1047,9 @@ namespace Overlink.Match
 
             // One row per Node, in board order, so the list reads top-to-bottom against the four plates. The
             // Core's numbers are not repeated here — both chips already carry CORE x/y.
-            // 12 + 16 * 2.1 + 4 * (15 * 2.05) = 168.6 of the slab's 170 pixels: the rows fill the panel exactly.
+            // A row is a two-line block at the reference's rhythm - dim label and owner above, the bonus
+            // below, the accent rule closing it: a 70 pixel block every 112 pixels, 52 under the panel top,
+            // which is 458 of the slab's 500 pixels at the default 15 point list font, scaled with it.
             //
             // The row array is rebuilt on every bind, authored or not, because SetNodeRow indexes it and a
             // stale array from a previous build would write into objects the scene no longer has. Only the
@@ -884,11 +1062,12 @@ namespace Overlink.Match
                     textColor, TextAlignmentOptions.MidlineLeft, out RectTransform rowRect, out bool rowCreated);
                 if (rowCreated)
                 {
-                    float rowTop = panelPadding + nodeHeaderSize * 2.1f + n * (nodeListFontSize * 2.05f);
+                    float scale = nodeListFontSize / 15f;
+                    float rowTop = 52f * scale + n * 112f * scale;
                     rowRect.anchorMin = new Vector2(0f, 1f);
                     rowRect.anchorMax = new Vector2(1f, 1f);
                     rowRect.pivot = new Vector2(0f, 1f);
-                    rowRect.sizeDelta = new Vector2(-panelPadding * 2f, nodeListFontSize * 2.05f);
+                    rowRect.sizeDelta = new Vector2(-panelPadding * 2f, 70f * scale);
                     rowRect.anchoredPosition = new Vector2(panelPadding, -rowTop);
                     rows[n].text = string.Empty;
                 }
@@ -1067,6 +1246,104 @@ namespace Overlink.Match
             return body;
         }
 
+        /// <summary>
+        /// The two animated meters under a chip: Core durability in the side's accent with a
+        /// damage-trail ghost, NP in the banner's cyan. They hang in the corner margin BELOW the
+        /// slab rather than inside it: the authored chip's interior is a title band, two body lines
+        /// and a mid rule with ten pixels to spare, so nothing anybody typed into the chip moves,
+        /// and the margin band they occupy holds no socket, no pile and no resting fan at any
+        /// supported aspect - the same emptiness the chip itself was seated in.
+        /// </summary>
+        void EnsureChipMeters(RectTransform chip, Color accent, out UiBar core, out UiBar np)
+        {
+            core = chip != null ? EnsureMeter("CoreMeter", chip, accent, true) : null;
+            np = chip != null ? EnsureMeter("NpMeter", chip, new Color(0.16f, 0.85f, 0.96f), false) : null;
+        }
+
+        UiBar EnsureMeter(string name, RectTransform chip, Color accent, bool withGhost)
+        {
+            Transform existing = chip.Find(name);
+            bool created = existing == null;
+            GameObject root = created ? new GameObject(name, typeof(RectTransform)) : existing.gameObject;
+            if (created) root.transform.SetParent(chip, false);
+
+            RectTransform rect = (RectTransform)root.transform;
+            if (created)
+            {
+                rect.anchorMin = new Vector2(0f, 0f);
+                rect.anchorMax = new Vector2(1f, 0f);
+                rect.pivot = new Vector2(0.5f, 0f);
+                rect.sizeDelta = new Vector2(-panelPadding * 2f, 4f);
+                // Core sits just under the slab and NP under it; both stay inside the corner margin.
+                rect.anchoredPosition = new Vector2(0f, withGhost ? -6f : -12f);
+            }
+
+            Color trackColor = new Color(0.16f, 0.20f, 0.28f, 0.92f);
+            Image track = MeterLayer(root.transform, "Track", trackColor, false);
+            Image ghost = withGhost
+                ? MeterLayer(root.transform, "Ghost", Color.Lerp(trackColor, accent, 0.45f), true)
+                : null;
+            Image fill = MeterLayer(root.transform, "Fill", accent, true);
+
+            UiBar bar = root.GetComponent<UiBar>();
+            if (bar == null) bar = root.AddComponent<UiBar>();
+            bar.Bind(fill, ghost);
+            return bar;
+        }
+
+        /// <summary>
+        /// One layer of a chip meter. Filled layers carry the shared white sprite: a Filled Image
+        /// with no sprite falls back to simple-quad rendering and ignores fillAmount entirely,
+        /// which is how the bay's milestone track once painted itself full at zero progress.
+        /// </summary>
+        static Image MeterLayer(Transform parent, string name, Color color, bool filled)
+        {
+            Transform existing = parent.Find(name);
+            bool created = existing == null;
+            GameObject go = created
+                ? new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image))
+                : existing.gameObject;
+            if (created) go.transform.SetParent(parent, false);
+
+            RectTransform rect = (RectTransform)go.transform;
+            if (created)
+            {
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+            }
+
+            Image image = go.GetComponent<Image>();
+            if (image == null) image = go.AddComponent<Image>();
+            image.raycastTarget = false;
+            if (created)
+            {
+                image.color = color;
+                if (filled)
+                {
+                    image.sprite = WhiteSprite();
+                    image.type = Image.Type.Filled;
+                    image.fillMethod = Image.FillMethod.Horizontal;
+                    image.fillAmount = 1f;
+                }
+            }
+            else if (filled && image.sprite == null)
+            {
+                image.sprite = WhiteSprite();
+            }
+
+            return image;
+        }
+
+        static Sprite meterSprite;
+
+        static Sprite WhiteSprite()
+        {
+            if (meterSprite == null) meterSprite = Resources.Load<Sprite>("VFX/UiWhite");
+            return meterSprite;
+        }
+
         // ---- Status writes. The presenter is the view of match state and this is the view of that view:
         // every one of these takes a finished string and never a MatchState.
 
@@ -1083,6 +1360,63 @@ namespace Overlink.Match
             {
                 bannerMotion = StartPulse(bannerMotion, banner, 1.045f, 0.20f);
             }
+        }
+
+        /// <summary>
+        /// The cyan stage and actor tags that flank the banner title - PRE-COMBAT and YOUR ACTION in the
+        /// reference art. The title keeps the phase sentence; the tags are the two short truths a glancing
+        /// eye actually needs, and they live inside the banner box so they travel with it.
+        /// <para>
+        /// Like every other box here they may be authored: a child of the banner named <c>TagLeft</c> or
+        /// <c>TagRight</c> keeps its scene styling and only receives words. Invented tags get the reference
+        /// treatment - small, bold, cyan, pushed to the outer edge of their half.
+        /// </para>
+        /// </summary>
+        public void SetBannerTags(string left, string right)
+        {
+            if (banner == null) return;
+
+            bannerTagLeft = EnsureBannerTag("TagLeft", bannerTagLeft, TextAlignmentOptions.MidlineRight, true);
+            bannerTagRight = EnsureBannerTag("TagRight", bannerTagRight, TextAlignmentOptions.MidlineLeft, false);
+            if (bannerTagLeft != null) bannerTagLeft.text = left ?? string.Empty;
+            if (bannerTagRight != null) bannerTagRight.text = right ?? string.Empty;
+        }
+
+        TextMeshProUGUI EnsureBannerTag(string name, TextMeshProUGUI cached, TextAlignmentOptions align, bool leftHalf)
+        {
+            if (cached != null) return cached;
+
+            Transform tag = banner.Find(name);
+            bool created = tag == null;
+            if (created && serializedMode)
+            {
+                Debug.LogError("[BattlefieldHud] Serialized Gameplay HUD is missing banner tag: " + name, this);
+                return null;
+            }
+            if (created)
+            {
+                var tagGo = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+                tagGo.transform.SetParent(banner, false);
+                tag = tagGo.transform;
+            }
+
+            TextMeshProUGUI tmp = tag.GetComponent<TextMeshProUGUI>();
+            if (tmp == null) return null;
+            if (created)
+            {
+                tmp.fontSize = 13f;
+                tmp.fontStyle = FontStyles.Bold;
+                tmp.color = new Color(0.16f, 0.85f, 0.96f, 1f);
+                tmp.alignment = align;
+                tmp.raycastTarget = false;
+                RectTransform rect = tmp.rectTransform;
+                rect.anchorMin = new Vector2(leftHalf ? 0f : 0.70f, 0f);
+                rect.anchorMax = new Vector2(leftHalf ? 0.30f : 1f, 1f);
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+            }
+
+            return tmp;
         }
 
         /// <summary>The key legend under the banner.</summary>
@@ -1110,7 +1444,8 @@ namespace Overlink.Match
             if (target == null || chip == null) return;
 
             Color accent = who == PlayerIndex.Player ? playerAccent : opponentAccent;
-            target.color = marked ? new Color(1f, 0.55f, 0.35f) : new Color(0.93f, 0.96f, 1f);
+            target.color = marked ? new Color(1f, 0.55f, 0.35f)
+                : who == PlayerIndex.Player ? playerBodyBase : opponentBodyBase;
             Transform rule = chip.Find("Accent");
             if (rule != null)
             {
@@ -1118,6 +1453,35 @@ namespace Overlink.Match
                 if (image != null) image.color = marked ? new Color(1f, 0.55f, 0.35f) : accent;
             }
 
+        }
+
+        /// <summary>
+        /// Publishes one side's two chip meters: Core durability and NP as ratios. The presenter
+        /// passes the same four numbers it prints in the chip body, so the bars and the digits can
+        /// never disagree; reduced motion snaps them through <see cref="UiBar"/> like every widget.
+        /// </summary>
+        public void SetStatusMeters(PlayerIndex who, float coreCurrent, float coreMax,
+            float npCurrent, float npMax)
+        {
+            bool player = who == PlayerIndex.Player;
+            UiBar core = player ? coreMeterPlayer : coreMeterOpponent;
+            UiBar np = player ? npMeterPlayer : npMeterOpponent;
+            if (core != null) core.Set(coreCurrent, coreMax);
+            if (np != null) np.Set(npCurrent, npMax);
+        }
+
+        /// <summary>Read-only view of one side's Core meter fill, for tests; -1 when unbound.</summary>
+        public float CoreMeterFill(PlayerIndex who)
+        {
+            UiBar bar = who == PlayerIndex.Player ? coreMeterPlayer : coreMeterOpponent;
+            return bar != null ? bar.FillAmount : -1f;
+        }
+
+        /// <summary>Read-only view of one side's NP meter fill, for tests; -1 when unbound.</summary>
+        public float NpMeterFill(PlayerIndex who)
+        {
+            UiBar bar = who == PlayerIndex.Player ? npMeterPlayer : npMeterOpponent;
+            return bar != null ? bar.FillAmount : -1f;
         }
 
         /// <summary>One row of the node list, tinted by who holds it. Null or empty hides the row.</summary>
@@ -1558,6 +1922,11 @@ namespace Overlink.Match
         {
             if (body == null)
             {
+                if (phaseControls != null || panel != null || HasSerializedBindings)
+                {
+                    Debug.LogError("[BattlefieldHud] Cannot display log: serialized Gameplay HUD is incomplete.", this);
+                    return;
+                }
                 Build();
             }
 
@@ -1715,6 +2084,11 @@ namespace Overlink.Match
         {
             if (readerTitle == null || readerBody == null)
             {
+                if (phaseControls != null || panel != null || HasSerializedBindings)
+                {
+                    Debug.LogError("[BattlefieldHud] Cannot show reader: serialized Gameplay HUD is incomplete.", this);
+                    return;
+                }
                 Build();
             }
 
@@ -1767,6 +2141,11 @@ namespace Overlink.Match
         {
             if (readerTitle == null || readerBody == null)
             {
+                if (phaseControls != null || panel != null || HasSerializedBindings)
+                {
+                    Debug.LogError("[BattlefieldHud] Cannot show card reader: serialized Gameplay HUD is incomplete.", this);
+                    return;
+                }
                 Build();
             }
 
@@ -1783,7 +2162,7 @@ namespace Overlink.Match
         /// <summary>True while the reader is standing down so the world-space card can be read.</summary>
         public bool ReaderShowsCard { get; private set; }
 
-        TextMeshProUGUI inspectionDetails;
+        [SerializeField] TextMeshProUGUI inspectionDetails;
 
         /// <summary>Companion text for the 3D preview, including the full unabridged ability.</summary>
         public void SetInspectionDetails(string title, string details)
@@ -1792,6 +2171,11 @@ namespace Overlink.Match
             if (inspectionDetails == null && !string.IsNullOrEmpty(title))
             {
                 Transform existing = reader.Find("InspectionDetails");
+                if (existing == null && serializedMode)
+                {
+                    Debug.LogError("[BattlefieldHud] Serialized Gameplay HUD is missing ReaderPanel/InspectionDetails.", this);
+                    return;
+                }
                 GameObject panel = existing != null ? existing.gameObject
                     : new GameObject("InspectionDetails", typeof(RectTransform), typeof(Image));
                 if (existing == null)

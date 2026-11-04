@@ -12,8 +12,10 @@ namespace Overlink.UI
     /// <summary>
     /// Deterministic, offline implementation of Gacha plan Milestones 1 and 3.
     ///
-    /// The screen is authored in <c>Assets/Scenes/Gacha.unity</c> (rebuild it through
-    /// <c>Overlink/Scenes/Build Gacha Pack Scene</c>). The card row is world-space and renders through
+    /// The reveal screen is authored in <c>Assets/Scenes/RevealGacha.unity</c> (rebuild it through
+    /// <c>Overlink/Scenes/Build Reveal Gacha Scene</c>). The shop lives in <c>Assets/Scenes/Gacha.unity</c>
+    /// and hands the pack size off through <see cref="ModeKey"/>; mode is never chosen on this screen.
+    /// The card row is world-space and renders through
     /// the real presentation pipeline: each revealed card instantiates its
     /// <c>Assets/Cards/Presentation/Templates</c> prefab via <see cref="CardTemplateCatalog"/> and binds
     /// it exactly like the Card Manager preview does, so the pack shows the shipped frames, art windows
@@ -26,7 +28,8 @@ namespace Overlink.UI
     /// advanced by exactly ten with threshold crossings granting free bonus packs (Milestone 3).
     ///
     /// The server/economy boundary is deliberately not represented here: manifests resolve locally and
-    /// deterministically, and the reveal position survives leaving and returning to the screen.
+    /// deterministically, and every entry into the scene is a fresh resolution — the meta progression
+    /// (collection, fragments, loyalty) persists, but the flip cursor never does.
     /// Attach it to the full-screen background image so the swipe-up gesture has a raycast surface.
     /// </summary>
     public sealed class OfflinePackOpeningController : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
@@ -53,6 +56,7 @@ namespace Overlink.UI
         [SerializeField] TextMeshProUGUI collectionText;
         [SerializeField] TextMeshProUGUI statusText;
         [SerializeField] TextMeshProUGUI instructionText;
+        [SerializeField] TextMeshProUGUI headerAccent;
 
         [Header("Presentation")]
         [SerializeField] CardTemplateCatalog templateCatalog;
@@ -65,18 +69,13 @@ namespace Overlink.UI
         [Header("Controls")]
         [SerializeField] Button revealNextButton;
         [SerializeField] Button revealRemainingButton;
-        [SerializeField] Button resetButton;
         [SerializeField] Button backButton;
-        [SerializeField] Button collectionButton;
-        [SerializeField] Toggle reducedMotionToggle;
+        [SerializeField] Button openAgainButton;
 
         [Header("Ten-Pack")]
-        [SerializeField] Button singlePackButton;
-        [SerializeField] Button tenPackButton;
         [SerializeField] TextMeshProUGUI packHeader;
         [SerializeField] Transform queueRoot;
         [SerializeField] GameObject capsuleTemplate;
-        [SerializeField] Button summaryButton;
         [SerializeField] GameObject summaryPanel;
         [SerializeField] Button summaryCloseButton;
         [SerializeField] Transform summaryContent;
@@ -294,6 +293,7 @@ namespace Overlink.UI
         readonly List<GameObject> summaryLines = new List<GameObject>();
         readonly List<GameObject> activeRevealVfx = new List<GameObject>();
         OfflineCollectionData.PackCard[] activeManifest = OfflineCollectionData.PackManifest;
+        OfflineCollectionData.SignalPackId selectedPack = OfflineCollectionData.SignalPackId.SignalArchive;
         PackMode mode = PackMode.Single;
         int revealed;
         int fragments;
@@ -301,33 +301,67 @@ namespace Overlink.UI
         bool pointerTracking;
         bool isRevealing;
         bool revealAllRunning;
+        GameObject signalBay;
+        GameObject revealUi;
+        GameObject cardRow;
+        bool openingPack;
+        bool reducedMotion;
 
-        bool ReducedMotion => reducedMotionToggle != null && reducedMotionToggle.isOn;
+        // Rolling readouts (P2b): the scene builder attaches UiCounter to the two status nodes and the
+        // controller resolves them as components in Awake rather than as serialized refs, so the
+        // verified twenty-one widget binding contract stays exactly as it is. Scenes authored before
+        // the widgets existed simply fall back to plain text writes.
+        UiCounter progressCounter;
+        UiCounter collectionCounter;
+        int collectionOwned;
+
+        /// <summary>Unique cards owned as of the last refresh — what the collection counter rolls to.</summary>
+        public int CollectionOwned => collectionOwned;
+
+        bool ReducedMotion => reducedMotion;
 
         void Awake()
         {
+            Transform bay = transform.Find("Figma Signal Bay");
+            Transform reveal = transform.Find("Reveal UI");
+            signalBay = bay != null ? bay.gameObject : null;
+            revealUi = reveal != null ? reveal.gameObject : null;
+            cardRow = slots.Length > 0 && slots[0] != null && slots[0].anchor != null
+                && slots[0].anchor.parent != null ? slots[0].anchor.parent.gameObject : null;
+            if (bay != null && reveal != null)
+            {
+                BindBayButton(bay, "Figma Open One", () => OpenFromBay(PackMode.Single));
+                BindBayButton(bay, "Figma Open Ten", () => OpenFromBay(PackMode.Ten));
+                BindBayButton(bay, "Figma Return", LeaveToCollection);
+                signalBay.SetActive(true);
+                revealUi.SetActive(false);
+                if (cardRow != null) cardRow.SetActive(false);
+            }
+            else openingPack = true; // Older authored scenes retain their original reveal flow.
             if (revealNextButton != null) revealNextButton.onClick.AddListener(RevealNext);
             if (revealRemainingButton != null) revealRemainingButton.onClick.AddListener(RevealRemaining);
-            if (resetButton != null) resetButton.onClick.AddListener(ResetDemo);
             if (backButton != null) backButton.onClick.AddListener(LeavePackOpening);
-            if (collectionButton != null) collectionButton.onClick.AddListener(LeaveToCollection);
-            if (singlePackButton != null) singlePackButton.onClick.AddListener(SelectSinglePack);
-            if (tenPackButton != null) tenPackButton.onClick.AddListener(SelectTenPack);
-            if (summaryButton != null) summaryButton.onClick.AddListener(ToggleSummary);
+            if (openAgainButton != null) openAgainButton.onClick.AddListener(OpenAgain);
             if (summaryCloseButton != null) summaryCloseButton.onClick.AddListener(() => SetSummaryOpen(false));
 
-            if (reducedMotionToggle != null)
-            {
-                reducedMotionToggle.isOn = PlayerPrefs.GetInt(ReducedMotionKey, 0) == 1;
-                reducedMotionToggle.onValueChanged.AddListener(OnReducedMotionChanged);
-                ApplyInstructionText();
-            }
+            // Reduced motion is a Settings-screen preference; this scene only reads it.
+            reducedMotion = PlayerPrefs.GetInt(ReducedMotionKey, 0) == 1;
+            ApplyInstructionText();
 
             mode = PlayerPrefs.GetInt(ModeKey, 0) == 1 ? PackMode.Ten : PackMode.Single;
-            OfflineCollectionData.EnsureResolved();
-            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved();
+            if (openingPack)
+            {
+                selectedPack = OfflineCollectionData.SelectedPack();
+                OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten, selectedPack);
+                if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved(selectedPack);
+                else OfflineCollectionData.EnsurePurchasedSingleResolved(selectedPack);
+            }
             BuildActiveManifest();
-            LoadProgress();
+            // Every entry is a fresh resolution: the flip cursor is never restored, while the meta
+            // progression (collection, fragments, loyalty) persists through OfflineCollectionData.
+            revealed = 0;
+            fragments = OfflineCollectionData.Fragments();
+            BindCounters();
             CacheAnchorRest();
             SyncSlots();
             BuildQueue();
@@ -340,7 +374,7 @@ namespace Overlink.UI
         {
             // Keyboard/gamepad players get the primary action focused immediately.
             EventSystem eventSystem = FindObjectOfType<EventSystem>();
-            if (eventSystem != null && revealNextButton != null)
+            if (eventSystem != null && openingPack && revealNextButton != null)
             {
                 eventSystem.SetSelectedGameObject(revealNextButton.gameObject);
             }
@@ -348,6 +382,7 @@ namespace Overlink.UI
 
         void Update()
         {
+            if (!openingPack) return;
             // Submit is the Unity UI action used by keyboard/gamepad in the existing EventSystem.
             // The button remains the primary focus target, so this is an accessibility fallback rather
             // than the only input path.
@@ -365,56 +400,56 @@ namespace Overlink.UI
             ClearRevealVfx();
         }
 
-        // ── Mode and manifest ───────────────────────────────────────────────────────────────────
-
-        /// <summary>Ten packs of five cards, plus one standard pack per loyalty reward the purchase
-        /// crossed into existence (§5.2), so a granted bonus pack is openable from the same queue.</summary>
-        void BuildActiveManifest()
+        static void BindBayButton(Transform bay, string childName, UnityEngine.Events.UnityAction action)
         {
-            if (mode == PackMode.Single)
-            {
-                activeManifest = OfflineCollectionData.PackManifest;
-                return;
-            }
-
-            var cards = new List<OfflineCollectionData.PackCard>(OfflineCollectionData.TenPackManifest);
-            int loyaltyPacks = OfflineCollectionData.BundleLoyaltyPacks();
-            for (int l = 0; l < loyaltyPacks; l++)
-            {
-                cards.AddRange(OfflineCollectionData.PackManifest);
-            }
-
-            activeManifest = cards.ToArray();
+            Transform child = bay.Find(childName);
+            Button button = child != null ? child.GetComponent<Button>() : null;
+            if (button != null) button.onClick.AddListener(action);
         }
 
-        public void SelectSinglePack()
+        void OpenFromBay(PackMode selectedMode)
         {
-            SetMode(PackMode.Single);
-        }
-
-        public void SelectTenPack()
-        {
-            SetMode(PackMode.Ten);
-        }
-
-        void SetMode(PackMode next)
-        {
-            if (mode == next) return;
-            mode = next;
+            mode = selectedMode;
+            selectedPack = OfflineCollectionData.SelectedPack();
             PlayerPrefs.SetInt(ModeKey, mode == PackMode.Ten ? 1 : 0);
             PlayerPrefs.Save();
-            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved();
+            OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten, selectedPack);
+            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved(selectedPack);
+            else OfflineCollectionData.EnsurePurchasedSingleResolved(selectedPack);
             BuildActiveManifest();
-            LoadProgress();
+            revealed = 0;
+            fragments = OfflineCollectionData.Fragments();
             ClearFaces();
+            for (int i = 0; i < slots.Length; i++) HideFace(i);
             SyncSlots();
             BuildQueue();
             RefreshTexts();
             UpdateButtons();
             SetSummaryOpen(false);
+            openingPack = true;
+            signalBay.SetActive(false);
+            revealUi.SetActive(true);
+            if (cardRow != null) cardRow.SetActive(true);
+            EventSystem eventSystem = FindObjectOfType<EventSystem>();
+            if (eventSystem != null && revealNextButton != null)
+                eventSystem.SetSelectedGameObject(revealNextButton.gameObject);
         }
 
-        string RevealedKey => mode == PackMode.Ten ? OfflineCollectionData.BundleRevealedKey : OfflineCollectionData.RevealedKey;
+        // ── Mode and manifest ───────────────────────────────────────────────────────────────────
+
+        /// <summary>Purchased cards plus any earned loyalty packs, presented in the same queue.</summary>
+        void BuildActiveManifest()
+        {
+            var cards = new List<OfflineCollectionData.PackCard>(mode == PackMode.Single
+                ? OfflineCollectionData.ManifestFor(selectedPack) : OfflineCollectionData.BundleManifestFor(selectedPack));
+            int loyaltyPacks = mode == PackMode.Single ? OfflineCollectionData.SingleLoyaltyPacks() : OfflineCollectionData.BundleLoyaltyPacks();
+            for (int l = 0; l < loyaltyPacks; l++)
+            {
+                cards.AddRange(OfflineCollectionData.ManifestFor(selectedPack));
+            }
+
+            activeManifest = cards.ToArray();
+        }
 
         int CurrentPack => Mathf.Min(revealed / CardsPerPack, Mathf.Max(0, activeManifest.Length / CardsPerPack - 1));
 
@@ -449,6 +484,7 @@ namespace Overlink.UI
 
         public void OnPointerDown(PointerEventData eventData)
         {
+            if (!openingPack) return;
             pointerDown = eventData.position;
             pointerTracking = true;
         }
@@ -468,25 +504,6 @@ namespace Overlink.UI
             }
         }
 
-        void OnReducedMotionChanged(bool value)
-        {
-            PlayerPrefs.SetInt(ReducedMotionKey, value ? 1 : 0);
-            PlayerPrefs.Save();
-            ApplyInstructionText();
-            if (value)
-            {
-                // Still the hover immediately; the flip coroutine checks the toggle per reveal.
-                for (int i = 0; i < slots.Length; i++)
-                {
-                    PackSlot slot = slots[i];
-                    if (slot != null && slot.anchor != null && anchorRest.TryGetValue(i, out Vector3 rest))
-                    {
-                        slot.anchor.localPosition = rest;
-                    }
-                }
-            }
-        }
-
         void ApplyInstructionText()
         {
             if (instructionText == null)
@@ -499,16 +516,26 @@ namespace Overlink.UI
 
         // ── Progress ─────────────────────────────────────────────────────────────────────────────
 
-        void LoadProgress()
+        /// <summary>Resolves the rolling readouts the scene builder attached and seeds their formatters
+        /// at zero, so the first refresh rolls the collection up from nothing — the counters' entry beat.</summary>
+        void BindCounters()
         {
-            revealed = Mathf.Clamp(PlayerPrefs.GetInt(RevealedKey, 0), 0, activeManifest.Length);
-            fragments = Mathf.Max(0, PlayerPrefs.GetInt(OfflineCollectionData.FragmentsKey, 0));
+            progressCounter = progressText != null ? progressText.GetComponent<UiCounter>() : null;
+            if (progressCounter != null)
+            {
+                progressCounter.Bind(v => "REVEALED  " + v + " / " + (activeManifest != null ? activeManifest.Length : 0), 0);
+            }
+
+            collectionCounter = collectionText != null ? collectionText.GetComponent<UiCounter>() : null;
+            if (collectionCounter != null) collectionCounter.Bind(ComposeCollection, 0);
         }
 
-        void SaveProgress()
+        /// <summary>Composes the collection readout around a rolling owned count; shared by the counter
+        /// formatter and the plain-text fallback so both voices stay identical.</summary>
+        string ComposeCollection(int owned)
         {
-            PlayerPrefs.SetInt(RevealedKey, revealed);
-            PlayerPrefs.Save();
+            return "COLLECTION  " + owned + " UNIQUE  •  DATA FRAGMENTS  " + fragments
+                + "  •  LOYALTY  " + OfflineCollectionData.LoyaltyProgress() + " / " + OfflineCollectionData.LoyaltyThreshold;
         }
 
         void RefreshTexts()
@@ -520,22 +547,31 @@ namespace Overlink.UI
                 if (OfflineCollectionData.Owned(OfflineCollectionData.Catalog[i].Id) > 0) owned++;
             }
 
-            if (progressText != null) progressText.text = "REVEALED  " + revealed + " / " + activeManifest.Length;
-            if (collectionText != null)
+            collectionOwned = owned;
+
+            // Roll when the VFX widget is present; plain text is the fallback for older scenes.
+            if (progressCounter != null) progressCounter.Set(revealed);
+            else if (progressText != null) progressText.text = "REVEALED  " + revealed + " / " + activeManifest.Length;
+            if (collectionCounter != null) collectionCounter.Set(owned);
+            else if (collectionText != null) collectionText.text = ComposeCollection(owned);
+
+            if (headerAccent != null)
             {
-                collectionText.text = "COLLECTION  " + owned + " UNIQUE  •  DATA FRAGMENTS  " + fragments
-                    + "  •  LOYALTY  " + OfflineCollectionData.LoyaltyProgress() + " / " + OfflineCollectionData.LoyaltyThreshold;
+                // One accent, not a sentence: the pack's condition in the bay's own vocabulary.
+                headerAccent.text = revealed == 0 ? "SEAL INTACT"
+                    : revealed >= activeManifest.Length ? "LINK COMPLETE"
+                    : "SEAL BROKEN";
             }
 
             if (packHeader != null)
             {
-                if (mode == PackMode.Single)
+                if (mode == PackMode.Single && PackCount == 1)
                 {
-                    packHeader.text = "SINGLE PACK  •  STANDARD FIVE-CARD RESOLUTION";
+                    packHeader.text = "SINGLE PACK";
                 }
                 else if (revealed >= activeManifest.Length)
                 {
-                    packHeader.text = "PACK " + PackCount + " / " + PackCount + "  •  BUNDLE COMPLETE";
+                    packHeader.text = "PACK " + PackCount + " / " + PackCount + "  •  COMPLETE";
                 }
                 else
                 {
@@ -546,45 +582,60 @@ namespace Overlink.UI
 
             if (statusText != null)
             {
-                if (mode == PackMode.Single)
+                if (mode == PackMode.Single && PackCount == 1)
                 {
                     statusText.text = revealed >= activeManifest.Length
                         ? "PACK COMPLETE  //  ALL FIVE CARDS SECURED  //  DUPLICATES CONVERTED TRANSPARENTLY"
-                        : "PACK RESOLVED  //  CARD " + (revealed + 1) + " IS READY  //  RESULT PERSISTS IF YOU LEAVE";
+                        : "PACK RESOLVED  //  CARD " + (revealed + 1) + " IS READY  //  FRESH RESOLUTION EVERY ENTRY";
                 }
                 else if (revealed >= activeManifest.Length)
                 {
-                    statusText.text = "BUNDLE COMPLETE  //  " + activeManifest.Length + " CARDS SECURED  //  SUMMARY AVAILABLE";
+                    statusText.text = (mode == PackMode.Single ? "PACKS COMPLETE" : "BUNDLE COMPLETE")
+                        + "  //  " + activeManifest.Length + " CARDS SECURED  //  SUMMARY AVAILABLE";
                 }
                 else
                 {
-                    statusText.text = "TEN-PACK QUEUE  //  PACK " + (CurrentPack + 1) + " CARD " + ((revealed % CardsPerPack) + 1)
-                        + " IS READY  //  RESULT PERSISTS IF YOU LEAVE";
+                    statusText.text = (mode == PackMode.Single ? "BONUS QUEUE" : "TEN-PACK QUEUE") + "  //  PACK " + (CurrentPack + 1) + " CARD " + ((revealed % CardsPerPack) + 1)
+                        + " IS READY  //  FRESH RESOLUTION EVERY ENTRY";
                 }
             }
         }
 
+        /// <summary>Two-state button machine: while cards remain, only the reveal pair exists — there is
+        /// no mid-reveal exit (Escape/submit routes to REVEAL ALL semantics instead). Once everything is
+        /// revealed, the pair is replaced by SIGNAL BAY (back) and OPEN AGAIN.</summary>
         void UpdateButtons()
         {
-            bool more = revealed < activeManifest.Length && !isRevealing;
-            if (revealNextButton != null) revealNextButton.interactable = more;
-            if (revealRemainingButton != null) revealRemainingButton.interactable = more;
-            if (summaryButton != null) summaryButton.interactable = mode == PackMode.Ten && revealed > 0;
-            if (singlePackButton != null) SetModeButtonLabel(singlePackButton, "SINGLE PACK", mode == PackMode.Single);
-            if (tenPackButton != null) SetModeButtonLabel(tenPackButton, "TEN-PACK  •  50 CARDS", mode == PackMode.Ten);
-        }
+            bool done = revealed >= activeManifest.Length;
+            bool more = !done && !isRevealing && !revealAllRunning;
+            if (revealNextButton != null)
+            {
+                revealNextButton.gameObject.SetActive(!done);
+                revealNextButton.interactable = more;
+            }
 
-        static void SetModeButtonLabel(Button button, string label, bool active)
-        {
-            if (button == null) return;
-            TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>();
-            if (text != null) text.text = (active ? "▸ " : string.Empty) + label;
+            if (revealRemainingButton != null)
+            {
+                revealRemainingButton.gameObject.SetActive(!done);
+                revealRemainingButton.interactable = more;
+            }
+
+            if (backButton != null)
+            {
+                backButton.gameObject.SetActive(done);
+                backButton.interactable = done;
+            }
+
+            if (openAgainButton != null)
+            {
+                openAgainButton.gameObject.SetActive(done);
+                openAgainButton.interactable = done;
+            }
         }
 
         // ── Queue strip ──────────────────────────────────────────────────────────────────────────
 
-        /// <summary>One capsule per pack in the bundle (plus loyalty packs): sealed, open, or done.
-        /// The whole strip is hidden in single-pack mode, where there is no queue to speak of.</summary>
+        /// <summary>One capsule per pack when the resolution includes more than one pack.</summary>
         void BuildQueue()
         {
             if (queueRoot == null || capsuleTemplate == null) return;
@@ -594,8 +645,8 @@ namespace Overlink.UI
             }
 
             capsules.Clear();
-            queueRoot.gameObject.SetActive(mode == PackMode.Ten);
-            if (mode == PackMode.Single) return;
+            queueRoot.gameObject.SetActive(PackCount > 1);
+            if (PackCount <= 1) return;
 
             int currentPack = revealed >= activeManifest.Length ? PackCount - 1 : CurrentPack;
             for (int p = 0; p < PackCount; p++)
@@ -605,9 +656,10 @@ namespace Overlink.UI
                 capsule.SetActive(true);
                 capsules.Add(capsule);
 
-                bool loyalty = p >= OfflineCollectionData.PacksInBundle;
+                int purchasedPacks = mode == PackMode.Single ? 1 : OfflineCollectionData.PacksInBundle;
+                bool loyalty = p >= purchasedPacks;
                 string state = p < currentPack || revealed >= activeManifest.Length ? "DONE" : p == currentPack ? "OPEN" : "SEALED";
-                SetCapsuleText(capsule, "Number", loyalty ? "L" + (p - OfflineCollectionData.PacksInBundle + 1) : (p + 1).ToString("00"));
+                SetCapsuleText(capsule, "Number", loyalty ? "L" + (p - purchasedPacks + 1) : (p + 1).ToString("00"));
                 SetCapsuleText(capsule, "State", loyalty ? "LOYALTY PACK  •  " + state : state);
                 Image image = capsule.GetComponent<Image>();
                 if (image != null)
@@ -645,7 +697,7 @@ namespace Overlink.UI
 
         public void RevealNext()
         {
-            if (isRevealing || revealAllRunning || revealed >= activeManifest.Length)
+            if (!openingPack || isRevealing || revealAllRunning || revealed >= activeManifest.Length)
             {
                 return;
             }
@@ -975,7 +1027,6 @@ namespace Overlink.UI
             if (manifestIndex != revealed) return;
             revealed = manifestIndex + 1;
             isRevealing = false;
-            SaveProgress();
             RefreshTexts();
             UpdateButtons();
             BuildQueue();
@@ -1053,7 +1104,22 @@ namespace Overlink.UI
             isRevealing = false;
             revealAllRunning = false;
             OfflineCollectionData.ClearPackRevealProgress();
-            SceneLoader.LoadMainMenu();
+            // The reveal is its own scene now, so the back button returns to the bay that sold the
+            // pack rather than to the main menu: the bay is one load away and still owns the choice
+            // of what to open next.
+            SceneLoader.Load(SceneIndex.Gacha);
+        }
+
+        /// <summary>Re-resolves the same pack size without returning to the bay: clears any reveal trace
+        /// and reloads the reveal scene, so the fresh-entry reset in <see cref="Awake"/> runs again.
+        /// <see cref="ModeKey"/> is deliberately left untouched.</summary>
+        void OpenAgain()
+        {
+            StopAllCoroutines();
+            isRevealing = false;
+            revealAllRunning = false;
+            OfflineCollectionData.ClearPackRevealProgress();
+            SceneLoader.Load(SceneIndex.RevealGacha);
         }
 
         void LeaveToCollection()
@@ -1067,7 +1133,8 @@ namespace Overlink.UI
 
         void OnBundleComplete()
         {
-            if (mode != PackMode.Ten) return;
+            // The summary is the completion beat for both modes now that the SUMMARY button is gone:
+            // a single pack auto-opens it too, so the audit is never a hidden extra click.
             BuildSummary();
             SetSummaryOpen(true);
         }
@@ -1223,31 +1290,22 @@ namespace Overlink.UI
         }
 
         /// <summary>
-        /// Duplicate audit per mode: the single pack checks earlier copies inside its own manifest; the
-        /// bundle defers to the committed-ownership audit in <see cref="OfflineCollectionData"/> so the
-        /// flag stays correct across relaunches and prior packs.
+        /// Reconstruct ownership before the current resolution by subtracting every committed copy,
+        /// including loyalty cards, then account for earlier cards in the active manifest.
         /// </summary>
         bool IsDuplicate(int manifestIndex)
         {
-            if (mode == PackMode.Ten && manifestIndex < OfflineCollectionData.TenPackManifest.Length)
-            {
-                return OfflineCollectionData.IsBundleDuplicate(manifestIndex);
-            }
-
+            string id = activeManifest[manifestIndex].Id;
             for (int i = 0; i < manifestIndex; i++)
             {
-                if (activeManifest[i].Id == activeManifest[manifestIndex].Id) return true;
+                if (activeManifest[i].Id == id) return true;
             }
-
-            return false;
+            int copies = 0;
+            foreach (var card in activeManifest) if (card.Id == id) copies++;
+            return OfflineCollectionData.Owned(id) > copies;
         }
 
         // ── Final summary (§6.3) ─────────────────────────────────────────────────────────────────
-
-        void ToggleSummary()
-        {
-            SetSummaryOpen(summaryPanel == null || !summaryPanel.activeSelf);
-        }
 
         void SetSummaryOpen(bool open)
         {
@@ -1257,8 +1315,8 @@ namespace Overlink.UI
 
         /// <summary>Groups the revealed cards by pack boundary with per-card ownership/fragment results,
         /// then surfaces the guarantee and loyalty audit lines once the bundle is complete so all fifty
-        /// cards stay accountable (§6.3). Opened mid-bundle it lists only what has been revealed, so the
-        /// SUMMARY button never spoils sealed packs.</summary>
+        /// cards stay accountable (§6.3). The summary auto-opens on completion in both modes, so it
+        /// never lists anything but fully revealed cards.</summary>
         void BuildSummary()
         {
             if (summaryContent == null || summaryLineTemplate == null) return;
@@ -1273,7 +1331,7 @@ namespace Overlink.UI
             bool complete = shown >= activeManifest.Length;
             for (int p = 0; p < PackCount && p * CardsPerPack < shown; p++)
             {
-                bool loyalty = p >= OfflineCollectionData.PacksInBundle;
+                bool loyalty = p >= (mode == PackMode.Single ? 1 : OfflineCollectionData.PacksInBundle);
                 AddSummaryLine("PACK " + (p + 1).ToString("00") + (loyalty ? "  •  LOYALTY BONUS PACK" : string.Empty),
                     new Color(0.42f, 0.72f, 1f), 20f, TextAnchor.MiddleLeft);
                 for (int s = 0; s < CardsPerPack; s++)
@@ -1297,28 +1355,36 @@ namespace Overlink.UI
 
             if (summaryGuaranteeText != null)
             {
-                int guarantee = complete ? OfflineCollectionData.BundleGuaranteeIndex() : -2;
-                if (guarantee == -2)
+                if (mode == PackMode.Single)
                 {
-                    summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  AUDIT UNLOCKS WHEN THE BUNDLE IS COMPLETE";
-                }
-                else if (guarantee >= 0)
-                {
-                    OfflineCollectionData.PackCard card = OfflineCollectionData.TenPackManifest[guarantee];
-                    summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  EPIC-OR-BETTER SATISFIED BY PACK "
-                        + ((guarantee / CardsPerPack) + 1) + " SLOT " + ((guarantee % CardsPerPack) + 1) + "  —  "
-                        + card.Name.ToUpperInvariant() + " (" + card.Rarity.ToString().ToUpperInvariant() + ")";
+                    summaryGuaranteeText.text = PackCount > 1 ? "SINGLE PACK + LOYALTY BONUS  •  RESOLUTION COMPLETE" : "SINGLE PACK  •  FIVE-CARD RESOLUTION COMPLETE";
                 }
                 else
                 {
-                    summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  NO QUALIFYING RESULT (AUDIT FAILURE)";
+                    int guarantee = complete ? OfflineCollectionData.BundleGuaranteeIndex(selectedPack) : -2;
+                    if (guarantee == -2)
+                    {
+                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  AUDIT UNLOCKS WHEN THE BUNDLE IS COMPLETE";
+                    }
+                    else if (guarantee >= 0)
+                    {
+                        OfflineCollectionData.PackCard card = OfflineCollectionData.BundleManifestFor(selectedPack)[guarantee];
+                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  EPIC-OR-BETTER SATISFIED BY PACK "
+                            + ((guarantee / CardsPerPack) + 1) + " SLOT " + ((guarantee % CardsPerPack) + 1) + "  —  "
+                            + card.Name.ToUpperInvariant() + " (" + card.Rarity.ToString().ToUpperInvariant() + ")";
+                    }
+                    else
+                    {
+                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  NO QUALIFYING RESULT (AUDIT FAILURE)";
+                    }
                 }
             }
 
             if (summaryLoyaltyText != null)
             {
                 summaryLoyaltyText.text = "LOYALTY  •  PURCHASED PACKS " + OfflineCollectionData.PurchasedPacks()
-                    + " (THIS BUNDLE +10)  •  PROGRESS " + OfflineCollectionData.LoyaltyProgress() + " / "
+                    + (mode == PackMode.Ten ? " (THIS BUNDLE +10)" : string.Empty)
+                    + "  •  PROGRESS " + OfflineCollectionData.LoyaltyProgress() + " / "
                     + OfflineCollectionData.LoyaltyThreshold + "  •  BONUS PACKS GRANTED "
                     + OfflineCollectionData.LoyaltyGranted();
             }
@@ -1337,25 +1403,6 @@ namespace Overlink.UI
                 text.fontSize = size;
                 text.alignment = anchor == TextAnchor.MiddleLeft ? TextAlignmentOptions.Left : TextAlignmentOptions.Center;
             }
-        }
-
-        // ── Reset ────────────────────────────────────────────────────────────────────────────────
-
-        void ResetDemo()
-        {
-            OfflineCollectionData.Reset();
-            revealed = 0;
-            fragments = 0;
-            OfflineCollectionData.EnsureResolved();
-            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved();
-            BuildActiveManifest();
-            fragments = OfflineCollectionData.Fragments();
-            ClearFaces();
-            for (int i = 0; i < slots.Length; i++) HideFace(i);
-            BuildQueue();
-            RefreshTexts();
-            UpdateButtons();
-            SetSummaryOpen(false);
         }
     }
 }

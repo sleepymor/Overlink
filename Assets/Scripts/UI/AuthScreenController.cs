@@ -17,12 +17,8 @@ namespace Overlink.UI
     /// <see cref="AuthFlowController"/>, which is the only thing allowed to change scenes. That split
     /// is why there is no scene loading anywhere in this file.
     /// </para>
-    /// <para>
-    /// Every reference is optional. If none are assigned the screen builds itself at runtime from
-    /// <c>AuthScreenController.Build.cs</c> (see <see cref="BuildRuntimeUi"/>), so the Auth scene works
-    /// with nothing but an empty GameObject carrying this component, and a designer can later replace
-    /// the generated look by wiring the fields in the Inspector without touching any code.
-    /// </para>
+    /// <para>All panels and controls are serialized in <c>Auth.unity</c>. Runtime code only binds
+    /// account state and listeners; it never constructs the screen foundation.</para>
     /// </summary>
     public sealed partial class AuthScreenController : MonoBehaviour
     {
@@ -81,7 +77,11 @@ namespace Overlink.UI
             AuthFlowController.EnsureInstance();
             PlayerProfileService.EnsureInstance();
 
-            if (!IsWired()) BuildRuntimeUi();
+            if (!IsWired())
+            {
+                Debug.LogError("[Auth] Serialized Auth UI is incomplete. Author Auth.unity before entering Play mode.");
+                return;
+            }
         }
 
         void Start()

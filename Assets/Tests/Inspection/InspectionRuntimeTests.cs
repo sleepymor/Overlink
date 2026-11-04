@@ -22,9 +22,12 @@ public class InspectionRuntimeTests
         presenter.enabled = false;
         var input = match.AddComponent<BattlefieldInput>();
         input.enabled = false;
-        input.presenter = presenter;
-        input.coordinator = coordinator;
-        var state = new MatchState();
+            input.presenter = presenter;
+            input.coordinator = coordinator;
+            var hudObject = new GameObject("Inspection test HUD", typeof(RectTransform));
+            var testHud = hudObject.AddComponent<BattlefieldHud>();
+            testHud.Build();
+            var state = new MatchState();
         typeof(GameCoordinator).GetField("matchState", BindingFlags.NonPublic | BindingFlags.Instance)
             .SetValue(coordinator, state);
         var definition = new CardDefinition { Id = "inspect", Name = "Inspect probe", Type = CardType.Unit,
@@ -34,7 +37,7 @@ public class InspectionRuntimeTests
         var data = new CardData(definition.Id, definition.Name, definition.Cost, definition.AbilityText, Color.white);
         data.AttachSource(definition, card);
         presenter.cardDataResolver = _ => data;
-        presenter.hud = BattlefieldHud.Ensure();
+            presenter.hud = testHud;
         presenter.BuildBoard();
         presenter.Repaint(state);
         yield return null;
@@ -60,7 +63,7 @@ public class InspectionRuntimeTests
 
         Object.Destroy(match);
         Object.Destroy(cameraObject);
-        Object.Destroy(presenter.hud.gameObject);
+            Object.Destroy(hudObject);
         yield return null;
     }
 }

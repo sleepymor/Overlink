@@ -17,9 +17,18 @@ namespace Overlink.UI
         public const string BundleResolvedKey = "Overlink.OfflinePack.Bundle.Resolved";
         public const string BundleRevealedKey = "Overlink.OfflinePack.Bundle.Revealed";
         public const string BundleLoyaltyPackKey = "Overlink.OfflinePack.Bundle.LoyaltyPack";
+        public const string SingleLoyaltyPackKey = "Overlink.OfflinePack.Single.LoyaltyPack";
         public const string PurchasedPacksKey = "Overlink.OfflinePack.PurchasedPacks";
         public const string LoyaltyGrantedKey = "Overlink.OfflinePack.LoyaltyGranted";
         public const string DeckKey = "Overlink.OfflineDeck.";
+        public const string SelectedPackKey = "Overlink.OfflinePack.SelectedPack";
+
+        public enum SignalPackId
+        {
+            SignalArchive = 0,
+            FrontlineProtocol = 1,
+            RelayNetwork = 2
+        }
 
         /// <summary>The prototype ships one set; the binder exposes it so the set filter is exercised.</summary>
         public const string SetName = "SET 001";
@@ -52,6 +61,69 @@ namespace Overlink.UI
             new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "Hold the line while the network stabilizes.", 30),
             new PackCard("card_fsti_001", "Signal Scout", CardType.Unit, Faction.Fsti, Rarity.Common, 1, 2, 2, "A duplicate copy becomes Data Fragments.", 5),
         };
+
+        // The three Signal Bay choices are real deterministic data sets. The first is the original
+        // offline prototype; the other two deliberately reuse the shipped catalog with different
+        // faction-oriented compositions so switching choices changes the reveal queue, ownership and
+        // duplicate-fragment accounting rather than only changing a label.
+        public static readonly PackCard[] FrontlineManifest =
+        {
+            new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "Hold the line while the network stabilizes.", 30),
+            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "Relay the line beyond the veil.", 12),
+            new PackCard("card_frti_001", "Repair Pulse", CardType.Ability, Faction.Frti, Rarity.Rare, 3, 0, 0, "Restore a damaged Core.", 12),
+            new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "A second shield node becomes Data Fragments.", 30),
+            new PackCard("card_fsti_001", "Signal Scout", CardType.Unit, Faction.Fsti, Rarity.Common, 1, 2, 2, "A reliable first link.", 5)
+        };
+
+        public static readonly PackCard[] RelayManifest =
+        {
+            new PackCard("card_fsti_002", "Relay Spark", CardType.Relay, Faction.Fsti, Rarity.Common, 2, 0, 0, "Connects the next play.", 5),
+            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "Relay the line beyond the veil.", 12),
+            new PackCard("card_frti_001", "Repair Pulse", CardType.Ability, Faction.Frti, Rarity.Rare, 3, 0, 0, "Restore a damaged Core.", 12),
+            new PackCard("card_fsti_002", "Relay Spark", CardType.Relay, Faction.Fsti, Rarity.Common, 2, 0, 0, "A second relay becomes Data Fragments.", 5),
+            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "A second courier becomes Data Fragments.", 12)
+        };
+
+        public static SignalPackId SelectedPack()
+        {
+            int raw = Mathf.Clamp(PlayerPrefs.GetInt(SelectedPackKey, 0), 0, 2);
+            return (SignalPackId)raw;
+        }
+
+        public static void SelectPack(SignalPackId pack)
+        {
+            PlayerPrefs.SetInt(SelectedPackKey, Mathf.Clamp((int)pack, 0, 2));
+            PlayerPrefs.Save();
+        }
+
+        public static string PackName(SignalPackId pack)
+        {
+            switch (pack)
+            {
+                case SignalPackId.FrontlineProtocol: return "FRONTLINE PROTOCOL";
+                case SignalPackId.RelayNetwork: return "RELAY NETWORK";
+                default: return "SIGNAL ARCHIVE";
+            }
+        }
+
+        public static PackCard[] ManifestFor(SignalPackId pack)
+        {
+            switch (pack)
+            {
+                case SignalPackId.FrontlineProtocol: return FrontlineManifest;
+                case SignalPackId.RelayNetwork: return RelayManifest;
+                default: return PackManifest;
+            }
+        }
+
+        public static PackCard[] BundleManifestFor(SignalPackId pack)
+        {
+            if (pack == SignalPackId.SignalArchive) return TenPackManifest;
+            PackCard[] single = ManifestFor(pack);
+            var bundle = new List<PackCard>(single.Length * 10);
+            for (int i = 0; i < 10; i++) bundle.AddRange(single);
+            return bundle.ToArray();
+        }
 
         /// <summary>
         /// Ten deterministic standard packs (fifty cards) for the offline Milestone 3 prototype.
@@ -104,6 +176,11 @@ namespace Overlink.UI
 
         public static int PacksInBundle => TenPackManifest.Length / 5;
 
+        public static int PacksInBundleFor(SignalPackId pack)
+        {
+            return BundleManifestFor(pack).Length / 5;
+        }
+
         /// <summary>
         /// Resolves the ten-pack bundle once: commits ownership and fragments for all fifty cards plus
         /// any loyalty pack the purchase crossed into existence, advances the purchased-pack counter by
@@ -111,16 +188,23 @@ namespace Overlink.UI
         /// </summary>
         public static void EnsureBundleResolved()
         {
+            EnsureBundleResolved(SignalPackId.SignalArchive);
+        }
+
+        public static void EnsureBundleResolved(SignalPackId pack)
+        {
             if (PlayerPrefs.GetInt(BundleResolvedKey, 0) == 1)
             {
                 return;
             }
 
+            PackCard[] manifest = BundleManifestFor(pack);
+            PackCard[] loyaltyManifest = ManifestFor(pack);
             var seen = new HashSet<string>();
             int fragments = 0;
-            for (int i = 0; i < TenPackManifest.Length; i++)
+            for (int i = 0; i < manifest.Length; i++)
             {
-                PackCard card = TenPackManifest[i];
+                PackCard card = manifest[i];
                 int owned = PlayerPrefs.GetInt(OwnedKey + card.Id, 0);
                 bool duplicate = !seen.Add(card.Id) || owned > 0;
                 PlayerPrefs.SetInt(OwnedKey + card.Id, owned + 1);
@@ -133,9 +217,9 @@ namespace Overlink.UI
             if (rewards > 0)
             {
                 // The loyalty pack is a standard pack resolved with the same ownership rules (§10.7).
-                for (int i = 0; i < PackManifest.Length; i++)
+                for (int i = 0; i < loyaltyManifest.Length; i++)
                 {
-                    PackCard card = PackManifest[i];
+                    PackCard card = loyaltyManifest[i];
                     int owned = PlayerPrefs.GetInt(OwnedKey + card.Id, 0);
                     bool duplicate = !seen.Add("loyalty:" + card.Id) || owned > 0;
                     PlayerPrefs.SetInt(OwnedKey + card.Id, owned + 1);
@@ -162,17 +246,23 @@ namespace Overlink.UI
         /// </summary>
         public static bool IsBundleDuplicate(int index)
         {
-            if (index < 0 || index >= TenPackManifest.Length) return false;
-            string id = TenPackManifest[index].Id;
+            return IsBundleDuplicate(SignalPackId.SignalArchive, index);
+        }
+
+        public static bool IsBundleDuplicate(SignalPackId pack, int index)
+        {
+            PackCard[] manifest = BundleManifestFor(pack);
+            if (index < 0 || index >= manifest.Length) return false;
+            string id = manifest[index].Id;
             for (int i = 0; i < index; i++)
             {
-                if (TenPackManifest[i].Id == id) return true;
+                if (manifest[i].Id == id) return true;
             }
 
             int copiesInBundle = 0;
-            for (int i = 0; i < TenPackManifest.Length; i++)
+            for (int i = 0; i < manifest.Length; i++)
             {
-                if (TenPackManifest[i].Id == id) copiesInBundle++;
+                if (manifest[i].Id == id) copiesInBundle++;
             }
 
             return Owned(id) - copiesInBundle > 0;
@@ -181,9 +271,15 @@ namespace Overlink.UI
         /// <summary>Index of the first Epic-or-better card in the bundle: the ten-pack guarantee audit.</summary>
         public static int BundleGuaranteeIndex()
         {
-            for (int i = 0; i < TenPackManifest.Length; i++)
+            return BundleGuaranteeIndex(SignalPackId.SignalArchive);
+        }
+
+        public static int BundleGuaranteeIndex(SignalPackId pack)
+        {
+            PackCard[] manifest = BundleManifestFor(pack);
+            for (int i = 0; i < manifest.Length; i++)
             {
-                if (TenPackManifest[i].Rarity >= Rarity.Epic) return i;
+                if (manifest[i].Rarity >= Rarity.Epic) return i;
             }
 
             return -1;
@@ -273,11 +369,50 @@ namespace Overlink.UI
                 }
             }
 
-            PlayerPrefs.SetInt(FragmentsKey, fragments);
+            PlayerPrefs.SetInt(FragmentsKey, Fragments() + fragments);
             PlayerPrefs.SetInt(ResolvedKey, 1);
             PlayerPrefs.SetInt(RevealedKey, 0);
             PlayerPrefs.Save();
         }
+
+        /// <summary>Resolve a purchased single pack once, including any earned loyalty pack.
+        /// Collection seeding uses EnsureResolved directly and never records a purchase.</summary>
+        public static void EnsurePurchasedSingleResolved()
+        {
+            EnsurePurchasedSingleResolved(SignalPackId.SignalArchive);
+        }
+
+        public static void EnsurePurchasedSingleResolved(SignalPackId pack)
+        {
+            if (PlayerPrefs.GetInt(ResolvedKey, 0) == 1) return;
+            PackCard[] manifest = ManifestFor(pack);
+            var seen = new HashSet<string>();
+            int fragments = 0;
+            for (int i = 0; i < manifest.Length; i++)
+            {
+                PackCard card = manifest[i];
+                int owned = Owned(card.Id);
+                bool duplicate = !seen.Add(card.Id) || owned > 0;
+                PlayerPrefs.SetInt(OwnedKey + card.Id, owned + 1);
+                if (duplicate) fragments += card.FragmentValue;
+            }
+            PlayerPrefs.SetInt(ResolvedKey, 1);
+            int rewards = CommitPurchase(1);
+            PlayerPrefs.SetInt(SingleLoyaltyPackKey, rewards);
+            for (int reward = 0; reward < rewards; reward++)
+            {
+                foreach (var card in manifest)
+                {
+                    int owned = Owned(card.Id);
+                    if (owned > 0) fragments += card.FragmentValue;
+                    PlayerPrefs.SetInt(OwnedKey + card.Id, owned + 1);
+                }
+            }
+            PlayerPrefs.SetInt(FragmentsKey, Fragments() + fragments);
+            PlayerPrefs.Save();
+        }
+
+        public static int SingleLoyaltyPacks() => Mathf.Max(0, PlayerPrefs.GetInt(SingleLoyaltyPackKey, 0));
 
         public static int Owned(string id)
         {
@@ -335,8 +470,10 @@ namespace Overlink.UI
             PlayerPrefs.DeleteKey(BundleResolvedKey);
             PlayerPrefs.DeleteKey(BundleRevealedKey);
             PlayerPrefs.DeleteKey(BundleLoyaltyPackKey);
+            PlayerPrefs.DeleteKey(SingleLoyaltyPackKey);
             PlayerPrefs.DeleteKey(PurchasedPacksKey);
             PlayerPrefs.DeleteKey(LoyaltyGrantedKey);
+            PlayerPrefs.DeleteKey(SelectedPackKey);
             PlayerPrefs.Save();
         }
 
@@ -350,6 +487,19 @@ namespace Overlink.UI
             PlayerPrefs.DeleteKey(RevealedKey);
             PlayerPrefs.DeleteKey(BundleRevealedKey);
             PlayerPrefs.Save();
+        }
+
+        /// <summary>Start a new resolution without discarding owned cards or the loyalty ledger.</summary>
+        public static void BeginFreshPack(bool bundle)
+        {
+            BeginFreshPack(bundle, SignalPackId.SignalArchive);
+        }
+
+        public static void BeginFreshPack(bool bundle, SignalPackId pack)
+        {
+            SelectPack(pack);
+            PlayerPrefs.DeleteKey(bundle ? BundleResolvedKey : ResolvedKey);
+            ClearPackRevealProgress();
         }
 
         public sealed class CollectionCard

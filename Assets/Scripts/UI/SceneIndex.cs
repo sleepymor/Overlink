@@ -9,6 +9,7 @@ namespace Overlink.UI
         public const string Deckbuilder = "Deckbuilder";
         public const string Collection  = "Collection";
         public const string Gacha       = "Gacha";
+        public const string RevealGacha = "RevealGacha";
         public const string Settings    = "Settings";
         public const string NetDemo     = "NetPresenceDemo";
         public const string CardPreview = "CardPresentationPreview";

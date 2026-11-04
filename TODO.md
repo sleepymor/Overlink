@@ -110,3 +110,45 @@ misses a rule is now told which rule — on the form, on submit, and in the serv
 consequence, documented in `docs/AUTH_FLOW.md`: a Google-created account has no password, so signing out
 on the web build locks that account out of web play; the answer is `AddUsernamePasswordAsync`, not the
 bridge.
+
+## 2026-10-29 — Plan gacha and card collection system
+- [x] Define the collection pillars and how cards support the existing battlefield without pay-to-win power creep
+- [x] Define pack structure, card slots, rarity bands, pity/duplicate protection, and exact probability rules
+- [x] Define single-pack and ten-pack purchase economy, currencies, limits, and safeguards
+- [x] Design the swipe-up sequential pack-opening flow, reveal pacing, skip/reveal-all behavior, and accessibility fallback
+- [x] Define collection screens, duplicate conversion, decks, crafting, set completion, and progression rewards
+- [x] Decide the first launch set scope and content production pipeline for the existing five card types
+- [x] Define server-authoritative transaction and reward validation requirements
+- [x] Turn the approved design into implementation slices, tests, analytics, and acceptance criteria
+
+**Artifact:** `docs/GACHA-CARD-COLLECTION-PLAN.md` — planning baseline covering the default five-card pack, one-pack/ten-pack purchases, swipe-up reveals, duplicate fragments, proposed pity and probabilities, server-authoritative resolution, and one free bonus pack per 100 purchased packs. Final prices, probabilities, set size, and monetization remain open tuning decisions.
+
+## 2026-10-31 — Expand gacha plan with currency system
+- [x] Define currency roles, ownership, and non-convertible boundaries
+- [x] Define proposed pack prices, free-player income, premium purchase-bundle policy, and loyalty interaction
+- [x] Define currency sinks, caps, expiry rules, and refund-handling design gate
+- [x] Define economy telemetry, simulation targets, and acceptance criteria
+- [x] Update and locally verify `docs/GACHA-CARD-COLLECTION-PLAN.md` (Mneme: PASS WITH FINDINGS; material findings applied; focused re-review passed with only a traceability finding, which was applied)
+
+## 2026-11-01 — Audit and publish first calendar-versioned alpha release
+- [x] Snapshot live branch, remote tags/releases, dirty paths, and artifact state
+- [x] Audit current game changes and define an explicit release path list; exclude notes, scratch files, generated engine churn, and unrelated work
+- [x] Run applicable local validation/build checks and resolve or document blockers
+- [x] Stage and review the explicit release diff; Mneme reassessment VERIFIED Unity metadata safety
+- [x] Commit the audited alpha scope (`02b62a1`)
+- [x] Create and verify free tag `v2026.11.0` without moving prior tags
+- [x] Push branch and tag; verify remote refs (`02b62a1`)
+- [x] Publish the GitHub prerelease and capture its URL
+- [x] Verify triggered CI status separately from publish status; run `41303478866` completed successfully for Windows and WebGL builds and itch.io pushes; workflow has no test job
+
+## 2026-11-03 — UI/VFX pass v2026.11.1 Alpha: static-image cleanup and live-node verification
+- [x] Split the pack prototype into shop (`Gacha.unity`) + reveal (`RevealGacha.unity`) and author the P0–P5 widget kit (report: `docs/UI-VFX-PASS.md`)
+- [x] Stamp the release mark on every player-facing version node (prefab `VersionLabel`, scene `Footer left`)
+- [x] Discover that the visible main menu is a static Figma mockup mounted through the instance's `Background` sprite override, with the live layer alpha-suppressed beneath it
+- [x] Derive `MainMenuBase.png` with every baked data string erased (version line, identity block, `[IMAGE SAMPLE]`, footer tagline) and re-point the override
+- [x] Un-suppress the live layer (`VersionLabel`, `Account overlay`, `Lobby footer`) and style the account widget onto the art (shared row, no wrap, sprite-less icon hidden, real status copy)
+- [x] Assert live node state (text / active / sprite reference) for every screen that ever used a static image; stills as secondary evidence only
+- [ ] Live featured-unit art for the erased `[IMAGE SAMPLE]` slot (separate art pass)
+- [ ] Decide whether the decorative inline groups stay suppressed under the mockup art or get un-hidden once the menu is re-authored live
+
+**Outcome:** The main menu no longer shows any baked data: version stamp, player identity, footer stamps and bay/collection counters are all live nodes verified by runtime assertion (`p5-menu-version.png` plus region crops as evidence). The identity corner shows the real profile name with working Profile / Sign Out actions where dead pixels used to be. Everything remains uncommitted on `master` by design.

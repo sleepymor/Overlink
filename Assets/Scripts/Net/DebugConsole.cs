@@ -8,7 +8,8 @@ namespace Overlink.Net
 {
     /// <summary>
     /// In-game log overlay so a standalone build can be diagnosed without the editor.
-    /// Self-installs, so scenes need no setup. Toggle with F1 or the LOG button.
+    /// Self-installs, so scenes need no setup. Toggle with F1 or the LOG hit zone,
+    /// which stays invisible until the console is open so it never draws over the UI plates.
     /// </summary>
     public class DebugConsole : MonoBehaviour
     {
@@ -27,6 +28,8 @@ namespace Overlink.Net
 
         TextMeshProUGUI output;
         GameObject panel;
+        Image toggleImage;
+        TextMeshProUGUI toggleLabel;
         bool visible;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -122,6 +125,17 @@ namespace Overlink.Net
         {
             visible = value;
             if (panel != null) panel.SetActive(value);
+            SetToggleVisual(value);
+        }
+
+        /// <summary>
+        /// While closed the toggle is an invisible hit zone parked on the LOG label baked
+        /// into the screen plates; it only draws its box and text once the panel is open.
+        /// </summary>
+        void SetToggleVisual(bool shown)
+        {
+            if (toggleImage != null) toggleImage.color = new Color(1f, 1f, 1f, shown ? 0.18f : 0f);
+            if (toggleLabel != null) toggleLabel.color = new Color(1f, 1f, 1f, shown ? 1f : 0f);
         }
 
         public void Clear()
@@ -183,12 +197,17 @@ namespace Overlink.Net
 
             var toggleGo = MakeButton(canvasGo.transform, "ConsoleToggle", "LOG", 16);
             var toggleRt = toggleGo.GetComponent<RectTransform>();
-            toggleRt.anchorMin = new Vector2(1f, 1f);
-            toggleRt.anchorMax = new Vector2(1f, 1f);
-            toggleRt.pivot = new Vector2(1f, 1f);
-            toggleRt.sizeDelta = new Vector2(90f, 34f);
-            toggleRt.anchoredPosition = new Vector2(-10f, -10f);
+            // Parked on the LOG label the collection plate bakes into its top-right corner,
+            // so the click affordance lines up with the artwork instead of floating over it.
+            toggleRt.anchorMin = new Vector2(0.9375f, 0.8756f);
+            toggleRt.anchorMax = new Vector2(0.975f, 0.9111f);
+            toggleRt.pivot = new Vector2(0.5f, 0.5f);
+            toggleRt.offsetMin = Vector2.zero;
+            toggleRt.offsetMax = Vector2.zero;
+            toggleImage = toggleGo.GetComponent<Image>();
+            toggleLabel = toggleGo.GetComponentInChildren<TextMeshProUGUI>();
             toggleGo.GetComponent<Button>().onClick.AddListener(() => SetVisible(!visible));
+            SetToggleVisual(false);
 
             panel.SetActive(false);
         }
