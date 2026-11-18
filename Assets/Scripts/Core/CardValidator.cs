@@ -9,6 +9,11 @@ namespace Overlink.Core
     {
         public const int MaxRepairAmount = 3;
         public const int MaxCost = 10;
+        public const int PoolBudgetSize = 150;
+        public const int PoolBudgetCommon = 75;
+        public const int PoolBudgetRare = 45;
+        public const int PoolBudgetEpic = 22;
+        public const int PoolBudgetLegendary = 8;
 
         private static readonly Regex IdPattern = new Regex(@"^card_(fsti|frti|fpb)_\d{3}$", RegexOptions.Compiled);
 
@@ -485,14 +490,14 @@ namespace Overlink.Core
             if (checkRarityBudget && list.Count > 0)
             {
                 CardComposition composition = CardComposition.FromCards(list);
-                int commonPct = (composition.Common * 100) / list.Count;
-                int rarePct = (composition.Rare * 100) / list.Count;
-                int epicPct = (composition.Epic * 100) / list.Count;
-                int legendaryPct = (composition.Legendary * 100) / list.Count;
 
-                if (commonPct != 50 || rarePct != 30 || epicPct != 15 || legendaryPct != 5)
+                if (list.Count != PoolBudgetSize
+                    || composition.Common != PoolBudgetCommon
+                    || composition.Rare != PoolBudgetRare
+                    || composition.Epic != PoolBudgetEpic
+                    || composition.Legendary != PoolBudgetLegendary)
                 {
-                    issues.Add(new ValidationIssue(Severity.Warning, "Pool", "Pool rarity budget mismatch. Expected 50/30/15/5, got " + commonPct + "/" + rarePct + "/" + epicPct + "/" + legendaryPct + " (counts: " + composition.Common + "/" + composition.Rare + "/" + composition.Epic + "/" + composition.Legendary + " of " + list.Count + ")."));
+                    issues.Add(new ValidationIssue(Severity.Warning, "Pool", "Pool rarity budget mismatch. Expected " + PoolBudgetCommon + "/" + PoolBudgetRare + "/" + PoolBudgetEpic + "/" + PoolBudgetLegendary + " of " + PoolBudgetSize + ", got " + composition.Common + "/" + composition.Rare + "/" + composition.Epic + "/" + composition.Legendary + " of " + list.Count + "."));
                 }
             }
 

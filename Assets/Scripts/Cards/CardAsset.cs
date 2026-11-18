@@ -52,6 +52,7 @@ namespace Overlink.Cards
         [TextArea(2, 6)] public string designNote;
         public List<CardEffectEntry> effects = new List<CardEffectEntry>();
         public string artPath;
+        public Sprite art;
 
         public CardDefinition ToDefinition()
         {

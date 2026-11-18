@@ -1,0 +1,23 @@
+Validated 150 cards.
+  Errors:   0
+  Warnings: 0
+  Infos:    0
+
+(Validator exited via UnicodeEncodeError on the final checkmark print under cp1252;
+the validation loop itself ran to completion and reported all three counts above.
+No validation errors or warnings were recorded before the print failure.)
+
+Artifact under test: E:\Games\Overlink\Assets\Cards\card_pool.json
+  size: 102820 bytes
+  mtime: 2026-11-13 00:40:22 (local)
+
+Composition (from generate_card_pool.py run output):
+  total: 150
+  byRarity: common=75, rare=45, epic=22, legendary=8
+  byFaction: fsti=50, frti=50, fpb=50
+  byType: Unit=88, Ability=35, Relay=11, Protocol=16
+
+Uniqueness check (check_pool.py):
+  Total: 150
+  Unique IDs: 150, Dupes: []
+  Unique names: 150

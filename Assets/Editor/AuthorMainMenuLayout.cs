@@ -48,8 +48,8 @@ namespace Overlink.EditorTools
             separator.GetComponent<Image>().color = new Color32(45, 65, 78, 255);
             var play = commands.Find("Play commands");
             Rect(play, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -165), new Vector2(530, 400));
-            string[] nodes = { "Matchmaking command", "VS AI command", "Deckbuilder command", "Gacha command" };
-            string[] titles = { "MATCHMAKING", "VS AI", "DECKBUILDER", "GACHA" };
+            string[] nodes = { "Matchmaking command", "VS AI command", "Binder command", "Gacha command" };
+            string[] titles = { "MATCHMAKING", "VS AI", "BINDER", "GACHA" };
             string[] details = { "ESTABLISH A COMPETITIVE LINK", "LOCAL COMBAT SIMULATION", "CARD BINDER  //  SIGNAL ARCHIVE", "OPEN A NEW SIGNAL" };
             for (int i = 0; i < nodes.Length; i++) StyleCommand(play.Find(nodes[i]), titles[i], details[i], i);
             var system = commands.Find("System commands");

@@ -1,0 +1,150 @@
+card_fpb_001|Junior Drafter|fpb|Common|Unit|1|1/2|-|-
+card_fpb_002|Blueprint Archivist|fpb|Common|Unit|2|1/3|-|-
+card_fpb_003|Sketch Apprentice|fpb|Common|Unit|1|1/1+1|Shield|Shield 1.
+card_fpb_004|Layout Planner|fpb|Common|Unit|2|1/3+1|Shield|Shield 1.
+card_fpb_005|Site Surveyor|fpb|Common|Unit|2|2/2|Deploy,Heal|Deploy: Heal an allied active unit for 2 HP.
+card_fpb_006|Zoning Inspector|fpb|Common|Unit|3|2/4|-|-
+card_fpb_007|Perspective Artist|fpb|Common|Unit|3|2/3+1|Shield|Shield 1.
+card_fpb_008|Foundation Layer|fpb|Common|Unit|4|2/5|-|-
+card_fpb_009|Model Maker|fpb|Common|Unit|3|2/3|Deploy,Repair|Deploy: Repair self for 2 Shield.
+card_fpb_010|Color Theorist|fpb|Common|Unit|4|3/3|Deploy|Deploy: Grant an allied active unit 2 Shield.
+card_fpb_011|Render Technician|fpb|Common|Unit|4|2/4+1|Shield|Shield 1.
+card_fpb_012|Structural Engineer|fpb|Common|Unit|5|3/5|-|-
+card_fpb_013|Eraser|fpb|Common|Unit|0|0/2|-|-
+card_fpb_014|Detail Renderer|fpb|Common|Unit|5|2/6|Activate,Heal|Activate: Heal an allied active unit for 2 HP.
+card_fpb_015|Scale Modeller|fpb|Common|Unit|3|3/2|-|-
+card_fpb_016|Quick Sketch|fpb|Common|Ability|1|0/0|-|Grant an allied active unit 2 Shield.
+card_fpb_017|Patch Work|fpb|Common|Ability|1|0/0|Heal|Heal an allied active unit for 3 HP.
+card_fpb_018|Revised Draft|fpb|Common|Ability|2|0/0|Heal|Heal all allied active units for 2 HP.
+card_fpb_019|Protective Coating|fpb|Common|Ability|2|0/0|Fast|Fast: Grant an allied active unit 3 Shield.
+card_fpb_020|Foundation Check|fpb|Common|Ability|0|0/0|Heal|Heal an allied active unit for 1 HP.
+card_fpb_021|Clear Coat|fpb|Common|Ability|2|0/0|-|Grant all allied active units 1 Shield.
+card_fpb_022|Restoration Studio|fpb|Common|Relay|2|0/0|Activate,Heal|Activate: Heal an allied active unit for 2 HP.
+card_fpb_023|Material Stockpile|fpb|Common|Relay|2|0/0|Activate|Activate: Grant an allied active unit 1 Shield.
+card_fpb_024|Maintenance Schedule|fpb|Common|Protocol|3|0/0|Persistent,Heal|Persistent: Heal all allied active units for 1 HP at the start of each turn.
+card_fpb_025|Iterative Design|fpb|Common|Protocol|3|0/0|Persistent|Persistent: Grant all allied active units 1 Shield at the start of each turn.
+card_fpb_026|Gallery Curator|fpb|Rare|Unit|3|2/4+1|Shield,Deploy,Heal|Shield 1. Deploy: Heal an allied active unit for 2 HP.
+card_fpb_027|Lead Architect|fpb|Rare|Unit|5|3/5+2|Shield|Shield 2.
+card_fpb_028|Conservation Specialist|fpb|Rare|Unit|4|2/4|Activate,Heal|Activate: Heal all allied active units for 2 HP.
+card_fpb_029|City Planner|fpb|Rare|Unit|4|2/5|Deploy|Deploy: Grant all allied active units 2 Shield.
+card_fpb_030|Composition Instructor|fpb|Rare|Unit|5|3/6|Deploy,Repair|Deploy: Repair self for 3 Shield.
+card_fpb_031|Mural Painter|fpb|Rare|Unit|6|3/6+2|Shield,Deploy,Heal|Shield 2. Deploy: Heal all allied active units for 3 HP.
+card_fpb_032|Framing Specialist|fpb|Rare|Unit|3|2/3|Deploy|Deploy: Deal 2 damage to an enemy active unit.
+card_fpb_033|Master Calligrapher|fpb|Rare|Unit|5|2/5|Activate,Repair|Activate: Repair self for 2 Shield.
+card_fpb_034|Design Reviewer|fpb|Rare|Unit|4|3/4|Deploy,Draw|Deploy: Draw 1 card and grant an allied active unit 1 Shield.
+card_fpb_035|Layered Varnish|fpb|Rare|Ability|3|0/0|-|Grant all allied active units 3 Shield.
+card_fpb_036|Full Restoration|fpb|Rare|Ability|3|0/0|Heal|Heal all allied active units for 4 HP.
+card_fpb_037|Structural Critique|fpb|Rare|Ability|3|0/0|-|Deal 4 damage to an enemy active unit.
+card_fpb_038|Gilding Workshop|fpb|Rare|Relay|3|0/0|Activate|Activate: Grant all allied active units 2 Shield.
+card_fpb_039|Preservation Order|fpb|Rare|Protocol|4|0/0|Persistent,Heal|Persistent: Heal all allied active units for 2 HP at the start of each turn.
+card_fpb_040|Hardening Process|fpb|Rare|Protocol|4|0/0|Persistent|Persistent: Grant all allied active units 2 Shield at the start of each turn.
+card_fpb_041|Exhibition Guard|fpb|Epic|Unit|6|3/7+3|Shield,Deploy,Heal|Shield 3. Deploy: Heal all allied active units for 3 HP.
+card_fpb_042|Conceptual Designer|fpb|Epic|Unit|5|3/5|Deploy|Deploy: Grant all allied active units 3 Shield.
+card_fpb_043|Restoration Director|fpb|Epic|Unit|7|3/7|Activate,Heal,Repair|Activate: Heal all allied active units for 3 HP. Repair self for 3 Shield.
+card_fpb_044|Chief Inspector|fpb|Epic|Unit|6|4/6|Deploy|Deploy: Destroy an enemy active unit.
+card_fpb_045|Master Restoration|fpb|Epic|Ability|5|0/0|Heal|Heal all allied active units for 5 HP. Grant all allied active units 2 Shield.
+card_fpb_046|Decommission Order|fpb|Epic|Ability|5|0/0|-|Destroy an enemy active unit. Grant all allied active units 1 Shield.
+card_fpb_047|Eternal Gallery|fpb|Epic|Protocol|5|0/0|Persistent,Heal|Persistent: Heal all allied active units for 3 HP and grant them 2 Shield at the start of each turn.
+card_fpb_048|Director Vasari|fpb|Legendary|Unit|9|4/9+3|Shield,Deploy,Activate,Heal,Repair|Shield 3. Deploy: Heal all allied active units for 4 HP. Activate: Repair self for 3 Shield.
+card_fpb_049|Living Masterpiece|fpb|Legendary|Protocol|9|0/0|Persistent,Heal|Persistent: Heal all allied active units for 4 HP and grant them 3 Shield at the start of each turn.
+card_fpb_050|Magnum Opus|fpb|Legendary|Ability|8|0/0|Heal|Heal all allied active units for 6 HP. Grant all allied active units 4 Shield. Draw 2 cards.
+card_frti_001|Assembly Worker|frti|Common|Unit|1|2/1|-|-
+card_frti_002|Rivet Gunner|frti|Common|Unit|2|3/1|-|-
+card_frti_003|Frame Hauler|frti|Common|Unit|2|2/3|-|-
+card_frti_004|Welding Apprentice|frti|Common|Unit|1|1/2|-|-
+card_frti_005|Piston Driver|frti|Common|Unit|3|4/2|-|-
+card_frti_006|Conveyor Operator|frti|Common|Unit|3|3/3|-|-
+card_frti_007|Crane Rigger|frti|Common|Unit|4|4/3|-|-
+card_frti_008|Foundry Stoker|frti|Common|Unit|4|3/4|-|-
+card_frti_009|Impact Hammer|frti|Common|Unit|3|3/2|FirstStrike|FirstStrike.
+card_frti_010|Drill Sergeant|frti|Common|Unit|2|2/2|Deploy|Deploy: Give an allied active unit +1 ATK this turn.
+card_frti_011|Load Bearer|frti|Common|Unit|5|4/4|-|-
+card_frti_012|Turbine Mechanic|frti|Common|Unit|4|5/2|-|-
+card_frti_013|Scrap Collector|frti|Common|Unit|1|1/1|Deploy|Deploy: Gain 1 NP.
+card_frti_014|Boiler Guard|frti|Common|Unit|5|5/3|-|-
+card_frti_015|Junction Welder|frti|Common|Unit|0|1/1|-|-
+card_frti_016|Overclock Engine|frti|Common|Ability|1|0/0|-|Give an allied active unit +2 ATK this turn.
+card_frti_017|Reinforced Plating|frti|Common|Ability|1|0/0|-|Grant an allied active unit 2 Shield.
+card_frti_018|Heavy Swing|frti|Common|Ability|2|0/0|-|Deal 3 damage to an enemy active unit.
+card_frti_019|Industrial Surge|frti|Common|Ability|2|0/0|-|Give an allied active unit +3 ATK this turn.
+card_frti_020|Quick Weld|frti|Common|Ability|1|0/0|Fast|Fast: Give an allied active unit +2 ATK this turn.
+card_frti_021|Controlled Demolition|frti|Common|Ability|3|0/0|-|Deal 2 damage to all enemy active units.
+card_frti_022|Supply Depot|frti|Common|Relay|2|0/0|Activate|Activate: Give an allied active unit +1 ATK permanently.
+card_frti_023|Ore Processor|frti|Common|Relay|2|0/0|Activate|Activate: Gain 2 NP.
+card_frti_024|Production Line|frti|Common|Protocol|3|0/0|Persistent|Persistent: Give all allied active units +1 ATK at the start of each turn.
+card_frti_025|Shift Change|frti|Common|Protocol|2|0/0|Persistent|Persistent: Gain 1 NP at the start of each turn.
+card_frti_026|Forge Master|frti|Rare|Unit|4|4/4|Deploy|Deploy: Give an allied active unit +2 ATK permanently.
+card_frti_027|Press Operator|frti|Rare|Unit|5|5/4|FirstStrike|FirstStrike.
+card_frti_028|Furnace Tender|frti|Rare|Unit|6|6/4|-|-
+card_frti_029|Demolition Expert|frti|Rare|Unit|4|3/3|Deploy,AoE|Deploy: Deal 2 damage to all enemy active units.
+card_frti_030|Alloy Smelter|frti|Rare|Unit|5|4/5|Deploy|Deploy: Grant an allied active unit 3 Shield.
+card_frti_031|Slag Breaker|frti|Rare|Unit|3|4/2|Piercing|Piercing.
+card_frti_032|Girder Layer|frti|Rare|Unit|3|2/4|Deploy|Deploy: Deal 2 damage to an enemy active unit.
+card_frti_033|Engine Guardian|frti|Rare|Unit|6|5/5|Deploy|Deploy: Deal 3 damage to an enemy active unit.
+card_frti_034|Railgun Prototype|frti|Rare|Unit|4|5/2|CannotBlock|CannotBlock. High ATK but cannot defend.
+card_frti_035|Precision Strike|frti|Rare|Ability|3|0/0|-|Deal 5 damage to an enemy active unit.
+card_frti_036|Tempered Steel|frti|Rare|Ability|2|0/0|Fast|Fast: Give an allied active unit +3 ATK this turn and grant it 2 Shield.
+card_frti_037|Shrapnel Burst|frti|Rare|Ability|4|0/0|AoE|Deal 3 damage to all enemy active units.
+card_frti_038|Munitions Factory|frti|Rare|Relay|4|0/0|Activate|Activate: Give all allied active units +2 ATK this turn.
+card_frti_039|Arms Race|frti|Rare|Protocol|4|0/0|Persistent|Persistent: Give all allied active units +1 ATK permanently at the start of each turn.
+card_frti_040|Thermal Runaway|frti|Rare|Protocol|4|0/0|Persistent,AoE|Persistent: Deal 1 damage to all enemy active units at the start of each turn.
+card_frti_041|Siege Engine|frti|Epic|Unit|7|7/5|Piercing|Piercing.
+card_frti_042|Lifter Mech|frti|Epic|Unit|6|5/6|Deploy,AoE|Deploy: Deal 3 damage to all enemy active units.
+card_frti_043|Chief Machinist|frti|Epic|Unit|6|5/5|Deploy|Deploy: Give all allied active units +2 ATK permanently.
+card_frti_044|Crushing Press|frti|Epic|Unit|5|6/3|FirstStrike,CannotBlock|FirstStrike. CannotBlock.
+card_frti_045|Factory Reset|frti|Epic|Ability|5|0/0|AoE|Deal 4 damage to all enemy active units.
+card_frti_046|Meltdown Protocol|frti|Epic|Ability|6|0/0|-|Destroy an enemy active unit.
+card_frti_047|War Foundry|frti|Epic|Relay|5|0/0|Activate|Activate: Give all allied active units +2 ATK permanently.
+card_frti_048|Director Kaelin|frti|Legendary|Unit|8|7/7|Piercing,FirstStrike,Deploy,AoE|Piercing. FirstStrike. Deploy: Deal 3 damage to all enemy active units.
+card_frti_049|Grand Forge|frti|Legendary|Relay|8|0/0|Activate,AoE|Activate: Give all allied active units +3 ATK permanently and deal 2 damage to all enemy active units.
+card_frti_050|Total Collapse|frti|Legendary|Ability|10|0/0|AoE|Deal 6 damage to all enemy active units.
+card_fsti_001|Lab Intern|fsti|Common|Unit|1|1/2|Deploy|Deploy: Draw 1 card.
+card_fsti_002|Relay Operator|fsti|Common|Unit|2|2/2|-|-
+card_fsti_003|Data Clerk|fsti|Common|Unit|1|1/1|Deploy|Deploy: Gain 1 NP.
+card_fsti_004|Frequency Scanner|fsti|Common|Unit|2|1/3|-|-
+card_fsti_005|Network Technician|fsti|Common|Unit|3|2/3|Deploy|Deploy: Draw 1 card.
+card_fsti_006|Optics Researcher|fsti|Common|Unit|3|3/2|-|-
+card_fsti_007|Patch Compiler|fsti|Common|Unit|2|2/1|Deploy|Deploy: Gain 1 NP.
+card_fsti_008|Survey Drone|fsti|Common|Unit|1|1/1|Piercing|Piercing.
+card_fsti_009|Lab Workstation|fsti|Common|Unit|4|2/4|Activate,Draw|Activate: Draw 1 card.
+card_fsti_010|Bandwidth Monitor|fsti|Common|Unit|3|2/2|Deploy|Deploy: Gain 2 NP.
+card_fsti_011|Campus Courier|fsti|Common|Unit|2|2/2|Deploy|Deploy: Buff an allied active unit +1 ATK this turn.
+card_fsti_012|Waveform Analyst|fsti|Common|Unit|4|3/3|-|-
+card_fsti_013|Calibration Probe|fsti|Common|Unit|0|1/1|-|-
+card_fsti_014|Spectrum Mapper|fsti|Common|Unit|5|3/4|Deploy,Draw|Deploy: Draw 2 cards.
+card_fsti_015|Telemetry Receiver|fsti|Common|Unit|4|2/5|-|-
+card_fsti_016|Quick Analysis|fsti|Common|Ability|1|0/0|Draw|Draw 1 card.
+card_fsti_017|Signal Boost|fsti|Common|Ability|1|0/0|-|Give an allied active unit +2 ATK this turn.
+card_fsti_018|System Ping|fsti|Common|Ability|0|0/0|-|Gain 1 NP.
+card_fsti_019|Firmware Update|fsti|Common|Ability|2|0/0|-|Give an allied active unit +1 ATK permanently.
+card_fsti_020|Rapid Scan|fsti|Common|Ability|1|0/0|Fast,Draw|Fast: Draw 1 card.
+card_fsti_021|Diagnostic Sweep|fsti|Common|Ability|2|0/0|Draw|Draw 2 cards.
+card_fsti_022|Signal Repeater|fsti|Common|Relay|2|0/0|Activate,Draw|Activate: Draw 1 card.
+card_fsti_023|Micro Transmitter|fsti|Common|Relay|1|0/0|Activate|Activate: Gain 1 NP.
+card_fsti_024|Batch Download|fsti|Common|Protocol|3|0/0|Persistent,Draw|Persistent: Draw 1 card at the start of each turn.
+card_fsti_025|Network Handshake|fsti|Common|Protocol|2|0/0|Persistent|Persistent: Gain 1 NP at the start of each turn.
+card_fsti_026|Photonics Engineer|fsti|Rare|Unit|3|2/3|Deploy,Draw|Deploy: Draw 1 card. Gain 1 NP.
+card_fsti_027|Algorithm Tuner|fsti|Rare|Unit|4|3/3|Deploy|Deploy: Give all allied active units +1 ATK this turn.
+card_fsti_028|Accelerator Tech|fsti|Rare|Unit|5|4/3|Piercing|Piercing.
+card_fsti_029|Quantum Statistician|fsti|Rare|Unit|4|2/4|Activate,Draw|Activate: Draw 1 card. Gain 1 NP.
+card_fsti_030|Field Calibrator|fsti|Rare|Unit|3|3/2|Deploy|Deploy: Debuff an enemy active unit -2 ATK this turn.
+card_fsti_031|Cryogenics Specialist|fsti|Rare|Unit|5|3/4|Deploy,Exhaust|Deploy: Exhaust an enemy active unit.
+card_fsti_032|Simulation Operator|fsti|Rare|Unit|6|4/5|Deploy,Draw|Deploy: Draw 2 cards.
+card_fsti_033|Interference Jammer|fsti|Rare|Unit|3|2/3|Deploy|Deploy: Prevent an enemy active unit from blocking this turn.
+card_fsti_034|Thermal Imager|fsti|Rare|Unit|2|2/2|FirstStrike|FirstStrike.
+card_fsti_035|Overclocked Sequence|fsti|Rare|Ability|3|0/0|Draw|Draw 3 cards.
+card_fsti_036|Phase Shift|fsti|Rare|Ability|2|0/0|Fast|Fast: Give an allied active unit +3 ATK this turn.
+card_fsti_037|Exploit Vulnerability|fsti|Rare|Ability|3|0/0|-|Debuff all enemy active units -1 ATK this turn.
+card_fsti_038|Data Cache|fsti|Rare|Relay|3|0/0|Activate,Draw|Activate: Draw 1 card and gain 1 NP.
+card_fsti_039|Recursive Loop|fsti|Rare|Protocol|4|0/0|Persistent,Draw|Persistent: Draw 2 cards at the start of each turn.
+card_fsti_040|Feedback Protocol|fsti|Rare|Protocol|3|0/0|Persistent|Persistent: Give all allied active units +1 ATK at the start of each turn.
+card_fsti_041|Entanglement Specialist|fsti|Epic|Unit|6|4/5|Deploy,Draw|Deploy: Draw 3 cards and gain 2 NP.
+card_fsti_042|Mainframe Guardian|fsti|Epic|Unit|7|5/6|Piercing,Deploy|Piercing. Deploy: Debuff all enemy active units -2 ATK this turn.
+card_fsti_043|Parallel Processor|fsti|Epic|Unit|5|3/4|Activate,Draw|Activate: Draw 2 cards.
+card_fsti_044|Senior Researcher|fsti|Epic|Unit|5|3/5|Deploy|Deploy: Give all allied active units +2 ATK permanently.
+card_fsti_045|Wavelength Disruptor|fsti|Epic|Unit|6|4/4|Deploy,Exhaust|Deploy: Exhaust all enemy active units.
+card_fsti_046|Learning Cycle|fsti|Epic|Ability|4|0/0|Draw|Draw 4 cards. Gain 2 NP.
+card_fsti_047|System Override|fsti|Epic|Ability|5|0/0|Exhaust|Exhaust all enemy active units and prevent them from blocking this turn.
+card_fsti_048|Infinite Regression|fsti|Epic|Protocol|5|0/0|Persistent,Draw|Persistent: Draw 2 cards and gain 2 NP at the start of each turn.
+card_fsti_049|Dr. Lumen|fsti|Legendary|Unit|8|5/7|Deploy,Activate,Draw|Deploy: Draw 3 cards and gain 3 NP. Activate: Draw 1 card.
+card_fsti_050|Nexus Core|fsti|Legendary|Protocol|9|0/0|Persistent,Draw|Persistent: Draw 3 cards, gain 3 NP, and give all allied active units +1 ATK at the start of each turn.

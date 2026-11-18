@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Overlink.Cards;
 using Overlink.Core;
+using Overlink.Persistence;
 using UnityEngine;
 
 namespace Overlink.Match
@@ -190,6 +191,27 @@ namespace Overlink.Match
             StartCoroutine(InitializeMatch());
         }
 
+        /// <summary>
+        /// The saved battle deck expanded to card definitions, or null when none is set or it is not a legal
+        /// deck (a draft cannot go into battle, so the starter deck is used instead).
+        /// </summary>
+        static List<CardDefinition> BattleDeckFromLibrary(List<CardDefinition> pool)
+        {
+            string id = DeckLibrary.BattleId;
+            if (id.Length == 0) return null;
+
+            DeckData data = DeckLibrary.Load(id);
+            var deck = new List<CardDefinition>();
+            foreach (var entry in data.Cards)
+            {
+                CardDefinition card = pool.Find(c => c != null && c.Id == entry.Key);
+                if (card == null) return null;
+                for (int i = 0; i < entry.Value; i++) deck.Add(card);
+            }
+
+            return DeckValidator.Validate(deck).HasErrors ? null : deck;
+        }
+
         IEnumerator InitializeMatch()
         {
             initializing = true;
@@ -198,9 +220,10 @@ namespace Overlink.Match
             // Wait for scene to settle
             yield return new WaitForSeconds(0.5f);
 
-            List<CardDefinition> pool = PrototypeCardPool.All();
-            List<CardDefinition> playerDeck = PrototypeCardPool.BuildDeck();
-            List<CardDefinition> opponentDeck = PrototypeCardPool.BuildDeck();
+            List<CardDefinition> pool = new List<CardDefinition>(MvpCardLibrary.All());
+            List<CardDefinition> playerDeck = BattleDeckFromLibrary(pool)
+                ?? MatchDeckBuilder.BuildStarterDeck(pool, Faction.Fsti);
+            List<CardDefinition> opponentDeck = MatchDeckBuilder.BuildStarterDeck(pool, Faction.Frti);
 
             // Surface pool problems in the console instead of failing silently at play time.
             ValidationResult poolValidation = CardValidator.ValidatePool(pool);
@@ -422,7 +445,8 @@ namespace Overlink.Match
                 // raw TextMeshProUGUI with TMP's default Overlay overflow, so the surplus was not truncated - it
                 // was drawn under the button, on the tabletop, where the shipped scene showed it. The counter is
                 // the half worth keeping: LINEUP is what the banner says, and CONFIRM is what the button does.
-                $"CONFIRM  {fielded}/{lineupNomination.Length}");
+                $"CONFIRM {fielded}/{lineupNomination.Length}",
+                $"DEPLOYED {fielded} / {lineupNomination.Length}");
         }
 
         bool IsNominated(int instanceId)

@@ -84,6 +84,20 @@ namespace Overlink.UI
             }
         }
 
+        /// <summary>True when every serialized control the controller depends on is assigned.</summary>
+        bool IsWired()
+        {
+            return loadingPanel != null && signInPanel != null && setupPanel != null
+                && ageStep != null && identityStep != null && loadingText != null
+                && titleText != null && statusText != null && signInError != null
+                && usernameInput != null && passwordInput != null && confirmPasswordInput != null
+                && submitButton != null && toggleModeButton != null && forgotPasswordButton != null
+                && ageInput != null && ageError != null && ageContinueButton != null
+                && identityUsernameInput != null && identityTagInput != null && identityEmailInput != null
+                && identityPreview != null && identityError != null && randomTagButton != null
+                && saveIdentityButton != null && signOutButton != null;
+        }
+
         void Start()
         {
             flow = AuthFlowController.Instance;

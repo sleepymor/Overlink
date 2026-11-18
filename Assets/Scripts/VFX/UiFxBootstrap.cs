@@ -6,7 +6,7 @@ namespace Overlink.UI
 {
     /// <summary>
     /// Applies the button micro-animation kit to every uGUI Button in every loaded scene, so hover
-    /// pops, press squashes and sheen sweeps reach all screens (menus, shop, reveal, binder, HUD
+    /// pops, accent rails and press squashes reach all screens (menus, shop, reveal, binder, HUD
     /// panels) without each scene authoring the component by hand. Runs once per domain load and
     /// re-decorates on every scene load; buttons that already carry <see cref="UiFxButton"/> — or
     /// that opt out by name — are skipped.
@@ -33,13 +33,23 @@ namespace Overlink.UI
             {
                 Button button = buttons[i];
                 if (button == null || button.GetComponent<UiFxButton>() != null || OptedOut(button)) continue;
-                button.gameObject.AddComponent<UiFxButton>();
+                UiFxButton effect = button.gameObject.AddComponent<UiFxButton>();
+                if (IsBattlePrimaryAction(button)) effect.ShowAccentRails = false;
             }
+        }
+
+        static bool IsBattlePrimaryAction(Button button)
+        {
+            if (button.name != "ConfirmLineupButton" && button.name != "EndPhaseButton"
+                && button.name != "DoneBlockingButton") return false;
+            Transform parent = button.transform.parent;
+            return parent != null && parent.name == "PhaseControls" && parent.parent != null
+                && parent.parent.name == "Battlefield HUD";
         }
 
         /// <summary>
         /// Name-based opt-out. A full-screen dismiss scrim is a Button too, and decorating one would
-        /// scale the whole screen past its bounds and sweep an additive sheen across everything, so
+        /// scale the whole screen past its bounds and add hover accents across everything, so
         /// scrim affordances stay undecorated by convention.
         /// </summary>
         static bool OptedOut(Button button)

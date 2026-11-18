@@ -1,0 +1,115 @@
+{
+  "formatVersion": 1,
+  "cards": [
+    {
+      "id": "card_fsti_001",
+      "name": "Signal Analyst",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 1,
+      "hp": 2,
+      "shield": 0,
+      "keywords": ["Deploy"],
+      "abilityText": "Deploy: Draw 1 card.",
+      "designNote": "Introductory card-draw engine for fsti.",
+      "effects": [
+        { "type": "Draw", "target": "Self", "amount": 1, "amount2": 0, "duration": 0, "referenceId": null, "fast": false }
+      ],
+      "artPath": "Assets/Art/Cards/fsti_001.png"
+    },
+    {
+      "id": "card_frti_010",
+      "name": "Vanguard Trooper",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 2,
+      "shield": 0,
+      "keywords": ["FirstStrike"],
+      "abilityText": "FirstStrike: Strikes before opposing units in combat.",
+      "designNote": "Aggressive frti frontline unit.",
+      "effects": [],
+      "artPath": "Assets/Art/Cards/frti_010.png"
+    },
+    {
+      "id": "card_fpb_050",
+      "name": "Bastion Sentry",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 4,
+      "shield": 2,
+      "keywords": ["Shield"],
+      "abilityText": "Shield: Reduces incoming damage by 2.",
+      "designNote": "Defensive fpb wall that soaks hits.",
+      "effects": [],
+      "artPath": "Assets/Art/Cards/fpb_050.png"
+    },
+    {
+      "id": "card_fsti_020",
+      "name": "Rapid Protocol",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": ["Fast"],
+      "abilityText": "Fast: Give an allied unit +2 ATK this turn.",
+      "designNote": "One-shot fast combat buff playable on the opponent's turn.",
+      "effects": [
+        { "type": "Buff", "target": "AlliedActive", "amount": 2, "amount2": 0, "duration": 1, "referenceId": null, "fast": true }
+      ],
+      "artPath": "Assets/Art/Cards/fsti_020.png"
+    },
+    {
+      "id": "card_frti_030",
+      "name": "Relay Drop",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": ["SummoningDelay"],
+      "abilityText": "Summon a Relay structure onto a Node.",
+      "designNote": "frti structure deployment.",
+      "effects": [
+        { "type": "Summon", "target": "Node", "amount": 1, "amount2": 0, "duration": 0, "referenceId": "card_frti_100", "fast": false }
+      ],
+      "artPath": "Assets/Art/Cards/frti_030.png"
+    },
+    {
+      "id": "card_fpb_099",
+      "name": "Chief Architect",
+      "faction": "fpb",
+      "rarity": "Legendary",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 3,
+      "hp": 5,
+      "shield": 0,
+      "keywords": ["Repair", "Heal"],
+      "abilityText": "Repair: Restore up to 3 Shield. Heal: Restore 2 HP to Commander.",
+      "designNote": "Legendary fpb sustain unit.",
+      "effects": [
+        { "type": "Repair", "target": "Self", "amount": 2, "amount2": 0, "duration": 0, "referenceId": null, "fast": false },
+        { "type": "Heal", "target": "Commander", "amount": 2, "amount2": 0, "duration": 0, "referenceId": null, "fast": false }
+      ],
+      "artPath": "Assets/Art/Cards/fpb_099.png"
+    }
+  ],
+  "composition": {
+    "total": 6,
+    "byRarity": { "common": 2, "rare": 2, "epic": 1, "legendary": 1 },
+    "byFaction": { "fsti": 2, "frti": 2, "fpb": 2 }
+  }
+}

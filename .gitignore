@@ -41,3 +41,7 @@ sysinfo.txt
 .vsconfig
 Recordings/
 Assets/AssetStoreTools*
+
+# Card art renders — excluded from release push
+Tools/art/renders_v2/
+Tools/art/renders_v3/

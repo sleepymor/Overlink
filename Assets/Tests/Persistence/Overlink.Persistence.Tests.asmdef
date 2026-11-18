@@ -1,0 +1,25 @@
+{
+    "name": "Overlink.Persistence.Tests",
+    "rootNamespace": "Overlink.Persistence.Tests",
+    "references": [
+        "Overlink.Core",
+        "Overlink.Persistence",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

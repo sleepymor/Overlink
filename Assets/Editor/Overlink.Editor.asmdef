@@ -5,6 +5,7 @@
         "Overlink.Cards",
         "Overlink.Core",
         "Overlink.Match",
+        "Overlink.Persistence",
         "Overlink.UI",
         "Overlink.Vfx",
         "Unity.TextMeshPro"

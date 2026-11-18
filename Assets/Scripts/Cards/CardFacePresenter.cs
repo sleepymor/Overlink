@@ -19,7 +19,7 @@ namespace Overlink.Cards
                     definition.Faction,
                     definition.Rarity,
                     definition.Cost,
-                    null,
+                    CardLibraryBootstrap.ArtFor(definition.Id),
                     unit ? instance.CurrentAtk : (int?)null,
                     unit ? instance.CurrentHp : (int?)null,
                     unit ? instance.CurrentShield : (int?)null,

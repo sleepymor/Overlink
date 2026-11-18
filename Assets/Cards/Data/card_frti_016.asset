@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_frti_016
+  m_EditorClassIdentifier: 
+  id: card_frti_016
+  cardName: Overclock Engine
+  faction: 1
+  rarity: 0
+  type: 1
+  cost: 1
+  atk: 0
+  hp: 0
+  shield: 0
+  keywords: 
+  abilityText: Give an allied active unit +2 ATK this turn.
+  designNote: Basic combat buff. Cheap and effective.
+  effects:
+  - type: 5
+    target: 3
+    amount: 2
+    amount2: 0
+    duration: 1
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/frti/card_frti_016_acc.png
+  art: {fileID: 21300000, guid: a1b0f181da53a414ea8c54330eb44a74, type: 3}

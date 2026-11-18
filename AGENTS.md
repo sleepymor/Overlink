@@ -45,11 +45,11 @@ Deck type-share ranges (Relay 10–15%, Protocol 10–15%) are aspirational unti
 
 ## 5. Guardrails (what NOT to do without explicit approval)
 
-- **Do not build a deck-builder UI.** `Deckbuilder.unity` is a `PlaceholderSceneController` only — no functional deck-builder editor window exists.
-- **No `DeckValidator` class exists.** The GDD describes one (MinDeckSize=30, MaxDeckSize=40, MaxCopiesPerCard=3, single-faction), but it is not implemented. Deck legality is currently enforced in `MatchState.ValidateDecks` (null/empty check only) and `CommandValidator`.
+- **The deck builder exists; do not rebuild it.** `Deckbuilder.unity` carries `DeckbuilderController`, which builds its whole UI at runtime and saves into the shared `DeckLibrary`. New deck UI should extend that screen, not add a second one.
+- **`DeckValidator` exists — do not claim it doesn't.** `Assets\Scripts\Core\DeckValidator.cs` defines `MinDeckSize = 30`, `MaxDeckSize = 40`, `MaxCopiesPerCard = 3`, and is the deck builder's save gate. The binder deliberately does not validate: both screens share one deck store and a deck can be grown as a partial draft.
 - **Do not push tags or move existing tags.**
 - **Do not add a fourth faction.** Three factions for MVP.
-- **Do not cite `Assets\Overlink\Core\Cards\DeckValidator.cs`** — it does not exist. Deck-related C# files live at `Assets\Scripts\Core\` or not at all.
+- **Do not cite `Assets\Overlink\Core\Cards\DeckValidator.cs`** — that path does not exist. Deck-related C# files live at `Assets\Scripts\Core\`, and saved-deck storage lives at `Assets\Scripts\Persistence\DeckLibrary.cs`.
 
 ## 6. Where things live
 
@@ -62,6 +62,7 @@ E:\Games\Overlink\
   Assets\Scripts\Net\         AuthFlowController.cs, LobbyManager.cs, GoogleTokenProvider.cs
   Assets\Scripts\VFX\         UiBar.cs, UiCounter.cs, UiFx*.cs, UiTween.cs, shaders
   Assets\Scenes\              Gameplay.unity, MainMenu.unity, Deckbuilder.unity (placeholder), Collection.unity, Gacha.unity
+  Assets\Cards\card_pool.json   150-card pool (75C/45R/22E/8L, 50 per faction); schema = Assets\Examples\Cards\card_examples.json; validate with Tools\validate_card_pool.py
   Assets\Tests\Core\ / Match\ / Net\   EditMode NUnit tests
   Assets\Tests\Cards\         PlayMode-only — 22 tests, never executed
   GDD\GDD-Overlink-v0.17-PreDevDraft.pdf   Stale v0.17 export — do not treat as current
@@ -74,5 +75,5 @@ E:\Games\Overlink\
 - Cost range: 0–10 NP (`CardValidator.MaxCost = 10`)
 - Starting hand: 5 cards
 - Card ID format: `card_<faction>_<nnn>`
-- MVP library: exactly 100 card definitions (50 Common / 30 Rare / 15 Epic / 5 Legendary)
+- MVP library: exactly 150 card definitions (75 Common / 45 Rare / 22 Epic / 8 Legendary), 50 per faction. Source of truth is the `CardAsset` files under `Assets\Cards\Data\`, collected in `Assets\Resources\Cards\CardCatalog.asset`
 - Reference 30-card deck: 16 Units / 6 Abilities / 4 Relays / 4 Protocols (balancing reference, not enforced)

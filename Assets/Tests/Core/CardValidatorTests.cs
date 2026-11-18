@@ -526,16 +526,16 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
-        public void PoolRarityBudget_50_30_15_5_CheckedWhenTrue()
+        public void PoolRarityBudget_75_45_22_8_CheckedWhenTrue()
         {
-            // Total 20 cards: 10 Common (50%), 6 Rare (30%), 3 Epic (15%), 1 Legendary (5%)
-            var pool = Enumerable.Range(1, 20).Select(i =>
+            // Total 150 cards: 75 Common, 45 Rare, 22 Epic, 8 Legendary
+            var pool = Enumerable.Range(1, 150).Select(i =>
             {
                 Rarity r = i switch
                 {
-                    <= 10 => Rarity.Common,
-                    <= 16 => Rarity.Rare,
-                    <= 19 => Rarity.Epic,
+                    <= 75 => Rarity.Common,
+                    <= 120 => Rarity.Rare,
+                    <= 142 => Rarity.Epic,
                     _ => Rarity.Legendary
                 };
                 return new CardDefinition

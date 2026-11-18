@@ -1226,7 +1226,7 @@ namespace Overlink.UI
                 card.Faction,
                 card.Rarity,
                 card.Cost,
-                fixture != null ? fixture.artSprite : null,
+                CardLibraryBootstrap.ArtFor(card.Id) ?? (fixture != null ? fixture.artSprite : null),
                 unit ? (int?)card.Atk : null,
                 unit ? (int?)card.Hp : null,
                 unit ? (int?)0 : null,

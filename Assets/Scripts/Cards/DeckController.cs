@@ -11,13 +11,6 @@ namespace Overlink.Cards
         public int DrawCount => drawPile.Count;
         public int DiscardCount => discardPile.Count;
 
-        void Awake()
-        {
-            var cards = CardData.StarterDeck();
-            Shuffle(cards);
-            foreach (var c in cards) drawPile.Enqueue(c);
-        }
-
         public CardData Draw()
         {
             if (drawPile.Count == 0) Reshuffle();

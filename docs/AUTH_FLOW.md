@@ -37,10 +37,10 @@ a transition happened. States are `Initializing → CheckingCachedSession → Si
 | `Net/AuthResult.cs` | Maps UGS error codes and payloads onto player-facing text |
 | `Net/PasswordPolicy.cs` | Unity's password rules, checked client-side and quoted to the player |
 | `Net/EmailPolicy.cs` | Address shape rules; the address itself is **unverified** — see below |
-| `UI/AuthScreenController.cs` (+ `.Build.cs`) | Sign-in and profile-setup screens |
+| `UI/AuthScreenController.cs` | Sign-in and profile-setup screens |
 | `UI/UiKit.cs` | The UGUI/TMP primitives both self-building screens share |
 | `UI/ProtectedSceneGuard.cs` | Redirects a directly-opened protected scene back to Auth |
-| `UI/MainMenuController.Account.cs` | Name display, Player ID dialog, sign-out |
+| `UI/MainMenuController.cs` | Name display, Player ID dialog, sign-out |
 | `Net/AccountResetUtility.cs` | Editor menu items for wiping local account state |
 
 ## Resuming a cached session

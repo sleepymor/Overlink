@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fsti_006
+  m_EditorClassIdentifier: 
+  id: card_fsti_006
+  cardName: Optics Researcher
+  faction: 0
+  rarity: 0
+  type: 0
+  cost: 3
+  atk: 3
+  hp: 2
+  shield: 0
+  keywords: 
+  abilityText: 
+  designNote: Aggressive 3-drop. Glass cannon profile.
+  effects: []
+  artPath: Assets/Cards/Arts/fsti/card_fsti_006_acc.png
+  art: {fileID: 21300000, guid: 0dd5af8b01d222041ae97ccbdd20dbab, type: 3}

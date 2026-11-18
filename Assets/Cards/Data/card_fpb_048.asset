@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_048
+  m_EditorClassIdentifier: 
+  id: card_fpb_048
+  cardName: Director Vasari
+  faction: 2
+  rarity: 3
+  type: 0
+  cost: 9
+  atk: 4
+  hp: 9
+  shield: 3
+  keywords: 0900000007000000060000000a0000000e000000
+  abilityText: 'Shield 3. Deploy: Heal all allied active units for 4 HP. Activate:
+    Repair self for 3 Shield.'
+  designNote: FPB legendary unit. Nearly unkillable fortress with team heal.
+  effects:
+  - type: 2
+    target: 5
+    amount: 4
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  - type: 15
+    target: 0
+    amount: 3
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_048_acc.png
+  art: {fileID: 21300000, guid: dc26d62d83144ed42a8d661d94970aae, type: 3}

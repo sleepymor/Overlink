@@ -1,0 +1,51 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_050
+  m_EditorClassIdentifier: 
+  id: card_fpb_050
+  cardName: Magnum Opus
+  faction: 2
+  rarity: 3
+  type: 1
+  cost: 8
+  atk: 0
+  hp: 0
+  shield: 0
+  keywords: 0a000000
+  abilityText: Heal all allied active units for 6 HP. Grant all allied active units
+    4 Shield. Draw 2 cards.
+  designNote: FPB legendary ability. Full defensive reset and card advantage.
+  effects:
+  - type: 2
+    target: 5
+    amount: 6
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  - type: 7
+    target: 5
+    amount: 4
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  - type: 3
+    target: 0
+    amount: 2
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_050_acc.png
+  art: {fileID: 21300000, guid: dc69eada6e4ee1f428911e6352d08e18, type: 3}

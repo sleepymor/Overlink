@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fsti_035
+  m_EditorClassIdentifier: 
+  id: card_fsti_035
+  cardName: Overclocked Sequence
+  faction: 0
+  rarity: 1
+  type: 1
+  cost: 3
+  atk: 0
+  hp: 0
+  shield: 0
+  keywords: 03000000
+  abilityText: Draw 3 cards.
+  designNote: Deep draw. Major hand refill.
+  effects:
+  - type: 3
+    target: 0
+    amount: 3
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fsti/card_fsti_035_acc.png
+  art: {fileID: 21300000, guid: e7e3a1180d7eb8445be25a779fb3e6c7, type: 3}

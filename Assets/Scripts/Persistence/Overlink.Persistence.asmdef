@@ -1,0 +1,16 @@
+{
+    "name": "Overlink.Persistence",
+    "rootNamespace": "Overlink.Persistence",
+    "references": [
+        "Overlink.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

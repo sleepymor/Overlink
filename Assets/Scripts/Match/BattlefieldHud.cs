@@ -288,6 +288,7 @@ namespace Overlink.Match
         [SerializeField] RectTransform phaseControls;
         [SerializeField] Button[] railButtonRefs;
         [SerializeField] TextMeshProUGUI[] railLabelRefs;
+        [SerializeField] TextMeshProUGUI setupDeploymentText;
 
         // Every button on the rail, cached because the pointer test walks it on every frame a card is held and
         // a GetComponentsInChildren there would allocate. Toggling a button's availability does not invalidate
@@ -553,6 +554,13 @@ namespace Overlink.Match
             }
 
             canvas = GetComponent<Canvas>();
+            // The log and node readouts sit directly over moving board art. Outline the glyphs, not the
+            // panel, so they stay distinguishable without adding a rectangular backdrop.
+            AddReadabilityOutline(header);
+            AddReadabilityOutline(body);
+            Transform nodeHeading = nodeList.Find("NodeListText");
+            if (nodeHeading != null) AddReadabilityOutline(nodeHeading.GetComponent<TextMeshProUGUI>());
+            foreach (TextMeshProUGUI row in nodeRows) AddReadabilityOutline(row);
             for (int i = 0; i < (int)RailKey.Count; i++)
             {
                 BindRail((RailKey)i, railButtonRefs[i], railLabelRefs[i], RailAction((RailKey)i));
@@ -563,6 +571,13 @@ namespace Overlink.Match
             HideRail();
             result.gameObject.SetActive(false);
             return true;
+        }
+
+        static void AddReadabilityOutline(TextMeshProUGUI text)
+        {
+            if (text == null) return;
+            text.outlineColor = new Color32(2, 5, 10, 255);
+            text.outlineWidth = 0.24f;
         }
 
         static int ValidateSerialized(string name, UnityEngine.Object value)
@@ -710,10 +725,10 @@ namespace Overlink.Match
                 new Color(0.70f, 0.36f, 0.10f, 0.98f), 16f, "DONE BLOCKING",
                 () => RailPressed?.Invoke(RailKey.DoneBlocking));
             EnsureRail(RailKey.Confirm, "ConfirmLineupButton", RailBand.Right, 0,
-                new Color(0.20f, 0.52f, 0.34f, 0.97f), 17f, "CONFIRM",
+                new Color(0.16f, 0.85f, 0.96f, 1f), 17f, "CONFIRM",
                 () => ConfirmLineupRequested?.Invoke());
             EnsureRail(RailKey.Reroll, "RerollLineupButton", RailBand.Right, 1,
-                new Color(0.34f, 0.30f, 0.52f, 0.96f), 16f, "REROLL - 2 NP",
+                new Color(0.106f, 0.149f, 0.204f, 1f), 16f, "REROLL - 2 NP",
                 () => RerollLineupRequested?.Invoke());
             EnsureRail(RailKey.EndTurn, "EndTurnButton", RailBand.Right, 2,
                 new Color(0.24f, 0.29f, 0.38f, 0.95f), 17f, "END TURN",
@@ -837,6 +852,7 @@ namespace Overlink.Match
                 label.alignment = TextAlignmentOptions.Center;
                 label.fontSize = fontSize;
                 label.fontStyle = FontStyles.Bold;
+                if (key == RailKey.Confirm) label.color = new Color(0.05f, 0.1f, 0.14f);
                 label.raycastTarget = false;
                 label.text = text;
             }
@@ -914,10 +930,24 @@ namespace Overlink.Match
         /// "2 NP" would be wrong on the second click. An unaffordable Reroll stays visible and dimmed rather
         /// than vanishing: hiding it reads as a rule that does not exist instead of a cost not yet met.
         /// </summary>
-        public void SetSetupBar(bool visible, string rerollText, bool rerollAffordable, string confirmText)
+        public void SetSetupBar(bool visible, string rerollText, bool rerollAffordable, string confirmText,
+            string deploymentText = null)
         {
+            RailSlot confirm = rail[(int)RailKey.Confirm];
+            bool opening = visible && confirm != null && !confirm.Visible;
             SetRail(RailKey.Reroll, visible, rerollAffordable, rerollText);
             SetRail(RailKey.Confirm, visible, true, confirmText);
+            if (setupDeploymentText != null)
+            {
+                if (setupDeploymentText.gameObject.activeSelf != visible)
+                    setupDeploymentText.gameObject.SetActive(visible);
+                if (deploymentText != null && setupDeploymentText.text != deploymentText)
+                    setupDeploymentText.text = deploymentText;
+            }
+            if (opening && EventSystem.current != null && EventSystem.current.currentSelectedGameObject == null)
+            {
+                EventSystem.current.SetSelectedGameObject(confirm.Object);
+            }
         }
 
         /// <summary>
@@ -1105,7 +1135,7 @@ namespace Overlink.Match
             // narrower to chase a portrait window would risk wrapping the victory line for a configuration the
             // game does not support in the first place. BattlefieldHudTests sweeps the aspects.
             result = EnsureBox("Result", new Vector2(1500f, resultFontSize * 2.6f),
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 120f),
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
                 Color.clear, out resultText, out bool resultCreated);
             if (resultCreated)
             {
@@ -1378,8 +1408,10 @@ namespace Overlink.Match
 
             bannerTagLeft = EnsureBannerTag("TagLeft", bannerTagLeft, TextAlignmentOptions.MidlineRight, true);
             bannerTagRight = EnsureBannerTag("TagRight", bannerTagRight, TextAlignmentOptions.MidlineLeft, false);
-            if (bannerTagLeft != null) bannerTagLeft.text = left ?? string.Empty;
-            if (bannerTagRight != null) bannerTagRight.text = right ?? string.Empty;
+            string leftText = left ?? string.Empty;
+            string rightText = right ?? string.Empty;
+            if (bannerTagLeft != null && bannerTagLeft.text != leftText) bannerTagLeft.text = leftText;
+            if (bannerTagRight != null && bannerTagRight.text != rightText) bannerTagRight.text = rightText;
         }
 
         TextMeshProUGUI EnsureBannerTag(string name, TextMeshProUGUI cached, TextAlignmentOptions align, bool leftHalf)
@@ -1429,7 +1461,8 @@ namespace Overlink.Match
         public void SetStatus(PlayerIndex who, string text)
         {
             TextMeshProUGUI target = who == PlayerIndex.Player ? playerBody : opponentBody;
-            if (target != null) target.text = text ?? string.Empty;
+            string next = text ?? string.Empty;
+            if (target != null && target.text != next) target.text = next;
         }
 
         /// <summary>
@@ -1489,8 +1522,9 @@ namespace Overlink.Match
         {
             if (nodeRows == null || index < 0 || index >= nodeRows.Length) return;
             if (nodeRows[index] == null) return;
-            nodeRows[index].text = text ?? string.Empty;
-            nodeRows[index].color = tint;
+            string next = text ?? string.Empty;
+            if (nodeRows[index].text != next) nodeRows[index].text = next;
+            if (nodeRows[index].color != tint) nodeRows[index].color = tint;
         }
 
         /// <summary>The transient instruction line ("Ready to block? Click one of your ...").</summary>

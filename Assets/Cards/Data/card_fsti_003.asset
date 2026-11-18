@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fsti_003
+  m_EditorClassIdentifier: 
+  id: card_fsti_003
+  cardName: Data Clerk
+  faction: 0
+  rarity: 0
+  type: 0
+  cost: 1
+  atk: 1
+  hp: 1
+  shield: 0
+  keywords: 07000000
+  abilityText: 'Deploy: Gain 1 NP.'
+  designNote: Cheap NP accelerator. Trades board presence for tempo.
+  effects:
+  - type: 4
+    target: 0
+    amount: 1
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fsti/card_fsti_003_acc.png
+  art: {fileID: 21300000, guid: b61a45906936d7c45977e238ac6dd636, type: 3}

@@ -73,6 +73,18 @@ namespace Overlink.Vfx
             steps.Add(routine);
         }
 
+        /// <summary>
+        /// Shared "juice": an overshoot pop that settles back to identity. Used by <see cref="UiBar"/>
+        /// and <see cref="UiCounter"/> so one change to the pop shape updates every widget at once.
+        /// Reduced motion snaps straight to the settled state via <see cref="Play"/>.
+        /// </summary>
+        public static void Pop(Transform target, Vector3 peak, float popDuration = 0.12f,
+            float settleDuration = 0.16f)
+        {
+            UiTween.On(target).Play(null, null, peak, popDuration, UiEase.OutBack, null,
+                () => UiTween.On(target).Play(null, null, Vector3.one, settleDuration, UiEase.OutCubic));
+        }
+
         public void Stop()
         {
             StopTransform();

@@ -41,7 +41,6 @@ namespace Overlink.EditorTools
                 mat.SetFloat("_Intensity", 0.55f);
                 mat.SetFloat("_Angle", 0.25f);
             });
-
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("[Overlink] VFX assets ensured at " + VfxRoot + " (" + created + " created).");

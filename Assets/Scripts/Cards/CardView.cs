@@ -62,6 +62,7 @@ namespace Overlink.Cards
 
         CardTween tween;
         Renderer bodyRenderer;
+        CardBackView backView;
 
         public static CardView Create(CardData data, Transform parent)
         {
@@ -280,6 +281,30 @@ namespace Overlink.Cards
         public void SetShade(Color shade)
         {
             if (Face != null) Face.SetShade(shade);
+        }
+
+        /// <summary>
+        /// Shows the shared card back in place of the face, for cards that are face down (opponent hand, deck pile).
+        /// The back is a sprite child that sits on the same plane as the face, so it reads correctly in both the fan
+        /// and the tabletop lanes.
+        /// </summary>
+        public void ShowBack(bool showBack)
+        {
+            if (showBack)
+            {
+                if (backView == null)
+                {
+                    backView = CardBackView.Create(transform, Size, 1);
+                }
+                backView.SetSize(Size);
+                backView.gameObject.SetActive(true);
+            }
+            else if (backView != null)
+            {
+                backView.gameObject.SetActive(false);
+            }
+
+            if (Face != null) Face.gameObject.SetActive(!showBack);
         }
 
         public void SetHovered(bool hovered) => IsHovered = hovered;

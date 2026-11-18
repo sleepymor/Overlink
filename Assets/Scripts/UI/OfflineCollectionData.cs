@@ -1,12 +1,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Overlink.Core;
+using Overlink.Persistence;
 
 namespace Overlink.UI
 {
     /// <summary>
     /// Shared deterministic collection state for the offline Gacha and Collection prototypes.
     /// This is intentionally a local PlayerPrefs-backed seam; it is not an economy or server ledger.
+    /// <para>
+    /// Decks are no longer stored here. Both this binder and the deck builder read and write the same
+    /// <see cref="DeckLibrary"/> records, so a saved deck is the same object in both screens; the
+    /// deck helpers below are adapters that keep the binder's card-focused call sites unchanged.
+    /// </para>
     /// </summary>
     public static class OfflineCollectionData
     {
@@ -30,10 +36,13 @@ namespace Overlink.UI
             RelayNetwork = 2
         }
 
-        /// <summary>The prototype ships one set; the binder exposes it so the set filter is exercised.</summary>
+        /// <summary>The prototype ships one set; keep it as data so a second set stays a data-only change.</summary>
         public const string SetName = "SET 001";
-        public const int DeckLimit = 30;
-        public const int CopyLimit = 3;
+
+        // Deck legality has exactly one source of truth: DeckValidator. The binder therefore stops at
+        // the constructed maximum (40) and the copy cap (3), so the two screens can never disagree.
+        public const int DeckLimit = DeckValidator.MaxDeckSize;
+        public const int CopyLimit = DeckValidator.MaxCopiesPerCard;
         public const int LoyaltyThreshold = 100;
 
         public static readonly CollectionCard[] Catalog =
@@ -53,36 +62,79 @@ namespace Overlink.UI
         };
 
         /// <summary>Five-card deterministic pack used by the offline reveal prototype; the final entry is a duplicate.</summary>
-        public static readonly PackCard[] PackManifest =
+        public static PackCard[] PackManifest => PackFromLegacy(
+            "card_fsti_001", "card_fsti_002", "card_frti_001", "card_fpb_001", "card_fsti_001");
+
+        // The three Signal Bay choices are real deterministic data sets. Each is an authored rarity and faction
+        // sequence, resolved through the 150-card library, so switching choices changes the reveal queue,
+        // ownership and duplicate-fragment accounting.
+        public static PackCard[] FrontlineManifest => PackFromLegacy(
+            "card_fpb_001", "card_fpb_002", "card_frti_001", "card_fpb_001", "card_fsti_001");
+
+        public static PackCard[] RelayManifest => PackFromLegacy(
+            "card_fsti_002", "card_fpb_002", "card_frti_001", "card_fsti_002", "card_fpb_002");
+
+        static PackCard[] PackFromLegacy(params string[] legacyIds)
         {
-            new PackCard("card_fsti_001", "Signal Scout", CardType.Unit, Faction.Fsti, Rarity.Common, 1, 2, 2, "A reliable first link.", 5),
-            new PackCard("card_fsti_002", "Relay Spark", CardType.Relay, Faction.Fsti, Rarity.Common, 2, 0, 0, "Connects the next play.", 5),
-            new PackCard("card_frti_001", "Repair Pulse", CardType.Ability, Faction.Frti, Rarity.Rare, 3, 0, 0, "Restore a damaged Core.", 12),
-            new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "Hold the line while the network stabilizes.", 30),
-            new PackCard("card_fsti_001", "Signal Scout", CardType.Unit, Faction.Fsti, Rarity.Common, 1, 2, 2, "A duplicate copy becomes Data Fragments.", 5),
+            var pack = new PackCard[legacyIds.Length];
+            for (int i = 0; i < legacyIds.Length; i++) pack[i] = FromCatalog(legacyIds[i]);
+            return pack;
+        }
+
+        /// <summary>
+        /// The legacy ids keep their intended faction and rarity; each one is mapped to a distinct library card
+        /// of that faction and rarity, in id order. A repeated legacy id maps to the same library card, so the
+        /// duplicate-fragment path still fires exactly where the authored sequence put it.
+        /// </summary>
+        static readonly string[] LegacyOrder =
+        {
+            "card_fsti_001", "card_fsti_002", "card_frti_001", "card_fpb_001", "card_fpb_002", "card_frti_002",
         };
 
-        // The three Signal Bay choices are real deterministic data sets. The first is the original
-        // offline prototype; the other two deliberately reuse the shipped catalog with different
-        // faction-oriented compositions so switching choices changes the reveal queue, ownership and
-        // duplicate-fragment accounting rather than only changing a label.
-        public static readonly PackCard[] FrontlineManifest =
-        {
-            new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "Hold the line while the network stabilizes.", 30),
-            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "Relay the line beyond the veil.", 12),
-            new PackCard("card_frti_001", "Repair Pulse", CardType.Ability, Faction.Frti, Rarity.Rare, 3, 0, 0, "Restore a damaged Core.", 12),
-            new PackCard("card_fpb_001", "Bulwark Node", CardType.Unit, Faction.Fpb, Rarity.Epic, 4, 4, 6, "A second shield node becomes Data Fragments.", 30),
-            new PackCard("card_fsti_001", "Signal Scout", CardType.Unit, Faction.Fsti, Rarity.Common, 1, 2, 2, "A reliable first link.", 5)
-        };
+        static readonly Dictionary<string, (Faction faction, Rarity rarity)> LegacyIntent =
+            new Dictionary<string, (Faction, Rarity)>
+            {
+                { "card_fsti_001", (Faction.Fsti, Rarity.Common) },
+                { "card_fsti_002", (Faction.Fsti, Rarity.Common) },
+                { "card_frti_001", (Faction.Frti, Rarity.Rare) },
+                { "card_fpb_001", (Faction.Fpb, Rarity.Epic) },
+                { "card_fpb_002", (Faction.Fpb, Rarity.Rare) },
+                { "card_frti_002", (Faction.Frti, Rarity.Legendary) },
+            };
 
-        public static readonly PackCard[] RelayManifest =
+        static Dictionary<string, string> s_legacyToLibrary;
+        static int s_legacyLibraryCount = -1;
+
+        static bool HasLibrary => MvpCardLibrary.IsRegistered;
+
+        static string LegacyLibraryId(string legacyId)
         {
-            new PackCard("card_fsti_002", "Relay Spark", CardType.Relay, Faction.Fsti, Rarity.Common, 2, 0, 0, "Connects the next play.", 5),
-            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "Relay the line beyond the veil.", 12),
-            new PackCard("card_frti_001", "Repair Pulse", CardType.Ability, Faction.Frti, Rarity.Rare, 3, 0, 0, "Restore a damaged Core.", 12),
-            new PackCard("card_fsti_002", "Relay Spark", CardType.Relay, Faction.Fsti, Rarity.Common, 2, 0, 0, "A second relay becomes Data Fragments.", 5),
-            new PackCard("card_fpb_002", "Mesh Courier", CardType.Relay, Faction.Fpb, Rarity.Rare, 2, 0, 0, "A second courier becomes Data Fragments.", 12)
-        };
+            if (!HasLibrary) return null;
+            int count = MvpCardLibrary.All().Count;
+            if (s_legacyToLibrary == null || s_legacyLibraryCount != count)
+            {
+                s_legacyToLibrary = new Dictionary<string, string>();
+                var next = new Dictionary<(Faction, Rarity), int>();
+                foreach (string id in LegacyOrder)
+                {
+                    (Faction faction, Rarity rarity) = LegacyIntent[id];
+                    var pool = new List<string>();
+                    foreach (CardDefinition card in MvpCardLibrary.All())
+                    {
+                        if (card.Faction == faction && card.Rarity == rarity) pool.Add(card.Id);
+                    }
+
+                    pool.Sort(string.CompareOrdinal);
+                    int slot = next.TryGetValue((faction, rarity), out int n) ? n : 0;
+                    next[(faction, rarity)] = slot + 1;
+                    if (pool.Count > 0) s_legacyToLibrary[id] = pool[slot % pool.Count];
+                }
+
+                s_legacyLibraryCount = count;
+            }
+
+            return s_legacyToLibrary.TryGetValue(legacyId, out string libraryId) ? libraryId : null;
+        }
 
         public static SignalPackId SelectedPack()
         {
@@ -131,7 +183,7 @@ namespace Overlink.UI
         /// guarantee audit and loyalty simulation are reviewable frame by frame. Pack 2 slot 3 carries
         /// the Epic that satisfies the ten-pack guarantee; packs 3 and 6 carry Legendary hit slots.
         /// </summary>
-        public static readonly PackCard[] TenPackManifest = BuildTenPackManifest();
+        public static PackCard[] TenPackManifest => BuildTenPackManifest();
 
         static PackCard[] BuildTenPackManifest()
         {
@@ -164,6 +216,15 @@ namespace Overlink.UI
         /// <summary>Copies a catalog entry into pack-card form so manifest and binder never drift.</summary>
         static PackCard FromCatalog(string id)
         {
+            string libraryId = LegacyLibraryId(id) ?? id;
+            CardDefinition definition = HasLibrary ? LibraryCard(libraryId) : null;
+            if (definition != null)
+            {
+                return new PackCard(definition.Id, definition.Name, definition.Type, definition.Faction, definition.Rarity,
+                    definition.Cost, definition.Atk, definition.Hp, definition.AbilityText ?? string.Empty,
+                    FragmentValueFor(definition.Rarity));
+            }
+
             CollectionCard card = Find(id);
             if (card == null)
             {
@@ -324,29 +385,56 @@ namespace Overlink.UI
             return Mathf.Max(0, granted);
         }
 
-        // ── Offline deck seam (Milestone 2 deck-builder integration) ─────────────────────────────
+        // ── Deck seam: adapters over DeckLibrary, the same store the deck builder writes ────────
 
         public static int DeckCopies(string id)
         {
-            return Mathf.Max(0, PlayerPrefs.GetInt(DeckKey + id, 0));
+            EnsureDeckMigration();
+            return DeckLibrary.CopiesInActive(id);
         }
 
+        /// <summary>Size of the active saved deck. Counts every card, not only catalog cards.</summary>
         public static int DeckSize()
         {
-            int total = 0;
-            for (int i = 0; i < Catalog.Length; i++) total += DeckCopies(Catalog[i].Id);
-            return total;
+            EnsureDeckMigration();
+            string active = DeckLibrary.ActiveId;
+            return active.Length == 0 ? 0 : DeckLibrary.CardCount(DeckLibrary.Load(active));
         }
 
-        /// <summary>Adds one copy to the offline deck if ownership, copy limit and deck size allow.</summary>
+        /// <summary>Adds one copy to the active deck if ownership, copy limit and deck size allow.</summary>
         public static bool AddToDeck(string id)
         {
-            int copies = DeckCopies(id);
+            EnsureDeckMigration();
+            int copies = DeckLibrary.CopiesInActive(id);
             if (copies >= CopyLimit || copies >= Owned(id) || DeckSize() >= DeckLimit) return false;
-            PlayerPrefs.SetInt(DeckKey + id, copies + 1);
-            PlayerPrefs.Save();
-            return true;
+            return DeckLibrary.SetActiveCopies(id, copies + 1);
         }
+
+        /// <summary>Removes one copy from the active deck; used by the binder's deck view.</summary>
+        public static bool RemoveFromDeck(string id)
+        {
+            EnsureDeckMigration();
+            int copies = DeckLibrary.CopiesInActive(id);
+            if (copies <= 0) return false;
+            return DeckLibrary.SetActiveCopies(id, copies - 1);
+        }
+
+        /// <summary>
+        /// Imports the pre-unification stores once: the deck builder's single <c>SavedDeck</c> slot and
+        /// this binder's per-card counts. Both imports are idempotent, so the guard only spares the
+        /// PlayerPrefs reads per call. The dictionary screen is the entry point because it owns the card
+        /// ids the counts are keyed by; the deck builder calls it too so a player who never opens the
+        /// binder still gets a single, fully migrated library.
+        /// </summary>
+        public static void EnsureDeckMigration()
+        {
+            if (s_deckMigrated) return;
+            s_deckMigrated = true;
+            DeckLibrary.MigrateLegacySavedDeck();
+            DeckLibrary.MigrateLegacyCounts(CatalogIds);
+        }
+
+        static bool s_deckMigrated;
 
         public static void EnsureResolved()
         {
@@ -416,7 +504,13 @@ namespace Overlink.UI
 
         public static int Owned(string id)
         {
-            return Mathf.Max(0, PlayerPrefs.GetInt(OwnedKey + id, 0));
+            int stored = Mathf.Max(0, PlayerPrefs.GetInt(OwnedKey + id, 0));
+            if (stored > 0) return stored;
+
+            // Offline sandbox: every MVP library card is playable without a gacha pull, so the binder
+            // and the deck builder agree about what can go in a deck. Catalog cards keep their real
+            // ownership counts, which is what the pack accounting and its audits read.
+            return IsLibraryCard(id) ? CopyLimit : 0;
         }
 
         public static int Fragments()
@@ -434,8 +528,133 @@ namespace Overlink.UI
             return null;
         }
 
-        /// <summary>Set membership (§4): the whole prototype catalog ships as SET 001. The binder's set
-        /// filter compares through this seam, so a second set is a data-only change.</summary>
+        // ── Card lookup across the gacha catalog and the MVP library ─────────────────────────
+
+        /// <summary>
+        /// Resolves any card the binder can show: the authored gacha catalog first (its names and
+        /// copy are the ones the packs awarded), then the 100-card MVP library the deck builder uses.
+        /// </summary>
+        public static CollectionCard Resolve(string id)
+        {
+            CardDefinition definition = LibraryCard(id);
+            if (definition != null) return FromDefinition(definition);
+            return Find(id);
+        }
+
+        public static CardDefinition LibraryCard(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            EnsureLibraryIndex();
+            return s_libraryById.TryGetValue(id, out CardDefinition card) ? card : null;
+        }
+
+        public static bool IsLibraryCard(string id) => LibraryCard(id) != null;
+
+        /// <summary>Projects a library card into the tile/detail model the binder already renders.</summary>
+        public static CollectionCard FromDefinition(CardDefinition card)
+        {
+            if (card == null) return null;
+            return new CollectionCard(card.Id, card.Name, card.Type, card.Faction, card.Rarity,
+                card.Cost, card.Atk, card.Hp, card.Shield, card.AbilityText ?? string.Empty,
+                FragmentValueFor(card.Rarity));
+        }
+
+        /// <summary>Duplicate-conversion value per rarity, matching the authored pack manifests.</summary>
+        public static int FragmentValueFor(Rarity rarity)
+        {
+            switch (rarity)
+            {
+                case Rarity.Rare: return 12;
+                case Rarity.Epic: return 30;
+                case Rarity.Legendary: return 60;
+                default: return 5;
+            }
+        }
+
+        /// <summary>
+        /// Every card a deck may contain for one faction: the 100-card MVP library plus the authored
+        /// gacha catalog. The catalog predates the library and uses its own low ids (001/002), so the
+        /// deck builder would otherwise refuse — and discard — a card the binder just added. One shared
+        /// pool is what makes "saved here, editable there" true in both directions.
+        /// </summary>
+        /// <summary>Expands a saved deck's counts into one definition per copy, or an empty list for a null deck.</summary>
+        public static List<CardDefinition> ExpandDeck(DeckData data)
+        {
+            var deck = new List<CardDefinition>();
+            if (data == null || data.Cards == null) return deck;
+            var pool = DeckPool(data.Faction);
+            foreach (var entry in data.Cards)
+            {
+                CardDefinition card = pool.Find(c => c != null && c.Id == entry.Key);
+                if (card == null) continue;
+                for (int i = 0; i < entry.Value; i++) deck.Add(card);
+            }
+            return deck;
+        }
+
+        public static List<CardDefinition> DeckPool(Faction faction)
+        {
+            var pool = new List<CardDefinition>(MvpCardLibrary.ByFaction(faction));
+            for (int i = 0; i < Catalog.Length; i++)
+            {
+                CollectionCard card = Catalog[i];
+                if (card.Faction != faction) continue;
+
+                // If the ids ever collide the library entry wins, otherwise the deck would list two
+                // rows for one id and count it twice.
+                if (IsLibraryCard(card.Id)) continue;
+
+                pool.Add(new CardDefinition
+                {
+                    Id = card.Id,
+                    Name = card.Name,
+                    Faction = card.Faction,
+                    Rarity = card.Rarity,
+                    Type = card.Type,
+                    Cost = card.Cost,
+                    Atk = card.Atk,
+                    Hp = card.Hp,
+                    Shield = card.Shield,
+                    AbilityText = card.Rules
+                });
+            }
+
+            return pool;
+        }
+
+        static void EnsureLibraryIndex()
+        {
+            if (s_libraryById != null) return;
+
+            s_libraryById = new Dictionary<string, CardDefinition>(System.StringComparer.Ordinal);
+            IReadOnlyList<CardDefinition> all = MvpCardLibrary.All();
+            for (int i = 0; i < all.Count; i++)
+            {
+                CardDefinition card = all[i];
+                if (card != null && !string.IsNullOrEmpty(card.Id)) s_libraryById[card.Id] = card;
+            }
+        }
+
+        static Dictionary<string, CardDefinition> s_libraryById;
+
+        static string[] CatalogIds
+        {
+            get
+            {
+                if (s_catalogIds == null)
+                {
+                    s_catalogIds = new string[Catalog.Length];
+                    for (int i = 0; i < Catalog.Length; i++) s_catalogIds[i] = Catalog[i].Id;
+                }
+
+                return s_catalogIds;
+            }
+        }
+
+        static string[] s_catalogIds;
+
+        /// <summary>Set membership (§4): the whole prototype catalog ships as SET 001, exposed as data rather
+        /// than as a hard-coded label.</summary>
         public static string SetFor(CollectionCard card)
         {
             return card == null ? string.Empty : SetName;
@@ -456,8 +675,37 @@ namespace Overlink.UI
             }
         }
 
+        /// <summary>
+        /// Every card the binder shows: the 150-card MVP library, plus any authored catalog entry the library
+        /// does not carry. The library wins on id collisions, so each card appears once.
+        /// </summary>
+        public static List<CollectionCard> BinderCards()
+        {
+            var cards = new List<CollectionCard>();
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            IReadOnlyList<CardDefinition> library = MvpCardLibrary.All();
+            for (int i = 0; i < library.Count; i++)
+            {
+                CollectionCard card = FromDefinition(library[i]);
+                if (card != null && seen.Add(card.Id)) cards.Add(card);
+            }
+
+            for (int i = 0; i < Catalog.Length; i++)
+            {
+                if (seen.Add(Catalog[i].Id)) cards.Add(Catalog[i]);
+            }
+
+            return cards;
+        }
+
         public static void Reset()
         {
+            foreach (CollectionCard card in BinderCards())
+            {
+                PlayerPrefs.DeleteKey(OwnedKey + card.Id);
+                PlayerPrefs.DeleteKey(DeckKey + card.Id);
+            }
+
             for (int i = 0; i < Catalog.Length; i++)
             {
                 PlayerPrefs.DeleteKey(OwnedKey + Catalog[i].Id);
@@ -474,6 +722,11 @@ namespace Overlink.UI
             PlayerPrefs.DeleteKey(PurchasedPacksKey);
             PlayerPrefs.DeleteKey(LoyaltyGrantedKey);
             PlayerPrefs.DeleteKey(SelectedPackKey);
+
+            // The saved decks now live in DeckLibrary. Reset wipes them too, and drops the old
+            // single-slot payload so the next migration cannot resurrect a deck the player cleared.
+            DeckLibrary.DeleteAll();
+            PlayerPrefs.DeleteKey(DeckLibrary.LegacyDeckKey);
             PlayerPrefs.Save();
         }
 

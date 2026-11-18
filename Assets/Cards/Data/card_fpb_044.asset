@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_044
+  m_EditorClassIdentifier: 
+  id: card_fpb_044
+  cardName: Chief Inspector
+  faction: 2
+  rarity: 2
+  type: 0
+  cost: 6
+  atk: 4
+  hp: 6
+  shield: 0
+  keywords: 07000000
+  abilityText: 'Deploy: Destroy an enemy active unit.'
+  designNote: Hard removal on a body. FPB answers any threat.
+  effects:
+  - type: 8
+    target: 4
+    amount: 1
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_044_acc.png
+  art: {fileID: 21300000, guid: 60121f1f423a61d4781edfae21488af4, type: 3}

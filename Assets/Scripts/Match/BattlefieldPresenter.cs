@@ -347,7 +347,7 @@ namespace Overlink.Match
         // command during the opening, the only drag that means anything is a nomination, and the two buttons
         // that close setup are the only interactive things on the screen.
         public const string SetupHintText =
-            "SETUP: Drag a UNIT from your hand to a glowing ACTIVE slot on your side - CORE or NODE 1-4\n" +
+            "Drag a UNIT from your hand to a glowing ACTIVE slot - CORE or NODE 1-4\n" +
             "Do not use BENCH or PROTOCOL   \u2022   Click a fielded card to return it   \u2022   Press CONFIRM when ready";
 
         static readonly string[] NodeLabel =
@@ -379,15 +379,21 @@ namespace Overlink.Match
         // Owner tints for the HUD's node list. Brightened from the plate albedos above: nodePlayer and
         // nodeOpponent are cube colours meant to sit under the board light, and as 21pt text on a dark slab
         // they read as mud.
-        static readonly Color RowNeutral = new Color(0.58f, 0.65f, 0.77f);
+        static readonly Color RowNeutral = new Color(0.78f, 0.84f, 0.90f);
         static readonly Color RowPlayer = new Color(0.16f, 0.85f, 0.96f);
-        static readonly Color RowOpponent = new Color(0.90f, 0.64f, 0.22f);
+        static readonly Color RowOpponent = new Color(1f, 0.78f, 0.60f);
+
+        internal static string NodeOwnerLabel(bool playerHolds, bool opponentHolds)
+        {
+            return playerHolds && opponentHolds ? "CONTESTED"
+                : playerHolds ? "YOURS" : opponentHolds ? "THEIRS" : "OPEN";
+        }
 
         // The reference gives every line of a chip and of a node row its own size and role - a large Core
         // figure, an accent-coloured NP line, small dim stock counts - and the HUD's contract is one text
-        // object per box, so the hierarchy travels inside the string as TMP rich text. DimHex is UiKit's
-        // TextDim; the accent halves take their side's row colour through Hex.
-        const string DimHex = "#8296A9";
+        // object per box, so the hierarchy travels inside the string as TMP rich text. The secondary ink is
+        // deliberately brighter than the general-purpose dim text to remain readable over the battle board.
+        const string DimHex = "#C1D1DF";
         static string Hex(Color c) =>
             $"#{Mathf.RoundToInt(c.r * 255f):X2}{Mathf.RoundToInt(c.g * 255f):X2}{Mathf.RoundToInt(c.b * 255f):X2}";
 
@@ -2512,6 +2518,7 @@ namespace Overlink.Match
 
         float noticeUntil;
         bool hintShowsSetup;
+        bool hiddenSetup;
         int deployPulseCardId = -1;
         int deployBurstCardId = -1;
         float deployPulseUntil;
@@ -2892,6 +2899,7 @@ namespace Overlink.Match
             // The legend is rewritten on the transition only, not every frame: the board repaints sixty times a
             // second for a line that changes once per match, and a text setter dirties its mesh on a write
             // whether or not the string changed.
+            hiddenSetup = state.SetupInProgress;
             if (state.SetupInProgress != hintShowsSetup)
             {
                 hintShowsSetup = state.SetupInProgress;
@@ -2940,11 +2948,10 @@ namespace Overlink.Match
                     : state.Result == MatchResult.OpponentWin ? "DEFEAT"
                     : state.Result == MatchResult.Draw ? "DRAW" : "";
 
-                // The reason rides on the same line at a third of the size: at the overlay's full 84pt a
-                // phrase like "BOTH CORES DESTROYED" would run off a 1500px panel at the reference resolution.
+                // Keep the result word itself centred, with the smaller reason on its own line underneath.
                 string reason = string.IsNullOrEmpty(state.ResultReason)
                     ? ""
-                    : $"<size=36%>   \u2022   {state.ResultReason}</size>";
+                    : $"\n<size=36%>{state.ResultReason}</size>";
 
                 SetResult(word + reason, state.Result == MatchResult.PlayerWin
                     ? new Color(0.45f, 1f, 0.55f)
@@ -3116,10 +3123,10 @@ namespace Overlink.Match
                     // figure wrapped DECK onto a fourth line of its own. Widening the slab is not on the
                     // table: the chips live in the fan's corners and 470 already touches the fan's
                     // maximum-span envelope.
-                    $"<size=36>CORE {p.CoreDurability}/{PlayerState.StartingCoreDurability}</size>\n" +
-                    $"<size=24><color={accent}>NP {p.CurrentNP}/{PlayerState.NpCap(nodes)}</color></size>" +
-                    $"<size=15><color={DimHex}>  NODES {nodes}/{Board.NodeCount}</color></size>\n" +
-                    $"<size=16><color={DimHex}>HAND {p.Hand.Count}   DECK {p.Deck.Count}</color></size>");
+                    $"<size=34><b>CORE {p.CoreDurability}</b></size><size=20><color={DimHex}> / {PlayerState.StartingCoreDurability}</color></size>\n" +
+                    $"<size=24><b><color={accent}>NP {p.CurrentNP}</color></b></size><size=16><color={DimHex}> / {PlayerState.NpCap(nodes)}</color></size>" +
+                    $"<pos=55%><size=13><color={DimHex}><nobr>NODES {nodes}/{Board.NodeCount}</nobr></color></size>\n" +
+                    $"<size=14><b><color={DimHex}>HAND {p.Hand.Count}   \u00b7   DECK {p.Deck.Count}</color></b></size>");
                 hud.SetStatusMeters(who, p.CoreDurability, PlayerState.StartingCoreDurability,
                     p.CurrentNP, PlayerState.NpCap(nodes));
             }
@@ -3143,7 +3150,7 @@ namespace Overlink.Match
                 bool oControls = oHolds && !pHolds;
 
                 SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n], TintForMark(nodePlate[n],
-                    pControls && oControls ? nodeFree
+                    pHolds && oHolds ? nodeFree
                     : pControls ? nodePlayer
                     : oControls ? nodeOpponent
                     : nodeFree))));
@@ -3153,16 +3160,16 @@ namespace Overlink.Match
                 // is actually worth.
                 if (hud != null)
                 {
-                    bool contested = pControls && oControls;
+                    bool contested = pHolds && oHolds;
                     // Two lines, as the reference composes a battlefield row: the node's name and who holds
                     // it on the first - the label dim, the owner untagged so it takes the row's owner colour
                     // - and what holding it pays alone and larger on the second, with the accent rule
                     // closing the block. Bonus and owner on one line could not both stay legible: the
                     // longest pair walked past the row's width and wrapped.
                     hud.SetNodeRow(n,
-                        $"<size=13><color={DimHex}>{NodeLabel[n % NodeLabel.Length]}   \u2022   </color>" +
-                        (contested ? "CONTESTED" : pControls ? "YOURS" : oControls ? "THEIRS" : "OPEN") +
-                        $"</size>\n<size=19>{NodeBonus[n % NodeBonus.Length]}</size>",
+                        $"<size=16><b><color=#FFFFFF>{NodeLabel[n % NodeLabel.Length]}</color><pos=58%><size=14>" +
+                        NodeOwnerLabel(pHolds, oHolds) +
+                        $"</size></b></size>\n<size=19><b><color=#FFD06A>{NodeBonus[n % NodeBonus.Length]}</color></b></size>",
                         contested || (!pControls && !oControls) ? RowNeutral
                         : pControls ? RowPlayer : RowOpponent);
                 }
@@ -3376,6 +3383,13 @@ namespace Overlink.Match
             // socket, so the cube keeps reading as a ring around it rather than being hidden by it.
             if (SyncBoardCard(tile, card, engine, preview))
             {
+                if (hiddenSetup && card.Owner == PlayerIndex.Opponent)
+                {
+                    tile.Card.ShowBack(true);
+                    tile.Label.text = string.Empty;
+                    return;
+                }
+                tile.Card.ShowBack(false);
                 // The card already carries the name, the cost, the art, the ability text and the live attack,
                 // health and shield, in the same face the fan uses, so the caption's job has narrowed to the four
                 // states a frame cannot express about itself. With no catalogs wired the label keeps carrying the

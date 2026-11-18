@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_047
+  m_EditorClassIdentifier: 
+  id: card_fpb_047
+  cardName: Eternal Gallery
+  faction: 2
+  rarity: 2
+  type: 3
+  cost: 5
+  atk: 0
+  hp: 0
+  shield: 0
+  keywords: 0c0000000a000000
+  abilityText: 'Persistent: Heal all allied active units for 3 HP and grant them
+    2 Shield at the start of each turn.'
+  designNote: Ultimate sustain protocol. Near-invincible board if not removed.
+  effects:
+  - type: 2
+    target: 5
+    amount: 3
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  - type: 7
+    target: 5
+    amount: 2
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_047_acc.png
+  art: {fileID: 21300000, guid: 45952d8f5ae77684484f0209ca1bada6, type: 3}

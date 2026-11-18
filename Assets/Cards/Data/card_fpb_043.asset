@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_043
+  m_EditorClassIdentifier: 
+  id: card_fpb_043
+  cardName: Restoration Director
+  faction: 2
+  rarity: 2
+  type: 0
+  cost: 7
+  atk: 3
+  hp: 7
+  shield: 0
+  keywords: 060000000a0000000e000000
+  abilityText: 'Activate: Heal all allied active units for 3 HP. Repair self for
+    3 Shield.'
+  designNote: Ultimate sustain unit. Heals the board and repairs itself each turn.
+  effects:
+  - type: 2
+    target: 5
+    amount: 3
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  - type: 15
+    target: 0
+    amount: 3
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_043_acc.png
+  art: {fileID: 21300000, guid: c02b704bd053b1942b2397d7de69ae76, type: 3}

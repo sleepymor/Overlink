@@ -1,0 +1,3984 @@
+{
+  "formatVersion": 1,
+  "cards": [
+    {
+      "id": "card_fpb_001",
+      "name": "Junior Drafter",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Cheap defensive body. Holds early positions.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_001_acc.png"
+    },
+    {
+      "id": "card_fpb_002",
+      "name": "Blueprint Archivist",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 1,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Durable 2-drop. Classic FPB defensive profile.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_002_acc.png"
+    },
+    {
+      "id": "card_fpb_003",
+      "name": "Sketch Apprentice",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 1,
+      "shield": 1,
+      "keywords": [
+        "Shield"
+      ],
+      "abilityText": "Shield 1.",
+      "designNote": "Cheap shielded unit. Soaks one extra hit.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_003_acc.png"
+    },
+    {
+      "id": "card_fpb_004",
+      "name": "Layout Planner",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 1,
+      "hp": 3,
+      "shield": 1,
+      "keywords": [
+        "Shield"
+      ],
+      "abilityText": "Shield 1.",
+      "designNote": "Defensive 2-drop with shield. Very sticky.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_004_acc.png"
+    },
+    {
+      "id": "card_fpb_005",
+      "name": "Site Surveyor",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Heal"
+      ],
+      "abilityText": "Deploy: Heal an allied active unit for 2 HP.",
+      "designNote": "Body with healing. Sustains board presence.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_005_acc.png"
+    },
+    {
+      "id": "card_fpb_006",
+      "name": "Zoning Inspector",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "High HP 3-drop. Hard to remove cheaply.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_006_acc.png"
+    },
+    {
+      "id": "card_fpb_007",
+      "name": "Perspective Artist",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 1,
+      "keywords": [
+        "Shield"
+      ],
+      "abilityText": "Shield 1.",
+      "designNote": "Solid mid-cost shielded unit.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_007_acc.png"
+    },
+    {
+      "id": "card_fpb_008",
+      "name": "Foundation Layer",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "High HP wall at 4 cost. Very durable.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_008_acc.png"
+    },
+    {
+      "id": "card_fpb_009",
+      "name": "Model Maker",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Repair"
+      ],
+      "abilityText": "Deploy: Repair self for 2 Shield.",
+      "designNote": "Self-repair on deploy. Gains shield when it enters.",
+      "effects": [
+        {
+          "type": "Repair",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_009_acc.png"
+    },
+    {
+      "id": "card_fpb_010",
+      "name": "Color Theorist",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Grant an allied active unit 2 Shield.",
+      "designNote": "Body plus shield grant. Defensive utility.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_010_acc.png"
+    },
+    {
+      "id": "card_fpb_011",
+      "name": "Render Technician",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 4,
+      "shield": 1,
+      "keywords": [
+        "Shield"
+      ],
+      "abilityText": "Shield 1.",
+      "designNote": "Durable mid-range with shield. Hard to shift.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_011_acc.png"
+    },
+    {
+      "id": "card_fpb_012",
+      "name": "Structural Engineer",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Big defensive body. Late common that holds board.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_012_acc.png"
+    },
+    {
+      "id": "card_fpb_013",
+      "name": "Eraser",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 0,
+      "atk": 0,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Free 0/2 blocker. Absorbs an attack for free.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_013_acc.png"
+    },
+    {
+      "id": "card_fpb_014",
+      "name": "Detail Renderer",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 2,
+      "hp": 6,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Heal"
+      ],
+      "abilityText": "Activate: Heal an allied active unit for 2 HP.",
+      "designNote": "Repeatable healer. Sustains the board each turn.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_014_acc.png"
+    },
+    {
+      "id": "card_fpb_015",
+      "name": "Scale Modeller",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Offensive common for FPB. Trades well.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_015_acc.png"
+    },
+    {
+      "id": "card_fpb_016",
+      "name": "Quick Sketch",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Grant an allied active unit 2 Shield.",
+      "designNote": "Cheap shield grant. Defensive trick.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_016_acc.png"
+    },
+    {
+      "id": "card_fpb_017",
+      "name": "Patch Work",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal an allied active unit for 3 HP.",
+      "designNote": "Basic heal spell. Keeps units alive.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_017_acc.png"
+    },
+    {
+      "id": "card_fpb_018",
+      "name": "Revised Draft",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal all allied active units for 2 HP.",
+      "designNote": "Board-wide heal. Keeps the whole team healthy.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_018_acc.png"
+    },
+    {
+      "id": "card_fpb_019",
+      "name": "Protective Coating",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Fast"
+      ],
+      "abilityText": "Fast: Grant an allied active unit 3 Shield.",
+      "designNote": "Fast-speed shield grant. Defensive combat trick.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": true
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_019_acc.png"
+    },
+    {
+      "id": "card_fpb_020",
+      "name": "Foundation Check",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 0,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal an allied active unit for 1 HP.",
+      "designNote": "Free heal. Tiny but free sustain.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_020_acc.png"
+    },
+    {
+      "id": "card_fpb_021",
+      "name": "Clear Coat",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Grant all allied active units 1 Shield.",
+      "designNote": "Board-wide shield. Small but affects everything.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_021_acc.png"
+    },
+    {
+      "id": "card_fpb_022",
+      "name": "Restoration Studio",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Heal"
+      ],
+      "abilityText": "Activate: Heal an allied active unit for 2 HP.",
+      "designNote": "Healing relay. Sustains board each turn.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_022_acc.png"
+    },
+    {
+      "id": "card_fpb_023",
+      "name": "Material Stockpile",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Grant an allied active unit 1 Shield.",
+      "designNote": "Shield relay. Slow shield generation.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_023_acc.png"
+    },
+    {
+      "id": "card_fpb_024",
+      "name": "Maintenance Schedule",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Heal"
+      ],
+      "abilityText": "Persistent: Heal all allied active units for 1 HP at the start of each turn.",
+      "designNote": "Ongoing board heal. Grinds out attrition.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_024_acc.png"
+    },
+    {
+      "id": "card_fpb_025",
+      "name": "Iterative Design",
+      "faction": "fpb",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Grant all allied active units 1 Shield at the start of each turn.",
+      "designNote": "Ongoing shield protocol. Stacks shields over time.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_025_acc.png"
+    },
+    {
+      "id": "card_fpb_026",
+      "name": "Gallery Curator",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 4,
+      "shield": 1,
+      "keywords": [
+        "Shield",
+        "Deploy",
+        "Heal"
+      ],
+      "abilityText": "Shield 1. Deploy: Heal an allied active unit for 2 HP.",
+      "designNote": "Shielded healer. Core defensive piece.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_026_acc.png"
+    },
+    {
+      "id": "card_fpb_027",
+      "name": "Lead Architect",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 5,
+      "shield": 2,
+      "keywords": [
+        "Shield"
+      ],
+      "abilityText": "Shield 2.",
+      "designNote": "Premium shielded body. Very hard to take down.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_027_acc.png"
+    },
+    {
+      "id": "card_fpb_028",
+      "name": "Conservation Specialist",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Heal"
+      ],
+      "abilityText": "Activate: Heal all allied active units for 2 HP.",
+      "designNote": "Repeatable board-wide heal. Key sustain engine.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_028_acc.png"
+    },
+    {
+      "id": "card_fpb_029",
+      "name": "City Planner",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Grant all allied active units 2 Shield.",
+      "designNote": "Board-wide shield on deploy. Defensive powerhouse.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_029_acc.png"
+    },
+    {
+      "id": "card_fpb_030",
+      "name": "Composition Instructor",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 6,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Repair"
+      ],
+      "abilityText": "Deploy: Repair self for 3 Shield.",
+      "designNote": "Self-repair for max shield. Very tanky on arrival.",
+      "effects": [
+        {
+          "type": "Repair",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_030_acc.png"
+    },
+    {
+      "id": "card_fpb_031",
+      "name": "Mural Painter",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 3,
+      "hp": 6,
+      "shield": 2,
+      "keywords": [
+        "Shield",
+        "Deploy",
+        "Heal"
+      ],
+      "abilityText": "Shield 2. Deploy: Heal all allied active units for 3 HP.",
+      "designNote": "Big heal on a shielded body. Full team sustain.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_031_acc.png"
+    },
+    {
+      "id": "card_fpb_032",
+      "name": "Framing Specialist",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Deal 2 damage to an enemy active unit.",
+      "designNote": "FPB removal option. Defensive deck needs answers too.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_032_acc.png"
+    },
+    {
+      "id": "card_fpb_033",
+      "name": "Master Calligrapher",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 2,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Repair"
+      ],
+      "abilityText": "Activate: Repair self for 2 Shield.",
+      "designNote": "Self-repairing tank. Keeps regenerating shield.",
+      "effects": [
+        {
+          "type": "Repair",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_033_acc.png"
+    },
+    {
+      "id": "card_fpb_034",
+      "name": "Design Reviewer",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 1 card and grant an allied active unit 1 Shield.",
+      "designNote": "Card draw plus shield. Versatile FPB rare.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_034_acc.png"
+    },
+    {
+      "id": "card_fpb_035",
+      "name": "Layered Varnish",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Grant all allied active units 3 Shield.",
+      "designNote": "Premium board-wide shield. Massive defensive swing.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_035_acc.png"
+    },
+    {
+      "id": "card_fpb_036",
+      "name": "Full Restoration",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal all allied active units for 4 HP.",
+      "designNote": "Deep board-wide heal. Major stabilizer.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_036_acc.png"
+    },
+    {
+      "id": "card_fpb_037",
+      "name": "Structural Critique",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Deal 4 damage to an enemy active unit.",
+      "designNote": "FPB removal spell. Precise damage.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_037_acc.png"
+    },
+    {
+      "id": "card_fpb_038",
+      "name": "Gilding Workshop",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Relay",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Grant all allied active units 2 Shield.",
+      "designNote": "Shield relay. Board-wide shield per turn.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_038_acc.png"
+    },
+    {
+      "id": "card_fpb_039",
+      "name": "Preservation Order",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Heal"
+      ],
+      "abilityText": "Persistent: Heal all allied active units for 2 HP at the start of each turn.",
+      "designNote": "Premium ongoing heal. Attrition engine.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_039_acc.png"
+    },
+    {
+      "id": "card_fpb_040",
+      "name": "Hardening Process",
+      "faction": "fpb",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Grant all allied active units 2 Shield at the start of each turn.",
+      "designNote": "Ongoing shield protocol. Stacking shield over time.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_040_acc.png"
+    },
+    {
+      "id": "card_fpb_041",
+      "name": "Exhibition Guard",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 3,
+      "hp": 7,
+      "shield": 3,
+      "keywords": [
+        "Shield",
+        "Deploy",
+        "Heal"
+      ],
+      "abilityText": "Shield 3. Deploy: Heal all allied active units for 3 HP.",
+      "designNote": "Premium defensive unit. Huge HP, shield, and team heal.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_041_acc.png"
+    },
+    {
+      "id": "card_fpb_042",
+      "name": "Conceptual Designer",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Grant all allied active units 3 Shield.",
+      "designNote": "Massive board-wide shield on deploy. Fortress builder.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_042_acc.png"
+    },
+    {
+      "id": "card_fpb_043",
+      "name": "Restoration Director",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 7,
+      "atk": 3,
+      "hp": 7,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Heal",
+        "Repair"
+      ],
+      "abilityText": "Activate: Heal all allied active units for 3 HP. Repair self for 3 Shield.",
+      "designNote": "Ultimate sustain unit. Heals the board and repairs itself each turn.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "Repair",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_043_acc.png"
+    },
+    {
+      "id": "card_fpb_044",
+      "name": "Chief Inspector",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 4,
+      "hp": 6,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Destroy an enemy active unit.",
+      "designNote": "Hard removal on a body. FPB answers any threat.",
+      "effects": [
+        {
+          "type": "Destroy",
+          "target": "EnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_044_acc.png"
+    },
+    {
+      "id": "card_fpb_045",
+      "name": "Master Restoration",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal all allied active units for 5 HP. Grant all allied active units 2 Shield.",
+      "designNote": "Massive defensive swing. Full team heal and shield.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 5,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_045_acc.png"
+    },
+    {
+      "id": "card_fpb_046",
+      "name": "Decommission Order",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Destroy an enemy active unit. Grant all allied active units 1 Shield.",
+      "designNote": "Hard removal with defensive bonus. FPB finesse.",
+      "effects": [
+        {
+          "type": "Destroy",
+          "target": "EnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_046_acc.png"
+    },
+    {
+      "id": "card_fpb_047",
+      "name": "Eternal Gallery",
+      "faction": "fpb",
+      "rarity": "Epic",
+      "type": "Protocol",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Heal"
+      ],
+      "abilityText": "Persistent: Heal all allied active units for 3 HP and grant them 2 Shield at the start of each turn.",
+      "designNote": "Ultimate sustain protocol. Near-invincible board if not removed.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_047_acc.png"
+    },
+    {
+      "id": "card_fpb_048",
+      "name": "Director Vasari",
+      "faction": "fpb",
+      "rarity": "Legendary",
+      "type": "Unit",
+      "cost": 9,
+      "atk": 4,
+      "hp": 9,
+      "shield": 3,
+      "keywords": [
+        "Shield",
+        "Deploy",
+        "Activate",
+        "Heal",
+        "Repair"
+      ],
+      "abilityText": "Shield 3. Deploy: Heal all allied active units for 4 HP. Activate: Repair self for 3 Shield.",
+      "designNote": "FPB legendary unit. Nearly unkillable fortress with team heal.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "Repair",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_048_acc.png"
+    },
+    {
+      "id": "card_fpb_049",
+      "name": "Living Masterpiece",
+      "faction": "fpb",
+      "rarity": "Legendary",
+      "type": "Protocol",
+      "cost": 9,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Heal"
+      ],
+      "abilityText": "Persistent: Heal all allied active units for 4 HP and grant them 3 Shield at the start of each turn.",
+      "designNote": "FPB legendary protocol. Overwhelming sustain per turn.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_049_acc.png"
+    },
+    {
+      "id": "card_fpb_050",
+      "name": "Magnum Opus",
+      "faction": "fpb",
+      "rarity": "Legendary",
+      "type": "Ability",
+      "cost": 8,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Heal"
+      ],
+      "abilityText": "Heal all allied active units for 6 HP. Grant all allied active units 4 Shield. Draw 2 cards.",
+      "designNote": "FPB legendary ability. Full defensive reset and card advantage.",
+      "effects": [
+        {
+          "type": "Heal",
+          "target": "AllAlliedActive",
+          "amount": 6,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GrantShield",
+          "target": "AllAlliedActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fpb/card_fpb_050_acc.png"
+    },
+    {
+      "id": "card_frti_001",
+      "name": "Assembly Worker",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 2,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Aggressive 1-drop. High ATK, low survivability.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_001_acc.png"
+    },
+    {
+      "id": "card_frti_002",
+      "name": "Rivet Gunner",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 3,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Glass cannon 2-drop. Hits hard, dies fast.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_002_acc.png"
+    },
+    {
+      "id": "card_frti_003",
+      "name": "Frame Hauler",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Balanced 2-drop. Solid stats for cost.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_003_acc.png"
+    },
+    {
+      "id": "card_frti_004",
+      "name": "Welding Apprentice",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Cheap blocker. Defensive 1-drop for FRTI.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_004_acc.png"
+    },
+    {
+      "id": "card_frti_005",
+      "name": "Piston Driver",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 4,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Aggressive 3-drop. Premium ATK for cost.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_005_acc.png"
+    },
+    {
+      "id": "card_frti_006",
+      "name": "Conveyor Operator",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Vanilla 3-drop. Even stats distribution.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_006_acc.png"
+    },
+    {
+      "id": "card_frti_007",
+      "name": "Crane Rigger",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 4,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "ATK-heavy 4-drop. Classic FRTI profile.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_007_acc.png"
+    },
+    {
+      "id": "card_frti_008",
+      "name": "Foundry Stoker",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Durable 4-drop. Balanced between offence and defence.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_008_acc.png"
+    },
+    {
+      "id": "card_frti_009",
+      "name": "Impact Hammer",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "FirstStrike"
+      ],
+      "abilityText": "FirstStrike.",
+      "designNote": "First striker. Trades up in combat reliably.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_009_acc.png"
+    },
+    {
+      "id": "card_frti_010",
+      "name": "Drill Sergeant",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Give an allied active unit +1 ATK this turn.",
+      "designNote": "Cheap buff on deploy. Supports aggressive openers.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_010_acc.png"
+    },
+    {
+      "id": "card_frti_011",
+      "name": "Load Bearer",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 4,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Premium vanilla 5-drop. Strong stat line.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_011_acc.png"
+    },
+    {
+      "id": "card_frti_012",
+      "name": "Turbine Mechanic",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 5,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "High ATK glass cannon at 4 NP. Aggressive curve topper.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_012_acc.png"
+    },
+    {
+      "id": "card_frti_013",
+      "name": "Scrap Collector",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Gain 1 NP.",
+      "designNote": "Cheap NP accelerator. Fuels bigger plays.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_013_acc.png"
+    },
+    {
+      "id": "card_frti_014",
+      "name": "Boiler Guard",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 5,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "High-ATK 5-drop. Threatens lethal damage.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_014_acc.png"
+    },
+    {
+      "id": "card_frti_015",
+      "name": "Junction Welder",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 0,
+      "atk": 1,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Free body. Board presence at no cost.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_015_acc.png"
+    },
+    {
+      "id": "card_frti_016",
+      "name": "Overclock Engine",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Give an allied active unit +2 ATK this turn.",
+      "designNote": "Basic combat buff. Cheap and effective.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_016_acc.png"
+    },
+    {
+      "id": "card_frti_017",
+      "name": "Reinforced Plating",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Grant an allied active unit 2 Shield.",
+      "designNote": "Defensive ability. Adds temporary shield.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_017_acc.png"
+    },
+    {
+      "id": "card_frti_018",
+      "name": "Heavy Swing",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Deal 3 damage to an enemy active unit.",
+      "designNote": "Direct damage removal. Clears small-to-mid threats.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_018_acc.png"
+    },
+    {
+      "id": "card_frti_019",
+      "name": "Industrial Surge",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Give an allied active unit +3 ATK this turn.",
+      "designNote": "Strong single-target buff. Big damage spike.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_019_acc.png"
+    },
+    {
+      "id": "card_frti_020",
+      "name": "Quick Weld",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Fast"
+      ],
+      "abilityText": "Fast: Give an allied active unit +2 ATK this turn.",
+      "designNote": "Fast-speed combat trick. Surprises in combat.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": true
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_020_acc.png"
+    },
+    {
+      "id": "card_frti_021",
+      "name": "Controlled Demolition",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Deal 2 damage to all enemy active units.",
+      "designNote": "AoE without keyword. Clears small boards.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_021_acc.png"
+    },
+    {
+      "id": "card_frti_022",
+      "name": "Supply Depot",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Give an allied active unit +1 ATK permanently.",
+      "designNote": "Structure that steadily buffs. Slow but persistent value.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_022_acc.png"
+    },
+    {
+      "id": "card_frti_023",
+      "name": "Ore Processor",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Gain 2 NP.",
+      "designNote": "NP relay. Industrial resource generation.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_023_acc.png"
+    },
+    {
+      "id": "card_frti_024",
+      "name": "Production Line",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Give all allied active units +1 ATK at the start of each turn.",
+      "designNote": "Ongoing ATK buff. Rewards keeping units alive.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_024_acc.png"
+    },
+    {
+      "id": "card_frti_025",
+      "name": "Shift Change",
+      "faction": "frti",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Gain 1 NP at the start of each turn.",
+      "designNote": "Ongoing NP generation. Fuels FRTI's expensive units.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_025_acc.png"
+    },
+    {
+      "id": "card_frti_026",
+      "name": "Forge Master",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 4,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Give an allied active unit +2 ATK permanently.",
+      "designNote": "Strong body with permanent buff on deploy.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_026_acc.png"
+    },
+    {
+      "id": "card_frti_027",
+      "name": "Press Operator",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 5,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "FirstStrike"
+      ],
+      "abilityText": "FirstStrike.",
+      "designNote": "Big first striker. Dominates combat step.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_027_acc.png"
+    },
+    {
+      "id": "card_frti_028",
+      "name": "Furnace Tender",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 6,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "High ATK 6-drop. Pure damage threat.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_028_acc.png"
+    },
+    {
+      "id": "card_frti_029",
+      "name": "Demolition Expert",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "AoE"
+      ],
+      "abilityText": "Deploy: Deal 2 damage to all enemy active units.",
+      "designNote": "AoE on deploy. Board clear attached to a body.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_029_acc.png"
+    },
+    {
+      "id": "card_frti_030",
+      "name": "Alloy Smelter",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 4,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Grant an allied active unit 3 Shield.",
+      "designNote": "Big body that also shields an ally. Defensive utility.",
+      "effects": [
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_030_acc.png"
+    },
+    {
+      "id": "card_frti_031",
+      "name": "Slag Breaker",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 4,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Piercing"
+      ],
+      "abilityText": "Piercing.",
+      "designNote": "Cheap piercing aggro. Ignores shield HP.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_031_acc.png"
+    },
+    {
+      "id": "card_frti_032",
+      "name": "Girder Layer",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Deal 2 damage to an enemy active unit.",
+      "designNote": "Deploy removal on a solid body. Versatile.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_032_acc.png"
+    },
+    {
+      "id": "card_frti_033",
+      "name": "Engine Guardian",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 5,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Deal 3 damage to an enemy active unit.",
+      "designNote": "Premium removal on a big body. Stabilizes the board.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_033_acc.png"
+    },
+    {
+      "id": "card_frti_034",
+      "name": "Railgun Prototype",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 5,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "CannotBlock"
+      ],
+      "abilityText": "CannotBlock. High ATK but cannot defend.",
+      "designNote": "Pure aggro. Cannot block, so all-in offense.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_034_acc.png"
+    },
+    {
+      "id": "card_frti_035",
+      "name": "Precision Strike",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Deal 5 damage to an enemy active unit.",
+      "designNote": "Heavy single-target removal. Kills most mid-cost units.",
+      "effects": [
+        {
+          "type": "DealDamage",
+          "target": "EnemyActive",
+          "amount": 5,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_035_acc.png"
+    },
+    {
+      "id": "card_frti_036",
+      "name": "Tempered Steel",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Fast"
+      ],
+      "abilityText": "Fast: Give an allied active unit +3 ATK this turn and grant it 2 Shield.",
+      "designNote": "Fast combat trick with shield. Offensive and defensive.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": true
+        },
+        {
+          "type": "GrantShield",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": true
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_036_acc.png"
+    },
+    {
+      "id": "card_frti_037",
+      "name": "Shrapnel Burst",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "AoE"
+      ],
+      "abilityText": "Deal 3 damage to all enemy active units.",
+      "designNote": "Strong AoE clear. Devastates wide boards.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_037_acc.png"
+    },
+    {
+      "id": "card_frti_038",
+      "name": "Munitions Factory",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Relay",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Give all allied active units +2 ATK this turn.",
+      "designNote": "High-value relay. Board-wide ATK boost per turn.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_038_acc.png"
+    },
+    {
+      "id": "card_frti_039",
+      "name": "Arms Race",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Give all allied active units +1 ATK permanently at the start of each turn.",
+      "designNote": "Snowball protocol. Permanent stacking ATK buffs.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_039_acc.png"
+    },
+    {
+      "id": "card_frti_040",
+      "name": "Thermal Runaway",
+      "faction": "frti",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "AoE"
+      ],
+      "abilityText": "Persistent: Deal 1 damage to all enemy active units at the start of each turn.",
+      "designNote": "Ongoing AoE ping. Grinds down enemy boards.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_040_acc.png"
+    },
+    {
+      "id": "card_frti_041",
+      "name": "Siege Engine",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 7,
+      "atk": 7,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Piercing"
+      ],
+      "abilityText": "Piercing.",
+      "designNote": "Top-end piercing threat. Ignores shields for massive damage.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_041_acc.png"
+    },
+    {
+      "id": "card_frti_042",
+      "name": "Lifter Mech",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 5,
+      "hp": 6,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "AoE"
+      ],
+      "abilityText": "Deploy: Deal 3 damage to all enemy active units.",
+      "designNote": "AoE clear on a premium body. Board wipe + threat.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_042_acc.png"
+    },
+    {
+      "id": "card_frti_043",
+      "name": "Chief Machinist",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 5,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Give all allied active units +2 ATK permanently.",
+      "designNote": "Permanent board-wide buff. Rally the whole team.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_043_acc.png"
+    },
+    {
+      "id": "card_frti_044",
+      "name": "Crushing Press",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 6,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "FirstStrike",
+        "CannotBlock"
+      ],
+      "abilityText": "FirstStrike. CannotBlock.",
+      "designNote": "All-in attacker. Massive first strike but no blocking.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_044_acc.png"
+    },
+    {
+      "id": "card_frti_045",
+      "name": "Factory Reset",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "AoE"
+      ],
+      "abilityText": "Deal 4 damage to all enemy active units.",
+      "designNote": "Premium board clear. Kills most units outright.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_045_acc.png"
+    },
+    {
+      "id": "card_frti_046",
+      "name": "Meltdown Protocol",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 6,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Destroy an enemy active unit.",
+      "designNote": "Hard removal. Kills any unit regardless of HP.",
+      "effects": [
+        {
+          "type": "Destroy",
+          "target": "EnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_046_acc.png"
+    },
+    {
+      "id": "card_frti_047",
+      "name": "War Foundry",
+      "faction": "frti",
+      "rarity": "Epic",
+      "type": "Relay",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Give all allied active units +2 ATK permanently.",
+      "designNote": "Premium relay. Stacking permanent buffs each turn.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_047_acc.png"
+    },
+    {
+      "id": "card_frti_048",
+      "name": "Director Kaelin",
+      "faction": "frti",
+      "rarity": "Legendary",
+      "type": "Unit",
+      "cost": 8,
+      "atk": 7,
+      "hp": 7,
+      "shield": 0,
+      "keywords": [
+        "Piercing",
+        "FirstStrike",
+        "Deploy",
+        "AoE"
+      ],
+      "abilityText": "Piercing. FirstStrike. Deploy: Deal 3 damage to all enemy active units.",
+      "designNote": "FRTI legendary unit. Dominant combat stats plus board clear.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_048_acc.png"
+    },
+    {
+      "id": "card_frti_049",
+      "name": "Grand Forge",
+      "faction": "frti",
+      "rarity": "Legendary",
+      "type": "Relay",
+      "cost": 8,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "AoE"
+      ],
+      "abilityText": "Activate: Give all allied active units +3 ATK permanently and deal 2 damage to all enemy active units.",
+      "designNote": "FRTI legendary relay. Ultimate factory. Buffs and damages each turn.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_049_acc.png"
+    },
+    {
+      "id": "card_frti_050",
+      "name": "Total Collapse",
+      "faction": "frti",
+      "rarity": "Legendary",
+      "type": "Ability",
+      "cost": 10,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "AoE"
+      ],
+      "abilityText": "Deal 6 damage to all enemy active units.",
+      "designNote": "FRTI legendary ability. Near-total board wipe.",
+      "effects": [
+        {
+          "type": "DealAoEDamage",
+          "target": "AllEnemyActive",
+          "amount": 6,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/frti/card_frti_050_acc.png"
+    },
+    {
+      "id": "card_fsti_001",
+      "name": "Lab Intern",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Draw 1 card.",
+      "designNote": "Cheap cantrip body. Basic card-draw engine.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_001_acc.png"
+    },
+    {
+      "id": "card_fsti_002",
+      "name": "Relay Operator",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Vanilla 2-drop. Efficient stats for early board.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_002_acc.png"
+    },
+    {
+      "id": "card_fsti_003",
+      "name": "Data Clerk",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Gain 1 NP.",
+      "designNote": "Cheap NP accelerator. Trades board presence for tempo.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_003_acc.png"
+    },
+    {
+      "id": "card_fsti_004",
+      "name": "Frequency Scanner",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 1,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Defensive 2-drop. Higher HP for holding positions.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_004_acc.png"
+    },
+    {
+      "id": "card_fsti_005",
+      "name": "Network Technician",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Draw 1 card.",
+      "designNote": "Mid-cost body with card draw. Bread and butter.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_005_acc.png"
+    },
+    {
+      "id": "card_fsti_006",
+      "name": "Optics Researcher",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Aggressive 3-drop. Glass cannon profile.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_006_acc.png"
+    },
+    {
+      "id": "card_fsti_007",
+      "name": "Patch Compiler",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Gain 1 NP.",
+      "designNote": "Low HP NP generator. Expendable accelerator.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_007_acc.png"
+    },
+    {
+      "id": "card_fsti_008",
+      "name": "Survey Drone",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 1,
+      "atk": 1,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [
+        "Piercing"
+      ],
+      "abilityText": "Piercing.",
+      "designNote": "Cheapest piercing unit. Chip damage through shields.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_008_acc.png"
+    },
+    {
+      "id": "card_fsti_009",
+      "name": "Lab Workstation",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Activate: Draw 1 card.",
+      "designNote": "Repeatable draw engine. High HP to survive.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_009_acc.png"
+    },
+    {
+      "id": "card_fsti_010",
+      "name": "Bandwidth Monitor",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Gain 2 NP.",
+      "designNote": "Bigger NP burst on deploy. Worth the 3-cost.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_010_acc.png"
+    },
+    {
+      "id": "card_fsti_011",
+      "name": "Campus Courier",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Buff an allied active unit +1 ATK this turn.",
+      "designNote": "Cheap tempo swing. Pairs well with aggressive openers.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_011_acc.png"
+    },
+    {
+      "id": "card_fsti_012",
+      "name": "Waveform Analyst",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Solid vanilla 4-drop. Reliable mid-game body.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_012_acc.png"
+    },
+    {
+      "id": "card_fsti_013",
+      "name": "Calibration Probe",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 0,
+      "atk": 1,
+      "hp": 1,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Free 1/1. Board filler, combo enabler.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_013_acc.png"
+    },
+    {
+      "id": "card_fsti_014",
+      "name": "Spectrum Mapper",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 2 cards.",
+      "designNote": "Big draw burst on a decent body. Late-game refuel.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_014_acc.png"
+    },
+    {
+      "id": "card_fsti_015",
+      "name": "Telemetry Receiver",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "",
+      "designNote": "Beefy common. Holds bench position well.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_015_acc.png"
+    },
+    {
+      "id": "card_fsti_016",
+      "name": "Quick Analysis",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Draw"
+      ],
+      "abilityText": "Draw 1 card.",
+      "designNote": "Cheapest cantrip. Cycles the deck.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_016_acc.png"
+    },
+    {
+      "id": "card_fsti_017",
+      "name": "Signal Boost",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Give an allied active unit +2 ATK this turn.",
+      "designNote": "Combat trick. Cheap damage buff.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_017_acc.png"
+    },
+    {
+      "id": "card_fsti_018",
+      "name": "System Ping",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 0,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Gain 1 NP.",
+      "designNote": "Free NP. Enables turn-1 acceleration.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_018_acc.png"
+    },
+    {
+      "id": "card_fsti_019",
+      "name": "Firmware Update",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Give an allied active unit +1 ATK permanently.",
+      "designNote": "Permanent buff. Stacks over turns.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_019_acc.png"
+    },
+    {
+      "id": "card_fsti_020",
+      "name": "Rapid Scan",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Fast",
+        "Draw"
+      ],
+      "abilityText": "Fast: Draw 1 card.",
+      "designNote": "Fast-speed cantrip. Playable on opponent's turn.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": true
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_020_acc.png"
+    },
+    {
+      "id": "card_fsti_021",
+      "name": "Diagnostic Sweep",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Draw"
+      ],
+      "abilityText": "Draw 2 cards.",
+      "designNote": "Core draw spell. Refuels hand.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_021_acc.png"
+    },
+    {
+      "id": "card_fsti_022",
+      "name": "Signal Repeater",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Activate: Draw 1 card.",
+      "designNote": "Common relay that generates cards each turn.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_022_acc.png"
+    },
+    {
+      "id": "card_fsti_023",
+      "name": "Micro Transmitter",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Relay",
+      "cost": 1,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate"
+      ],
+      "abilityText": "Activate: Gain 1 NP.",
+      "designNote": "Cheap NP relay. Slow but persistent value.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_023_acc.png"
+    },
+    {
+      "id": "card_fsti_024",
+      "name": "Batch Download",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Draw"
+      ],
+      "abilityText": "Persistent: Draw 1 card at the start of each turn.",
+      "designNote": "Ongoing draw engine. High value if it stays up.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_024_acc.png"
+    },
+    {
+      "id": "card_fsti_025",
+      "name": "Network Handshake",
+      "faction": "fsti",
+      "rarity": "Common",
+      "type": "Protocol",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Gain 1 NP at the start of each turn.",
+      "designNote": "Ongoing NP generation. Ramps into big plays.",
+      "effects": [
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_025_acc.png"
+    },
+    {
+      "id": "card_fsti_026",
+      "name": "Photonics Engineer",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 1 card. Gain 1 NP.",
+      "designNote": "Card draw plus NP on deploy. Key engine piece.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_026_acc.png"
+    },
+    {
+      "id": "card_fsti_027",
+      "name": "Algorithm Tuner",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 3,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Give all allied active units +1 ATK this turn.",
+      "designNote": "Board-wide ATK buff on deploy. Rewards wide boards.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_027_acc.png"
+    },
+    {
+      "id": "card_fsti_028",
+      "name": "Accelerator Tech",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 4,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Piercing"
+      ],
+      "abilityText": "Piercing.",
+      "designNote": "Mid-cost piercing threat. Punches through shields.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_028_acc.png"
+    },
+    {
+      "id": "card_fsti_029",
+      "name": "Quantum Statistician",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 4,
+      "atk": 2,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Activate: Draw 1 card. Gain 1 NP.",
+      "designNote": "Repeatable draw+NP engine. High priority removal target.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_029_acc.png"
+    },
+    {
+      "id": "card_fsti_030",
+      "name": "Field Calibrator",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 3,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Debuff an enemy active unit -2 ATK this turn.",
+      "designNote": "Offensive deploy. Weakens the opponent's attacker.",
+      "effects": [
+        {
+          "type": "Debuff",
+          "target": "EnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_030_acc.png"
+    },
+    {
+      "id": "card_fsti_031",
+      "name": "Cryogenics Specialist",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Exhaust"
+      ],
+      "abilityText": "Deploy: Exhaust an enemy active unit.",
+      "designNote": "Removal-adjacent. Exhausts a key enemy unit.",
+      "effects": [
+        {
+          "type": "Exhaust",
+          "target": "EnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_031_acc.png"
+    },
+    {
+      "id": "card_fsti_032",
+      "name": "Simulation Operator",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 4,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 2 cards.",
+      "designNote": "Big body with deep draw. Late-game card advantage.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_032_acc.png"
+    },
+    {
+      "id": "card_fsti_033",
+      "name": "Interference Jammer",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 3,
+      "atk": 2,
+      "hp": 3,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Prevent an enemy active unit from blocking this turn.",
+      "designNote": "Opens up attacks. Bypasses a blocker.",
+      "effects": [
+        {
+          "type": "PreventBlock",
+          "target": "EnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_033_acc.png"
+    },
+    {
+      "id": "card_fsti_034",
+      "name": "Thermal Imager",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Unit",
+      "cost": 2,
+      "atk": 2,
+      "hp": 2,
+      "shield": 0,
+      "keywords": [
+        "FirstStrike"
+      ],
+      "abilityText": "FirstStrike.",
+      "designNote": "Efficient first striker. Trades up against bigger units.",
+      "effects": [],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_034_acc.png"
+    },
+    {
+      "id": "card_fsti_035",
+      "name": "Overclocked Sequence",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Draw"
+      ],
+      "abilityText": "Draw 3 cards.",
+      "designNote": "Deep draw. Major hand refill.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_035_acc.png"
+    },
+    {
+      "id": "card_fsti_036",
+      "name": "Phase Shift",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 2,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Fast"
+      ],
+      "abilityText": "Fast: Give an allied active unit +3 ATK this turn.",
+      "designNote": "Strong combat trick at fast speed.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AlliedActive",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": true
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_036_acc.png"
+    },
+    {
+      "id": "card_fsti_037",
+      "name": "Exploit Vulnerability",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Ability",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [],
+      "abilityText": "Debuff all enemy active units -1 ATK this turn.",
+      "designNote": "Board-wide debuff. Punishes wide enemy boards.",
+      "effects": [
+        {
+          "type": "Debuff",
+          "target": "AllEnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_037_acc.png"
+    },
+    {
+      "id": "card_fsti_038",
+      "name": "Data Cache",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Relay",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Activate: Draw 1 card and gain 1 NP.",
+      "designNote": "Efficient relay. Draw and NP in one activation.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_038_acc.png"
+    },
+    {
+      "id": "card_fsti_039",
+      "name": "Recursive Loop",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Draw"
+      ],
+      "abilityText": "Persistent: Draw 2 cards at the start of each turn.",
+      "designNote": "Premium card-draw engine. Game-warping if unanswered.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_039_acc.png"
+    },
+    {
+      "id": "card_fsti_040",
+      "name": "Feedback Protocol",
+      "faction": "fsti",
+      "rarity": "Rare",
+      "type": "Protocol",
+      "cost": 3,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent"
+      ],
+      "abilityText": "Persistent: Give all allied active units +1 ATK at the start of each turn.",
+      "designNote": "Ongoing board-wide buff. Snowballs if not removed.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_040_acc.png"
+    },
+    {
+      "id": "card_fsti_041",
+      "name": "Entanglement Specialist",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 4,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 3 cards and gain 2 NP.",
+      "designNote": "Major refuel on deploy. Restocks hand and ramps.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_041_acc.png"
+    },
+    {
+      "id": "card_fsti_042",
+      "name": "Mainframe Guardian",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 7,
+      "atk": 5,
+      "hp": 6,
+      "shield": 0,
+      "keywords": [
+        "Piercing",
+        "Deploy"
+      ],
+      "abilityText": "Piercing. Deploy: Debuff all enemy active units -2 ATK this turn.",
+      "designNote": "Top-end threat. Piercing plus board-wide debuff.",
+      "effects": [
+        {
+          "type": "Debuff",
+          "target": "AllEnemyActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_042_acc.png"
+    },
+    {
+      "id": "card_fsti_043",
+      "name": "Parallel Processor",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Activate: Draw 2 cards.",
+      "designNote": "Repeatable deep draw. Must-answer engine.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_043_acc.png"
+    },
+    {
+      "id": "card_fsti_044",
+      "name": "Senior Researcher",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 5,
+      "atk": 3,
+      "hp": 5,
+      "shield": 0,
+      "keywords": [
+        "Deploy"
+      ],
+      "abilityText": "Deploy: Give all allied active units +2 ATK permanently.",
+      "designNote": "Permanent board-wide buff. Game-changing deploy.",
+      "effects": [
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 2,
+          "amount2": 0,
+          "duration": -1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_044_acc.png"
+    },
+    {
+      "id": "card_fsti_045",
+      "name": "Wavelength Disruptor",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Unit",
+      "cost": 6,
+      "atk": 4,
+      "hp": 4,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Exhaust"
+      ],
+      "abilityText": "Deploy: Exhaust all enemy active units.",
+      "designNote": "Mass exhaust. Clears the way for an alpha strike.",
+      "effects": [
+        {
+          "type": "Exhaust",
+          "target": "AllEnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_045_acc.png"
+    },
+    {
+      "id": "card_fsti_046",
+      "name": "Learning Cycle",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 4,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Draw"
+      ],
+      "abilityText": "Draw 4 cards. Gain 2 NP.",
+      "designNote": "Massive hand refill plus NP. Turns the corner.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 4,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_046_acc.png"
+    },
+    {
+      "id": "card_fsti_047",
+      "name": "System Override",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Ability",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Exhaust"
+      ],
+      "abilityText": "Exhaust all enemy active units and prevent them from blocking this turn.",
+      "designNote": "Premium removal spell. Full board lockdown for one turn.",
+      "effects": [
+        {
+          "type": "Exhaust",
+          "target": "AllEnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "PreventBlock",
+          "target": "AllEnemyActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_047_acc.png"
+    },
+    {
+      "id": "card_fsti_048",
+      "name": "Infinite Regression",
+      "faction": "fsti",
+      "rarity": "Epic",
+      "type": "Protocol",
+      "cost": 5,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Draw"
+      ],
+      "abilityText": "Persistent: Draw 2 cards and gain 2 NP at the start of each turn.",
+      "designNote": "Ultimate ongoing engine. Must be removed immediately.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 2,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_048_acc.png"
+    },
+    {
+      "id": "card_fsti_049",
+      "name": "Dr. Lumen",
+      "faction": "fsti",
+      "rarity": "Legendary",
+      "type": "Unit",
+      "cost": 8,
+      "atk": 5,
+      "hp": 7,
+      "shield": 0,
+      "keywords": [
+        "Deploy",
+        "Activate",
+        "Draw"
+      ],
+      "abilityText": "Deploy: Draw 3 cards and gain 3 NP. Activate: Draw 1 card.",
+      "designNote": "FSTI legendary. Massive deploy value plus repeatable draw.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_049_acc.png"
+    },
+    {
+      "id": "card_fsti_050",
+      "name": "Nexus Core",
+      "faction": "fsti",
+      "rarity": "Legendary",
+      "type": "Protocol",
+      "cost": 9,
+      "atk": 0,
+      "hp": 0,
+      "shield": 0,
+      "keywords": [
+        "Persistent",
+        "Draw"
+      ],
+      "abilityText": "Persistent: Draw 3 cards, gain 3 NP, and give all allied active units +1 ATK at the start of each turn.",
+      "designNote": "FSTI ultimate protocol. Overwhelming recurring value.",
+      "effects": [
+        {
+          "type": "Draw",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "GainNP",
+          "target": "Self",
+          "amount": 3,
+          "amount2": 0,
+          "duration": 0,
+          "referenceId": null,
+          "fast": false
+        },
+        {
+          "type": "Buff",
+          "target": "AllAlliedActive",
+          "amount": 1,
+          "amount2": 0,
+          "duration": 1,
+          "referenceId": null,
+          "fast": false
+        }
+      ],
+      "artPath": "Assets/Cards/Arts/fsti/card_fsti_050_acc.png"
+    }
+  ],
+  "composition": {
+    "total": 150,
+    "byRarity": {
+      "common": 75,
+      "rare": 45,
+      "epic": 22,
+      "legendary": 8
+    },
+    "byFaction": {
+      "fsti": 50,
+      "frti": 50,
+      "fpb": 50
+    }
+  }
+}

@@ -416,6 +416,18 @@ namespace Overlink.Match.Tests
             var rig = new GameObject("DropRayRig");
             rig.tag = "MainCamera";
             Camera cam = rig.AddComponent<Camera>();
+            // Camera.main returns the first enabled MainCamera-tagged camera, so a scene camera left
+            // enabled would win and the test would project through the wrong lens.
+            Camera[] sceneCameras = Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
+            var disabledCameras = new List<Camera>();
+            foreach (Camera other in sceneCameras)
+            {
+                if (other != cam && other.isActiveAndEnabled && other.CompareTag("MainCamera"))
+                {
+                    other.enabled = false;
+                    disabledCameras.Add(other);
+                }
+            }
             cam.fieldOfView = fieldOfView;
             Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
             rig.transform.rotation = rot;
@@ -471,6 +483,10 @@ namespace Overlink.Match.Tests
             {
                 Object.DestroyImmediate(presenter.gameObject);
                 Object.DestroyImmediate(rig);
+                foreach (Camera other in disabledCameras)
+                {
+                    if (other != null) other.enabled = true;
+                }
             }
         }
 

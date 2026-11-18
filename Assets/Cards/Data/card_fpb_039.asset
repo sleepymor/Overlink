@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3dd68084e28676459e53e641ca3bbc0, type: 3}
+  m_Name: card_fpb_039
+  m_EditorClassIdentifier: 
+  id: card_fpb_039
+  cardName: Preservation Order
+  faction: 2
+  rarity: 1
+  type: 3
+  cost: 4
+  atk: 0
+  hp: 0
+  shield: 0
+  keywords: 0c0000000a000000
+  abilityText: 'Persistent: Heal all allied active units for 2 HP at the start of
+    each turn.'
+  designNote: Premium ongoing heal. Attrition engine.
+  effects:
+  - type: 2
+    target: 5
+    amount: 2
+    amount2: 0
+    duration: 0
+    referenceId: 
+    fast: 0
+  artPath: Assets/Cards/Arts/fpb/card_fpb_039_acc.png
+  art: {fileID: 21300000, guid: 81c22e100a7c61f4bbc04a97e43d2641, type: 3}

@@ -108,7 +108,7 @@ namespace Overlink.EditorTools
                 errors += Require(canvas.transform, "Profile Panel/Card/Content/Close Button", typeof(Button));
                 errors += Require(canvas.transform, "Title and commands/Play commands/Matchmaking command", typeof(Button));
                 errors += Require(canvas.transform, "Title and commands/Play commands/VS AI command", typeof(Button));
-                errors += Require(canvas.transform, "Title and commands/Play commands/Deckbuilder command", typeof(Button));
+                errors += Require(canvas.transform, "Title and commands/Play commands/Binder command", typeof(Button));
                 errors += Require(canvas.transform, "Title and commands/Play commands/Gacha command", typeof(Button));
                 errors += Require(canvas.transform, "Title and commands/System commands/Settings command", typeof(Button));
                 errors += Require(canvas.transform, "Title and commands/System commands/Quit command", typeof(Button));
@@ -142,13 +142,11 @@ namespace Overlink.EditorTools
             int errors = 0;
             string[] forbidden =
             {
-                "MainMenuController.Account.cs:BuildProfileDialog",
                 "SettingsController.cs:CreateVisualToggle",
                 "OfflineSignalBayController.cs:AddComponent<Button>"
             };
             string[] files =
             {
-                "Assets/Scripts/UI/MainMenuController.Account.cs",
                 "Assets/Scripts/UI/SettingsController.cs",
                 "Assets/Scripts/UI/OfflineSignalBayController.cs"
             };

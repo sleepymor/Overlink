@@ -144,8 +144,7 @@ namespace Overlink.UI
 
         void Pop()
         {
-            UiTween.On(transform).Play(null, null, new Vector3(1.06f, 1.18f, 1f), 0.12f, UiEase.OutBack, null,
-                () => UiTween.On(transform).Play(null, null, Vector3.one, 0.16f, UiEase.OutCubic));
+            UiTween.Pop(transform, new Vector3(1.06f, 1.18f, 1f));
         }
 
         void OnDisable() => StopLag();

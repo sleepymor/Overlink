@@ -37,7 +37,7 @@ namespace Overlink.EditorTools
         // Presentation catalog + fixture roots, shared with the card-manager / preview builders.
         const string PresentationRoot = "Assets/Cards/Presentation";
         const string CardBackMaterialPath = "Assets/Cards/Presentation/GachaCardBack.mat";
-        const string CardBackTrimMaterialPath = "Assets/Cards/Presentation/GachaCardBackTrim.mat";
+        const string CardBackTexturePath = "Assets/Cards/Frame/OverlinkBack/Card_Back.png";
 
         // World-space framing for the pack row. Ortho + z=-12 matches the presentation-preview
         // convention; the spacing/width keep five portrait cards inside a 16:9 view with margin.
@@ -61,8 +61,27 @@ namespace Overlink.EditorTools
         static readonly Color TextBright = new Color(0.871f, 0.910f, 0.933f); // #DDE8ED
         static readonly Color TextDim = new Color(0.510f, 0.588f, 0.663f); // #8296A9
 
+        // Chakra Petch SDF for the reveal screen only; other screens keep the shared Rajdhani default.
+        const string RevealFontPath = "Assets/UI/Fonts/ChakraPetch-Regular SDF.asset";
+        const string RevealFontBoldPath = "Assets/UI/Fonts/ChakraPetch-Bold SDF.asset";
+        static TMP_FontAsset textFontOverride;
+
         [MenuItem("Overlink/Scenes/Build Reveal Gacha Scene")]
         public static void BuildRevealGachaScene()
+        {
+            EnsureCardLibraryRegistered();
+            textFontOverride = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(RevealFontPath);
+            try
+            {
+                BuildRevealGachaSceneCore();
+            }
+            finally
+            {
+                textFontOverride = null;
+            }
+        }
+
+        static void BuildRevealGachaSceneCore()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -73,12 +92,15 @@ namespace Overlink.EditorTools
             CreateDirectionalLight("Gacha Light");
             CreateEventSystem();
 
-            // Card backs are authored world quads (no card-back sprite exists in the project), so two
+            // Card backs are authored world quads (the shared back sprite is Card_Back.png, applied to the material), so two
             // persistent URP-safe materials are ensured once and reused across every rebuild. A quad's
             // mesh is a built-in asset and its material is a saved asset, so both survive scene save
             // (a runtime-generated sprite would not).
-            Material backMaterial = EnsureSolidMaterial(CardBackMaterialPath, CardBack);
-            Material trimMaterial = EnsureSolidMaterial(CardBackTrimMaterialPath, Accent);
+            Material backMaterial = EnsureBackMaterial(CardBackMaterialPath, CardBack);
+
+            // The circuit backdrop is a world quad behind the card row: a UI image would sit on top of the
+            // world cards, so it lives in the same ortho view and is pushed back past the row's z.
+            CreateRevealBackdrop(CardOrthoSize);
 
             // World-space row the card camera sees. Slots hang off this root so the hover/flip
             // animation moves them in world units; the controller binds each slot's parts.
@@ -92,7 +114,7 @@ namespace Overlink.EditorTools
             for (int i = 0; i < manifest.Length; i++)
             {
                 float x = (i - (manifest.Length - 1) * 0.5f) * SlotSpacing;
-                CreateWorldSlot(rowRoot.transform, i, x, backMaterial, trimMaterial,
+                CreateWorldSlot(rowRoot.transform, i, x, backMaterial,
                     out Transform slotAnchor, out Transform slotPivot, out GameObject slotBack,
                     out Transform slotFaceHolder, out TextMeshPro slotResult);
                 slotAnchors.Add(slotAnchor);
@@ -113,19 +135,19 @@ namespace Overlink.EditorTools
 
             CreatePanel("Accent", screen.transform, new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(0f, -4f), new Vector2(0f, 8f), Accent);
-            CreateText("Eyebrow", screen.transform, "OVERLINK // COLLECTION LAB", 18f, TextDim,
-                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(54f, -42f), new Vector2(540f, 30f));
-            CreateText("Title", screen.transform, "SIGNAL PACK // FIRST LINK", 38f, TextBright,
-                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(54f, -76f), new Vector2(850f, 55f));
+            CreateText("Eyebrow", screen.transform, "OVERLINK // COLLECTION LAB", 15f, Accent,
+                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(98f, -44f), new Vector2(540f, 26f));
+            CreateText("Title", screen.transform, "SIGNAL PACK // FIRST LINK", 40f, TextBright,
+                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(98f, -72f), new Vector2(850f, 56f));
             // The header carries no explanatory sentence — one live accent in the bay's own vocabulary
             // (SEAL INTACT → SEAL BROKEN → LINK COMPLETE) states the pack's condition instead.
-            TextMeshProUGUI headerAccent = CreateText("Header Accent", screen.transform, "SEAL INTACT", 17f, Accent,
-                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(56f, -128f), new Vector2(920f, 32f));
+            TextMeshProUGUI headerAccent = CreateText("Header Accent", screen.transform, "SEAL INTACT", 15f, TextDim,
+                TextAlignmentOptions.TopLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(98f, -124f), new Vector2(520f, 26f));
 
             TextMeshProUGUI progressText = CreateText("Progress", screen.transform, string.Empty, 20f, Accent,
-                TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-560f, -54f), new Vector2(500f, 34f));
-            TextMeshProUGUI collectionText = CreateText("Collection", screen.transform, string.Empty, 16f, TextDim,
-                TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-560f, -92f), new Vector2(500f, 30f));
+                TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-70f, -50f), new Vector2(520f, 32f));
+            TextMeshProUGUI collectionText = CreateText("Collection", screen.transform, string.Empty, 14f, TextDim,
+                TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-70f, -86f), new Vector2(520f, 26f));
             // Rolling readouts ride the same nodes; the controller resolves them as components in its
             // Awake, so the serialized widget contract the verification checks stays unchanged.
             progressText.gameObject.AddComponent<UiCounter>();
@@ -140,7 +162,7 @@ namespace Overlink.EditorTools
             // Pack queue strip: one capsule per pack in the bundle (plus loyalty bonus packs), cloned at
             // runtime from this authored template so sealed/open/done state stays visible while revealing.
             GameObject queue = CreatePanel("Pack Queue", screen.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0f, -226f), new Vector2(1180f, 64f), Panel);
+                new Vector2(0f, -190f), new Vector2(1180f, 56f), new Color(0f, 0f, 0f, 0f));
             HorizontalLayoutGroup queueLayout = queue.AddComponent<HorizontalLayoutGroup>();
             queueLayout.spacing = 10f;
             queueLayout.childAlignment = TextAnchor.MiddleCenter;
@@ -157,24 +179,24 @@ namespace Overlink.EditorTools
             // The world card row is authored above (world-space, not UGUI). Status/instructions sit
             // below it in the overlay HUD; status is pulled further down so it never collides with the
             // per-slot world-space result lines that hang under each card.
-            TextMeshProUGUI statusText = CreateText("Status", screen.transform, string.Empty, 18f, TextBright,
-                TextAlignmentOptions.Center, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -340f), new Vector2(1500f, 34f));
-            TextMeshProUGUI instructionText = CreateText("Instructions", screen.transform, "SWIPE UP  •  SPACE / ENTER  •  GAMEPAD SUBMIT", 15f, TextDim,
-                TextAlignmentOptions.Center, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 94f), new Vector2(900f, 28f));
+            TextMeshProUGUI statusText = CreateText("Status", screen.transform, string.Empty, 14f, TextDim,
+                TextAlignmentOptions.Center, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -330f), new Vector2(1200f, 26f));
+            TextMeshProUGUI instructionText = CreateText("Instructions", screen.transform, "SWIPE UP  •  SPACE / ENTER", 13f, TextDim,
+                TextAlignmentOptions.Center, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 26f), new Vector2(700f, 22f));
 
             // The bottom row alternates between two mutually exclusive pairs on the same centred
             // footprint: while cards remain, REVEAL / REVEAL ALL own the row (there is no mid-reveal
             // exit — leaving is only offered once the pack is resolved), and once everything is
             // revealed the controller swaps in SIGNAL BAY / OPEN AGAIN. Reduced motion moved to the
             // Settings screen; RESET DEMO lives in the editor tools only.
-            Button revealNext = CreateButton("Reveal Next", screen.transform, "REVEAL", true,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-150f, 38f), new Vector2(280f, 52f));
-            Button revealRemaining = CreateButton("Reveal Remaining", screen.transform, "REVEAL ALL", false,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(150f, 38f), new Vector2(280f, 52f));
-            Button back = CreateButton("Back", screen.transform, "SIGNAL BAY", false,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-150f, 38f), new Vector2(280f, 52f));
-            Button openAgain = CreateButton("Open Again", screen.transform, "OPEN AGAIN", true,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(150f, 38f), new Vector2(280f, 52f));
+            Button revealNext = CreateMenuButton("Reveal Next", screen.transform, "REVEAL", true,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-160f, 70f), new Vector2(300f, 56f));
+            Button revealRemaining = CreateMenuButton("Reveal Remaining", screen.transform, "REVEAL ALL", false,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(160f, 70f), new Vector2(300f, 56f));
+            Button back = CreateMenuButton("Back", screen.transform, "SIGNAL BAY", false,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-160f, 70f), new Vector2(300f, 56f));
+            Button openAgain = CreateMenuButton("Open Again", screen.transform, "OPEN AGAIN", true,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(160f, 70f), new Vector2(300f, 56f));
             back.gameObject.SetActive(false);
             openAgain.gameObject.SetActive(false);
 
@@ -289,6 +311,7 @@ namespace Overlink.EditorTools
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             Camera collectionCardCamera = CreateCollectionCardCamera("Main Camera");
+            CreateBinderBackdrop(collectionCardCamera.orthographicSize);
             CreateEventSystem();
             Canvas canvas = CreateCanvas("Offline Collection Canvas");
 
@@ -316,6 +339,11 @@ namespace Overlink.EditorTools
                 TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-54f, -90f), new Vector2(520f, 30f));
             TextMeshProUGUI deckText = CreateText("Deck", screen.transform, string.Empty, 16f, Accent,
                 TextAlignmentOptions.TopRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-54f, -124f), new Vector2(520f, 30f));
+            // The header readout doubles as the deck chooser: the card's own text is the hit target, so
+            // cycling decks costs no extra chip in the filter row.
+            deckText.raycastTarget = true;
+            Button deckChooser = deckText.gameObject.AddComponent<Button>();
+            deckChooser.transition = Selectable.Transition.None;
 
             GameObject filters = CreatePanel("Filters", screen.transform, new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(0f, -176f), new Vector2(-108f, 58f), new Color(0.106f, 0.149f, 0.204f, 0.72f));
@@ -325,7 +353,7 @@ namespace Overlink.EditorTools
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(284f, 0f), new Vector2(200f, 40f));
             Button rarityFilter = CreateButton("Rarity Filter", filters.transform, "RARITY  •  ANY", false,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(504f, 0f), new Vector2(200f, 40f));
-            Button setFilter = CreateButton("Set Filter", filters.transform, "SET  •  ANY", false,
+            Button viewToggle = CreateButton("View Toggle", filters.transform, "VIEW  •  COLLECTION", false,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(724f, 0f), new Vector2(200f, 40f));
             Button ownershipFilter = CreateButton("Ownership Filter", filters.transform, "OWNERSHIP  •  ALL", false,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(944f, 0f), new Vector2(200f, 40f));
@@ -349,13 +377,12 @@ namespace Overlink.EditorTools
             gridContentRect.anchoredPosition = Vector2.zero;
             gridContentRect.sizeDelta = new Vector2(0f, 1000f);
             GridLayoutGroup gridLayout = gridContent.AddComponent<GridLayoutGroup>();
-            gridLayout.padding = new RectOffset(28, 28, 24, 24);
-            gridLayout.spacing = new Vector2(18f, 18f);
-            // Three columns keep the six authored cards compact at the reference resolution. The
-            // runtime face sizing also clamps to this cell height, preserving a clean second row.
-            gridLayout.cellSize = new Vector2(325f, 320f);
+            gridLayout.padding = new RectOffset(4, 4, 12, 12);
+            gridLayout.spacing = new Vector2(14f, 14f);
+            // Seven columns by three visible rows; runtime sizes the cells to the viewport (see OfflineCollectionController).
+            gridLayout.cellSize = new Vector2(210f, 300f);
             gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            gridLayout.constraintCount = 3;
+            gridLayout.constraintCount = 7;
             gridLayout.childAlignment = TextAnchor.UpperCenter;
             ScrollRect gridScroll = grid.AddComponent<ScrollRect>();
             gridScroll.viewport = grid.GetComponent<RectTransform>();
@@ -376,27 +403,57 @@ namespace Overlink.EditorTools
                 new Vector2(0f, 78f), new Vector2(1f, -372f), new Color(0.149f, 0.227f, 0.290f, 0.9f));
             divider.GetComponent<Image>().raycastTarget = false;
 
+            // Transparent so the world-space card face (drawn by Main Camera under the UI) stays visible.
             GameObject detail = CreateStretchPanel("CardDetail", screen.transform, new Vector2(0.70f, 0f), new Vector2(1f, 1f),
-                new Vector2(-48f, 78f), new Vector2(-72f, -294f), DetailPanel);
+                new Vector2(-48f, 78f), new Vector2(-72f, -294f), new Color(DetailPanel.r, DetailPanel.g, DetailPanel.b, 0f));
             CreateText("DetailEyebrow", detail.transform, "FOCUSED CARD  //  INSPECTOR", 14f, TextDim, TextAlignmentOptions.TopLeft,
                 new Vector2(0.08f, 0.91f), new Vector2(0.92f, 0.98f), Vector2.zero, Vector2.zero);
             TextMeshProUGUI detailTitle = CreateText("DetailTitle", detail.transform, "SELECT A CARD", 30f, TextBright, TextAlignmentOptions.TopLeft,
-                new Vector2(0.08f, 0.78f), new Vector2(0.92f, 0.9f), Vector2.zero, Vector2.zero);
+                new Vector2(0.08f, 0.82f), new Vector2(0.92f, 0.92f), Vector2.zero, Vector2.zero);
             TextMeshProUGUI detailOwnership = CreateText("DetailOwnership", detail.transform, string.Empty, 17f, Accent, TextAlignmentOptions.TopLeft,
-                new Vector2(0.08f, 0.67f), new Vector2(0.92f, 0.76f), Vector2.zero, Vector2.zero);
+                new Vector2(0.04f, 0.26f), new Vector2(0.96f, 0.31f), Vector2.zero, Vector2.zero);
+            // Reference layout: the card sits on the left of the inspector with its metadata column beside it
+            // (rarity, faction/type, cost). Name, stats, and rules run underneath.
+            GameObject previewAnchor = new GameObject("CardPreviewAnchor", typeof(RectTransform));
+            previewAnchor.transform.SetParent(detail.transform, false);
+            RectTransform previewRect = previewAnchor.GetComponent<RectTransform>();
+            previewRect.anchorMin = new Vector2(0.04f, 0.32f);
+            previewRect.anchorMax = new Vector2(0.52f, 0.80f);
+            previewRect.offsetMin = Vector2.zero;
+            previewRect.offsetMax = Vector2.zero;
+            TextMeshProUGUI detailRarity = CreateText("DetailRarity", detail.transform, string.Empty, 14f, TextDim,
+                TextAlignmentOptions.TopLeft, new Vector2(0.56f, 0.72f), new Vector2(0.96f, 0.80f), Vector2.zero, Vector2.zero);
+            TextMeshProUGUI detailFactionType = CreateText("DetailFactionType", detail.transform, string.Empty, 14f, TextDim,
+                TextAlignmentOptions.TopLeft, new Vector2(0.56f, 0.60f), new Vector2(0.96f, 0.68f), Vector2.zero, Vector2.zero);
+            TextMeshProUGUI detailCost = CreateText("DetailCost", detail.transform, string.Empty, 30f, Accent,
+                TextAlignmentOptions.TopLeft, new Vector2(0.56f, 0.44f), new Vector2(0.96f, 0.58f), Vector2.zero, Vector2.zero);
             TextMeshProUGUI detailBody = CreateText("DetailBody", detail.transform,
-                "Choose a card sleeve to inspect its tactical profile, rules, and acquisition state.", 17f, TextDim,
-                TextAlignmentOptions.TopLeft, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.64f), Vector2.zero, Vector2.zero);
+                "Choose a card sleeve to inspect its tactical profile, rules, and acquisition state.", 15f, TextDim,
+                TextAlignmentOptions.TopLeft, new Vector2(0.04f, 0.12f), new Vector2(0.96f, 0.25f), Vector2.zero, Vector2.zero);
 
-            // Deck-builder seam: the label states the exact reason (not owned / copy limit / deck full)
-            // when the selected card cannot be added, so the disabled state stays explainable.
-            Button addToDeck = CreateButton("AddToDeck", detail.transform, "ADD TO DECK  •  SELECT A CARD", false,
+            // Deck edits happen only in the full deck builder; the binder is read-only for decks.
+            Button editDeck = CreateButton("EditDeck", detail.transform, "EDIT DECK", true,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 44f), new Vector2(340f, 48f));
 
             Button openPack = CreateButton("OpenPack", screen.transform, "SIGNAL BAY", true,
                 new Vector2(0.70f, 0f), new Vector2(0.70f, 0f), new Vector2(90f, 38f), new Vector2(190f, 46f));
-            Button back = CreateButton("Back", screen.transform, "BACK  //  MAIN MENU", false,
-                new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(54f, 38f), new Vector2(170f, 46f));
+            Button back = CreateButton("Back", screen.transform, "MAIN MENU", false,
+                new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(54f, 38f), new Vector2(210f, 46f));
+            RectTransform backLabel = back.transform.Find("Label") as RectTransform;
+            if (backLabel != null)
+            {
+                backLabel.offsetMin = new Vector2(36f, 0f);
+                backLabel.offsetMax = new Vector2(-8f, 0f);
+            }
+            GameObject backIcon = new GameObject("Binder Back Icon", typeof(RectTransform), typeof(Image));
+            backIcon.transform.SetParent(back.transform, false);
+            RectTransform backIconRect = backIcon.GetComponent<RectTransform>();
+            backIconRect.anchorMin = backIconRect.anchorMax = new Vector2(0f, .5f);
+            backIconRect.anchoredPosition = new Vector2(20f, 0f);
+            backIconRect.sizeDelta = new Vector2(22f, 22f);
+            Image backIconImage = backIcon.GetComponent<Image>();
+            backIconImage.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/UI/Icons/Collection/corner-down-left.png");
+            backIconImage.raycastTarget = false;
 
             // Collection keeps its production guard; the AuthFlow preview bypass list covers editor testing.
             GameObject guard = new GameObject("Auth Guard");
@@ -408,10 +465,11 @@ namespace Overlink.EditorTools
             so.FindProperty("typeFilterButton").objectReferenceValue = typeFilter;
             so.FindProperty("factionFilterButton").objectReferenceValue = factionFilter;
             so.FindProperty("rarityFilterButton").objectReferenceValue = rarityFilter;
-            so.FindProperty("setFilterButton").objectReferenceValue = setFilter;
+            so.FindProperty("viewToggleButton").objectReferenceValue = viewToggle;
             so.FindProperty("ownershipFilterButton").objectReferenceValue = ownershipFilter;
             so.FindProperty("sortButton").objectReferenceValue = sort;
             so.FindProperty("gridRoot").objectReferenceValue = gridContent.transform;
+            so.FindProperty("gridViewport").objectReferenceValue = grid.GetComponent<RectTransform>();
             so.FindProperty("tileTemplate").objectReferenceValue = tileTemplate;
             so.FindProperty("emptyText").objectReferenceValue = empty;
             so.FindProperty("worldCardRoot").objectReferenceValue = collectionCardRoot.transform;
@@ -429,13 +487,18 @@ namespace Overlink.EditorTools
                 collectionFixtures.GetArrayElementAtIndex(i).objectReferenceValue =
                     AssetDatabase.LoadAssetAtPath<CardPresentationFixture>(CardPresentationEditor.FixturePathFor(AllRarities[i]));
             }
+            so.FindProperty("detailCardAnchor").objectReferenceValue = previewRect;
             so.FindProperty("detailTitle").objectReferenceValue = detailTitle;
             so.FindProperty("detailOwnership").objectReferenceValue = detailOwnership;
             so.FindProperty("detailBody").objectReferenceValue = detailBody;
+            so.FindProperty("detailRarity").objectReferenceValue = detailRarity;
+            so.FindProperty("detailFactionType").objectReferenceValue = detailFactionType;
+            so.FindProperty("detailCost").objectReferenceValue = detailCost;
             so.FindProperty("openPackButton").objectReferenceValue = openPack;
             so.FindProperty("backButton").objectReferenceValue = back;
             so.FindProperty("deckText").objectReferenceValue = deckText;
-            so.FindProperty("addToDeckButton").objectReferenceValue = addToDeck;
+            so.FindProperty("deckChooserButton").objectReferenceValue = deckChooser;
+            so.FindProperty("editDeckButton").objectReferenceValue = editDeck;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(controller);
 
@@ -538,7 +601,7 @@ namespace Overlink.EditorTools
         /// template into, and a world-space result line hanging under the card. Returns each part so the
         /// builder can serialize them onto the controller.
         /// </summary>
-        static void CreateWorldSlot(Transform parent, int index, float x, Material backMat, Material trimMat,
+        static void CreateWorldSlot(Transform parent, int index, float x, Material backMat,
             out Transform anchor, out Transform pivot, out GameObject back, out Transform faceHolder,
             out TextMeshPro result)
         {
@@ -552,18 +615,14 @@ namespace Overlink.EditorTools
             pivotGo.transform.localPosition = Vector3.zero;
             pivot = pivotGo.transform;
 
-            // Card back: a trim border, a dark face, and an accent diamond, all co-planar quads offset in
-            // z just enough to avoid z-fighting. Faces the camera at rest until the pivot flips it away.
+            // Card back: one quad textured with Card_Back.png, which already carries its own frame.
+            // Faces the camera at rest until the pivot flips it away.
             GameObject backGo = new GameObject("Back");
             backGo.transform.SetParent(pivot, false);
             backGo.transform.localPosition = Vector3.zero;
             float cardHeight = CardWidth * CardAspect;
-            CreateBackQuad("Trim", backGo.transform, new Vector3(0f, 0f, 0.015f),
-                new Vector3(CardWidth + 0.09f, cardHeight + 0.09f, 1f), 0f, trimMat);
             CreateBackQuad("Face", backGo.transform, Vector3.zero,
                 new Vector3(CardWidth, cardHeight, 1f), 0f, backMat);
-            CreateBackQuad("Emblem", backGo.transform, new Vector3(0f, 0.06f, -0.02f),
-                new Vector3(CardWidth * 0.36f, CardWidth * 0.36f, 1f), 45f, trimMat);
             back = backGo;
 
             // The controller instantiates the real CardFaceView template here, pre-rotated 180 so the
@@ -608,7 +667,7 @@ namespace Overlink.EditorTools
             tmp.text = value;
             tmp.fontSize = fontSize;
             tmp.color = color;
-            TMP_FontAsset font = Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
             if (font != null) tmp.font = font;
             tmp.alignment = alignment;
             tmp.enableWordWrapping = true;
@@ -643,6 +702,96 @@ namespace Overlink.EditorTools
             material.color = color;
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        static void EnsureCardLibraryRegistered()
+        {
+            if (MvpCardLibrary.IsRegistered) return;
+            var catalog = AssetDatabase.LoadAssetAtPath<CardCatalog>(CardLibraryBootstrap.CatalogAssetPath);
+            if (catalog == null)
+            {
+                Debug.LogError("[BuildOfflineGachaScenes] CardCatalog not found at " + CardLibraryBootstrap.CatalogAssetPath);
+                return;
+            }
+
+            CardLibraryBootstrap.Register(catalog);
+        }
+
+        /// <summary>Loads or creates the card-back material and points it at the shared Card_Back.png art.</summary>
+        static Material EnsureBackMaterial(string path, Color tint)
+        {
+            // The shader multiplies the texture by the base color, so the tint must be white or the art goes black.
+            Material material = EnsureSolidMaterial(path, Color.white);
+            Texture2D back = AssetDatabase.LoadAssetAtPath<Texture2D>(CardBackTexturePath);
+            if (back != null)
+            {
+                if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", back);
+                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", back);
+                material.mainTexture = back;
+            }
+            else
+            {
+                Debug.LogWarning("[BuildOfflineGachaScenes] Card back texture not found at " + CardBackTexturePath);
+            }
+
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        const string RevealBackdropMaterialPath = "Assets/Cards/Presentation/RevealBackdrop.mat";
+        const string RevealBackdropShaderName = "Overlink/RevealBackdrop";
+
+        const string BinderBackdropTexturePath = "Assets/UI/Background/Binder Background.png";
+        const string BinderBackdropMaterialPath = "Assets/Cards/Presentation/BinderBackdrop.mat";
+
+        /// <summary>Full-view binder backdrop from the authored 16:9 art, placed behind the card row.</summary>
+        static void CreateBinderBackdrop(float orthoSize)
+        {
+            Texture texture = AssetDatabase.LoadAssetAtPath<Texture>(BinderBackdropTexturePath);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(BinderBackdropMaterialPath);
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                AssetDatabase.CreateAsset(material, BinderBackdropMaterialPath);
+            }
+            material.SetTexture("_BaseMap", texture);
+            material.SetColor("_BaseColor", Color.white);
+            EditorUtility.SetDirty(material);
+
+            GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "Binder Backdrop";
+            quad.transform.position = new Vector3(0f, 0f, 2f);
+            quad.transform.localScale = new Vector3(orthoSize * 2f * (16f / 9f) + 0.4f, orthoSize * 2f + 0.4f, 1f);
+            MeshRenderer renderer = quad.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.sortingOrder = -100;
+            UnityEngine.Object.DestroyImmediate(quad.GetComponent<Collider>());
+        }
+
+        /// <summary>Full-view circuit quad sized from the ortho camera (16:9), placed behind the pack row.</summary>
+        static void CreateRevealBackdrop(float orthoSize)
+        {
+            Shader shader = Shader.Find(RevealBackdropShaderName);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(RevealBackdropMaterialPath);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, RevealBackdropMaterialPath);
+            }
+            else if (shader != null && material.shader != shader)
+            {
+                material.shader = shader;
+            }
+
+            material.color = Color.white;
+            EditorUtility.SetDirty(material);
+
+            GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "Reveal Backdrop";
+            quad.transform.position = new Vector3(0f, 0f, 2f);
+            quad.transform.localScale = new Vector3(orthoSize * 2f * (16f / 9f) + 0.4f, orthoSize * 2f + 0.4f, 1f);
+            quad.GetComponent<MeshRenderer>().sharedMaterial = material;
+            UnityEngine.Object.DestroyImmediate(quad.GetComponent<Collider>());
         }
 
         /// <summary>Orthographic URP camera that renders the world-space pack row; the overlay HUD canvas
@@ -811,7 +960,7 @@ namespace Overlink.EditorTools
             tmp.text = value;
             tmp.fontSize = size;
             tmp.color = color;
-            TMP_FontAsset font = Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
             if (font != null) tmp.font = font;
             tmp.richText = false;
             tmp.enableWordWrapping = true;
@@ -871,6 +1020,58 @@ namespace Overlink.EditorTools
             labelRect.offsetMax = new Vector2(-8f, 0f);
             TextMeshProUGUI tmp = labelGo.AddComponent<TextMeshProUGUI>();
             ConfigureText(tmp, label, primary ? 16f : 14f, primary ? TextBright : Accent);
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.enableWordWrapping = false;
+            tmp.fontStyle = FontStyles.Bold;
+            return button;
+        }
+
+        /// <summary>Button in the main menu's command style: a solid cyan primary with dark text, or a dark
+        /// slate plate with light text. No edge stripe and no notch, matching MainMenu's MATCHMAKING and
+        /// GACHA rows.</summary>
+        static Button CreateMenuButton(string name, Transform parent, string label, bool primary,
+            Vector2 anchorMin, Vector2 anchorMax, Vector2 position, Vector2 size)
+        {
+            Color plate = new Color32(23, 40, 51, 255);
+            Color fill = primary ? Accent : plate;
+            Color text = primary ? new Color32(8, 14, 24, 255) : TextBright;
+
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = (anchorMin + anchorMax) * 0.5f;
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+
+            Image image = go.GetComponent<Image>();
+            image.color = fill;
+
+            Button button = go.AddComponent<Button>();
+            go.AddComponent<UiFxButton>();
+            button.transition = Selectable.Transition.ColorTint;
+            button.targetGraphic = image;
+            button.colors = new ColorBlock
+            {
+                normalColor = Color.white,
+                highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f),
+                pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f),
+                selectedColor = new Color(1.08f, 1.08f, 1.08f, 1f),
+                disabledColor = new Color(1f, 1f, 1f, 0.45f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.08f
+            };
+
+            GameObject labelGo = new GameObject("Label", typeof(RectTransform));
+            labelGo.transform.SetParent(go.transform, false);
+            RectTransform labelRect = labelGo.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = new Vector2(8f, 0f);
+            labelRect.offsetMax = new Vector2(-8f, 0f);
+            TextMeshProUGUI tmp = labelGo.AddComponent<TextMeshProUGUI>();
+            ConfigureText(tmp, label, 16f, text);
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.enableWordWrapping = false;
             tmp.fontStyle = FontStyles.Bold;

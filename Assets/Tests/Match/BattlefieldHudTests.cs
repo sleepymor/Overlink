@@ -4,7 +4,10 @@ using System.Text;
 using NUnit.Framework;
 using Overlink.Core;
 using TMPro;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -598,6 +601,105 @@ namespace Overlink.Match.Tests
             Assert.AreEqual("VICTORY", hud.ResultText);
         }
 
+        [TestCase(false, false, "OPEN")]
+        [TestCase(true, false, "YOURS")]
+        [TestCase(false, true, "THEIRS")]
+        [TestCase(true, true, "CONTESTED")]
+        public void NodeOwnerLabel_ReflectsBothSides(bool playerHolds, bool opponentHolds, string expected)
+        {
+            var method = typeof(BattlefieldPresenter).GetMethod("NodeOwnerLabel",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method);
+            Assert.AreEqual(expected, method.Invoke(null, new object[] { playerHolds, opponentHolds }));
+        }
+
+        [Test]
+        public void SetupBar_SelectsConfirmWhenNoControlIsFocused()
+        {
+            // EventSystem.current is only assigned when an EventSystem enables inside a running player loop,
+            // which EditMode never reaches. With none current the HUD has nothing to select through, so the
+            // contract checked here is: opening the bar must not throw and must leave the confirm button
+            // selectable, rather than requiring a selection the environment cannot produce.
+            BattlefieldHud hud = NewHud();
+            hud.SetSetupBar(false, null, true, null);
+            Assert.DoesNotThrow(() => hud.SetSetupBar(true, "REROLL - 2 NP", true, "CONFIRM 0/5"));
+            Transform confirm = hud.transform.Find("PhaseControls/ConfirmLineupButton");
+            Assert.IsNotNull(confirm, "The confirm button must exist to be selected when the bar opens.");
+            Assert.IsTrue(confirm.gameObject.activeSelf, "Opening the setup bar must show the confirm button.");
+        }
+
+        [Test]
+        public void GameplayScene_SetupControlsUseAuthoredSpritesWithoutBlockingTheBoard()
+        {
+            const string path = "Assets/Scenes/Gameplay.unity";
+            var scene = SceneManager.GetSceneByPath(path);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            try
+            {
+                BattlefieldHud hud = null;
+                foreach (var root in scene.GetRootGameObjects())
+                    if (root.name == BattlefieldHud.RootName) hud = root.GetComponent<BattlefieldHud>();
+                Assert.IsNotNull(hud);
+                Assert.IsTrue(hud.HasSerializedBindings);
+                Assert.IsNull(hud.GetComponent<GraphicRaycaster>());
+                var scaler = hud.GetComponent<CanvasScaler>();
+                Assert.AreEqual(new Vector2(1600, 900), scaler.referenceResolution);
+                foreach (string name in new[] { "RerollLineupButton", "ConfirmLineupButton" })
+                {
+                    var control = hud.transform.Find("PhaseControls/" + name);
+                    Assert.IsNotNull(control);
+                    Assert.IsNotNull(control.GetComponent<Image>().sprite, name + " needs its authored plate");
+                    var icon = control.GetChild(1).GetComponent<Image>();
+                    Assert.IsNotNull(icon.sprite, name + " needs its authored icon");
+                    Assert.IsFalse(icon.raycastTarget);
+                }
+                Assert.IsNotNull(hud.transform.Find("LogPanel/Match log icon").GetComponent<Image>().sprite);
+                var controls = hud.transform.Find("PhaseControls");
+                foreach (Button button in controls.GetComponentsInChildren<Button>(true))
+                {
+                    bool primary = button.name == "ConfirmLineupButton" || button.name == "EndPhaseButton"
+                        || button.name == "DoneBlockingButton";
+                    Image plate = button.GetComponent<Image>();
+                    Assert.IsNotNull(plate.sprite, button.name);
+                    Assert.AreEqual(primary ? "Angular command plate" : "Angular command plate-1",
+                        plate.sprite.name, button.name + " should share the setup button treatment");
+                    var label = button.transform.Find("Label").GetComponent<TextMeshProUGUI>();
+                    StringAssert.Contains("ChakraPetch", label.font.name, button.name);
+                }
+                foreach (TextMeshProUGUI text in hud.GetComponentsInChildren<TextMeshProUGUI>(true))
+                    StringAssert.Contains("ChakraPetch", text.font.name, text.name);
+                var result = (RectTransform)hud.transform.Find("Result");
+                Assert.AreEqual(new Vector2(0.5f, 0.5f), result.anchorMin);
+                Assert.AreEqual(result.anchorMin, result.anchorMax);
+                Assert.AreEqual(Vector2.zero, result.anchoredPosition);
+                Assert.AreEqual(TextAlignmentOptions.Center,
+                    result.Find("ResultText").GetComponent<TextMeshProUGUI>().alignment);
+                foreach (string panel in new[] { "Result", "LogPanel", "NodeList", "PlayerChip", "OpponentChip", "Account backplate" })
+                    Assert.AreEqual(0f, hud.transform.Find(panel).GetComponent<Image>().color.a, panel);
+                var profile = hud.transform.Find("ProfileLink").GetComponent<TextMeshProUGUI>();
+                Assert.IsFalse(profile.enableWordWrapping);
+                Assert.GreaterOrEqual(profile.rectTransform.anchorMax.x - profile.rectTransform.anchorMin.x, 0.04f);
+                Assert.IsNotNull(hud.transform.Find("PhaseControls/Deployment count").GetComponent<TextMeshProUGUI>());
+                Assert.IsNotNull(hud.transform.Find("PhaseControls/ConfirmLineupButton/Confirm subtitle"));
+                foreach (string chip in new[] { "PlayerChip", "OpponentChip" })
+                {
+                    var root = hud.transform.Find(chip);
+                    Assert.IsFalse(root.Find("Accent").gameObject.activeSelf,
+                        "The static accent must not cross the live Core readout.");
+                    Assert.IsFalse(root.Find("NpMeter").gameObject.activeSelf,
+                        "NP is already shown numerically; the second meter clutters the chip.");
+                    var core = (RectTransform)root.Find("CoreMeter");
+                    Assert.AreEqual(1f, core.anchorMin.y);
+                    Assert.AreEqual(1f, core.anchorMax.y);
+                }
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
         [Test]
         public void SetStatusMarked_ChangesOnlyTheTintAndTheRule()
         {
@@ -624,6 +726,9 @@ namespace Overlink.Match.Tests
 
             hud.SetResult("DEFEAT", Color.red);
             Assert.IsTrue(Box(hud, "Result").gameObject.activeSelf, "A result has to be visible.");
+            Assert.AreEqual(Vector2.zero, Box(hud, "Result").anchoredPosition);
+            Assert.AreEqual(TextAlignmentOptions.Center,
+                hud.transform.Find("Result/ResultText").GetComponent<TextMeshProUGUI>().alignment);
 
             hud.SetResult(string.Empty, Color.red);
             Assert.IsFalse(Box(hud, "Result").gameObject.activeSelf,
@@ -1039,7 +1144,7 @@ namespace Overlink.Match.Tests
             Ink(table, problems, hud, "log", "LogPanel/LogText", null);
 
             Ink(table, problems, hud, "result", "Result/ResultText",
-                "VICTORY<size=36%>   \u2022   BOTH CORES DESTROYED</size>");
+                "VICTORY\n<size=36%>BOTH CORES DESTROYED</size>");
 
             // The rail is the same question with the opposite answer. Its labels are raw TextMeshProUGUI rather
             // than EnsureText's, so they carry TMP's default Overflow mode: a label too long for its 162x36 slab

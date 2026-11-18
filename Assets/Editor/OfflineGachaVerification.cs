@@ -48,11 +48,11 @@ namespace Overlink.EditorTools
         static readonly string[] CollectionRefs =
         {
             "countText", "fragmentText", "deckText",
-            "typeFilterButton", "factionFilterButton", "rarityFilterButton", "setFilterButton",
+            "typeFilterButton", "factionFilterButton", "rarityFilterButton", "viewToggleButton",
             "ownershipFilterButton", "sortButton",
             "gridRoot", "tileTemplate", "emptyText",
             "worldCardRoot", "worldCardCamera", "templateCatalog", "frameCatalog", "tierMaterials",
-            "detailTitle", "detailOwnership", "detailBody", "addToDeckButton",
+            "detailTitle", "detailOwnership", "detailBody", "deckChooserButton", "editDeckButton",
             "openPackButton", "backButton"
         };
 

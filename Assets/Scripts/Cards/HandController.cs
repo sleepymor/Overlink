@@ -22,6 +22,7 @@ namespace Overlink.Cards
         [Header("Refs (auto-created/found if empty)")]
         public DeckController deck;
         public Transform deckPile;
+        CardBackView deckBack;
         public Transform playSlot;
         public Transform discardPile;
 
@@ -421,6 +422,10 @@ namespace Overlink.Cards
             cam = Camera.main;
             if (deck == null) deck = GetComponent<DeckController>();
             deckPile = EnsureAnchor(deckPile, "DeckPile", new Vector3(-4.2f, 0f, 0f));
+            if (deckBack == null)
+            {
+                deckBack = CardBackView.Create(deckPile, cardSize, 0);
+            }
             playSlot = EnsureAnchor(playSlot, "PlaySlot", new Vector3(0f, 2.6f, 0f));
             discardPile = EnsureAnchor(discardPile, "DiscardPile", new Vector3(4.2f, 0f, 0f));
         }
