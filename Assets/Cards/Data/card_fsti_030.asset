@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Debuff an enemy active unit -2 ATK this turn.'
   designNote: Offensive deploy. Weakens the opponent's attacker.
+  flavourText: 'Engineer with a calibration wand correcting a distorted field grid.'
   effects:
   - type: 6
     target: 4

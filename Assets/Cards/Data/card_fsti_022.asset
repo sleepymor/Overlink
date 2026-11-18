@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0600000003000000
   abilityText: 'Activate: Draw 1 card.'
   designNote: Common relay that generates cards each turn.
+  flavourText: 'A relay pylon re-broadcasting a beam.'
   effects:
   - type: 3
     target: 0

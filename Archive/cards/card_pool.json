@@ -14,6 +14,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Cheap defensive body. Holds early positions.",
+      "flavourText": "Trainee at a drafting table with T-square.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_001_acc.png"
     },
@@ -30,6 +31,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Durable 2-drop. Classic FPB defensive profile.",
+      "flavourText": "Clerk among rolled blueprints.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_002_acc.png"
     },
@@ -48,6 +50,7 @@
       ],
       "abilityText": "Shield 1.",
       "designNote": "Cheap shielded unit. Soaks one extra hit.",
+      "flavourText": "Student sketching on a pad.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_003_acc.png"
     },
@@ -66,6 +69,7 @@
       ],
       "abilityText": "Shield 1.",
       "designNote": "Defensive 2-drop with shield. Very sticky.",
+      "flavourText": "Planner arranging blocks on a drafting board.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_004_acc.png"
     },
@@ -85,6 +89,7 @@
       ],
       "abilityText": "Deploy: Heal an allied active unit for 2 HP.",
       "designNote": "Body with healing. Sustains board presence.",
+      "flavourText": "Surveyor with a theodolite on site.",
       "effects": [
         {
           "type": "Heal",
@@ -111,6 +116,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "High HP 3-drop. Hard to remove cheaply.",
+      "flavourText": "Official with a clipboard checking a plan against code.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_006_acc.png"
     },
@@ -129,6 +135,7 @@
       ],
       "abilityText": "Shield 1.",
       "designNote": "Solid mid-cost shielded unit.",
+      "flavourText": "Artist drawing vanishing-point lines on a canvas.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_007_acc.png"
     },
@@ -145,6 +152,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "High HP wall at 4 cost. Very durable.",
+      "flavourText": "Worker setting a solid base layer.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_008_acc.png"
     },
@@ -164,6 +172,7 @@
       ],
       "abilityText": "Deploy: Repair self for 2 Shield.",
       "designNote": "Self-repair on deploy. Gains shield when it enters.",
+      "flavourText": "Craftsman assembling a scale model.",
       "effects": [
         {
           "type": "Repair",
@@ -192,6 +201,7 @@
       ],
       "abilityText": "Deploy: Grant an allied active unit 2 Shield.",
       "designNote": "Body plus shield grant. Defensive utility.",
+      "flavourText": "Painter mixing pigments.",
       "effects": [
         {
           "type": "GrantShield",
@@ -220,6 +230,7 @@
       ],
       "abilityText": "Shield 1.",
       "designNote": "Durable mid-range with shield. Hard to shift.",
+      "flavourText": "Artist at a render station.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_011_acc.png"
     },
@@ -236,6 +247,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Big defensive body. Late common that holds board.",
+      "flavourText": "Engineer reviewing load diagrams.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_012_acc.png"
     },
@@ -252,6 +264,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Free 0/2 blocker. Absorbs an attack for free.",
+      "flavourText": "A simple rubber eraser lifting away error.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_013_acc.png"
     },
@@ -271,6 +284,7 @@
       ],
       "abilityText": "Activate: Heal an allied active unit for 2 HP.",
       "designNote": "Repeatable healer. Sustains the board each turn.",
+      "flavourText": "Fine-detail artist adding finishing touches that restore an adjacent piece.",
       "effects": [
         {
           "type": "Heal",
@@ -297,6 +311,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Offensive common for FPB. Trades well.",
+      "flavourText": "Modeler working a precise scaled replica.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_015_acc.png"
     },
@@ -313,6 +328,7 @@
       "keywords": [],
       "abilityText": "Grant an allied active unit 2 Shield.",
       "designNote": "Cheap shield grant. Defensive trick.",
+      "flavourText": "A rapid loose sketch that throws a quick protective shield over an ally.",
       "effects": [
         {
           "type": "GrantShield",
@@ -341,6 +357,7 @@
       ],
       "abilityText": "Heal an allied active unit for 3 HP.",
       "designNote": "Basic heal spell. Keeps units alive.",
+      "flavourText": "Hands mending a torn drawing with careful patches.",
       "effects": [
         {
           "type": "Heal",
@@ -369,6 +386,7 @@
       ],
       "abilityText": "Heal all allied active units for 2 HP.",
       "designNote": "Board-wide heal. Keeps the whole team healthy.",
+      "flavourText": "A clean second draft laid over the first.",
       "effects": [
         {
           "type": "Heal",
@@ -397,6 +415,7 @@
       ],
       "abilityText": "Fast: Grant an allied active unit 3 Shield.",
       "designNote": "Fast-speed shield grant. Defensive combat trick.",
+      "flavourText": "A clear protective layer brushed quickly over a surface.",
       "effects": [
         {
           "type": "GrantShield",
@@ -425,6 +444,7 @@
       ],
       "abilityText": "Heal an allied active unit for 1 HP.",
       "designNote": "Free heal. Tiny but free sustain.",
+      "flavourText": "A quick inspection tick that patches a small fault.",
       "effects": [
         {
           "type": "Heal",
@@ -451,6 +471,7 @@
       "keywords": [],
       "abilityText": "Grant all allied active units 1 Shield.",
       "designNote": "Board-wide shield. Small but affects everything.",
+      "flavourText": "A fine lacquer sprayed evenly.",
       "effects": [
         {
           "type": "GrantShield",
@@ -480,6 +501,7 @@
       ],
       "abilityText": "Activate: Heal an allied active unit for 2 HP.",
       "designNote": "Healing relay. Sustains board each turn.",
+      "flavourText": "A workbench of brushes and solvents.",
       "effects": [
         {
           "type": "Heal",
@@ -508,6 +530,7 @@
       ],
       "abilityText": "Activate: Grant an allied active unit 1 Shield.",
       "designNote": "Shield relay. Slow shield generation.",
+      "flavourText": "Shelves of conservation materials.",
       "effects": [
         {
           "type": "GrantShield",
@@ -537,6 +560,7 @@
       ],
       "abilityText": "Persistent: Heal all allied active units for 1 HP at the start of each turn.",
       "designNote": "Ongoing board heal. Grinds out attrition.",
+      "flavourText": "A pinned timetable of upkeep tasks.",
       "effects": [
         {
           "type": "Heal",
@@ -565,6 +589,7 @@
       ],
       "abilityText": "Persistent: Grant all allied active units 1 Shield at the start of each turn.",
       "designNote": "Ongoing shield protocol. Stacks shields over time.",
+      "flavourText": "A sequence of evolving drafts stacked.",
       "effects": [
         {
           "type": "GrantShield",
@@ -595,6 +620,7 @@
       ],
       "abilityText": "Shield 1. Deploy: Heal an allied active unit for 2 HP.",
       "designNote": "Shielded healer. Core defensive piece.",
+      "flavourText": "Curator in a gallery.",
       "effects": [
         {
           "type": "Heal",
@@ -623,6 +649,7 @@
       ],
       "abilityText": "Shield 2.",
       "designNote": "Premium shielded body. Very hard to take down.",
+      "flavourText": "Senior architect at a grand drafting table.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fpb/card_fpb_027_acc.png"
     },
@@ -642,6 +669,7 @@
       ],
       "abilityText": "Activate: Heal all allied active units for 2 HP.",
       "designNote": "Repeatable board-wide heal. Key sustain engine.",
+      "flavourText": "Restorer at a bench with fine tools.",
       "effects": [
         {
           "type": "Heal",
@@ -670,6 +698,7 @@
       ],
       "abilityText": "Deploy: Grant all allied active units 2 Shield.",
       "designNote": "Board-wide shield on deploy. Defensive powerhouse.",
+      "flavourText": "Planner over a large city map.",
       "effects": [
         {
           "type": "GrantShield",
@@ -699,6 +728,7 @@
       ],
       "abilityText": "Deploy: Repair self for 3 Shield.",
       "designNote": "Self-repair for max shield. Very tanky on arrival.",
+      "flavourText": "Teacher demonstrating structure.",
       "effects": [
         {
           "type": "Repair",
@@ -729,6 +759,7 @@
       ],
       "abilityText": "Shield 2. Deploy: Heal all allied active units for 3 HP.",
       "designNote": "Big heal on a shielded body. Full team sustain.",
+      "flavourText": "Artist on scaffolding before a vast mural.",
       "effects": [
         {
           "type": "Heal",
@@ -757,6 +788,7 @@
       ],
       "abilityText": "Deploy: Deal 2 damage to an enemy active unit.",
       "designNote": "FPB removal option. Defensive deck needs answers too.",
+      "flavourText": "Framer mounting a work.",
       "effects": [
         {
           "type": "DealDamage",
@@ -786,6 +818,7 @@
       ],
       "abilityText": "Activate: Repair self for 2 Shield.",
       "designNote": "Self-repairing tank. Keeps regenerating shield.",
+      "flavourText": "Calligrapher with brush and ink.",
       "effects": [
         {
           "type": "Repair",
@@ -815,6 +848,7 @@
       ],
       "abilityText": "Deploy: Draw 1 card and grant an allied active unit 1 Shield.",
       "designNote": "Card draw plus shield. Versatile FPB rare.",
+      "flavourText": "Critic marking up a design.",
       "effects": [
         {
           "type": "Draw",
@@ -850,6 +884,7 @@
       "keywords": [],
       "abilityText": "Grant all allied active units 3 Shield.",
       "designNote": "Premium board-wide shield. Massive defensive swing.",
+      "flavourText": "Multiple varnish coats building up.",
       "effects": [
         {
           "type": "GrantShield",
@@ -878,6 +913,7 @@
       ],
       "abilityText": "Heal all allied active units for 4 HP.",
       "designNote": "Deep board-wide heal. Major stabilizer.",
+      "flavourText": "A piece returned to pristine condition.",
       "effects": [
         {
           "type": "Heal",
@@ -904,6 +940,7 @@
       "keywords": [],
       "abilityText": "Deal 4 damage to an enemy active unit.",
       "designNote": "FPB removal spell. Precise damage.",
+      "flavourText": "A red-lined critique that dismantles an enemy's argument with a heavy blow.",
       "effects": [
         {
           "type": "DealDamage",
@@ -932,6 +969,7 @@
       ],
       "abilityText": "Activate: Grant all allied active units 2 Shield.",
       "designNote": "Shield relay. Board-wide shield per turn.",
+      "flavourText": "Artisans applying gold leaf.",
       "effects": [
         {
           "type": "GrantShield",
@@ -961,6 +999,7 @@
       ],
       "abilityText": "Persistent: Heal all allied active units for 2 HP at the start of each turn.",
       "designNote": "Premium ongoing heal. Attrition engine.",
+      "flavourText": "A formal directive sealed.",
       "effects": [
         {
           "type": "Heal",
@@ -989,6 +1028,7 @@
       ],
       "abilityText": "Persistent: Grant all allied active units 2 Shield at the start of each turn.",
       "designNote": "Ongoing shield protocol. Stacking shield over time.",
+      "flavourText": "A treatment hardening surfaces.",
       "effects": [
         {
           "type": "GrantShield",
@@ -1019,6 +1059,7 @@
       ],
       "abilityText": "Shield 3. Deploy: Heal all allied active units for 3 HP.",
       "designNote": "Premium defensive unit. Huge HP, shield, and team heal.",
+      "flavourText": "A watchful guardian posted at a grand exhibition.",
       "effects": [
         {
           "type": "Heal",
@@ -1047,6 +1088,7 @@
       ],
       "abilityText": "Deploy: Grant all allied active units 3 Shield.",
       "designNote": "Massive board-wide shield on deploy. Fortress builder.",
+      "flavourText": "Visionary sketching bold concepts that project a wide protective shield to all.",
       "effects": [
         {
           "type": "GrantShield",
@@ -1077,6 +1119,7 @@
       ],
       "abilityText": "Activate: Heal all allied active units for 3 HP. Repair self for 3 Shield.",
       "designNote": "Ultimate sustain unit. Heals the board and repairs itself each turn.",
+      "flavourText": "Lead conservator directing a full restoration.",
       "effects": [
         {
           "type": "Heal",
@@ -1114,6 +1157,7 @@
       ],
       "abilityText": "Deploy: Destroy an enemy active unit.",
       "designNote": "Hard removal on a body. FPB answers any threat.",
+      "flavourText": "Senior inspector with final authority.",
       "effects": [
         {
           "type": "Destroy",
@@ -1142,6 +1186,7 @@
       ],
       "abilityText": "Heal all allied active units for 5 HP. Grant all allied active units 2 Shield.",
       "designNote": "Massive defensive swing. Full team heal and shield.",
+      "flavourText": "A masterpiece fully restored under glass.",
       "effects": [
         {
           "type": "Heal",
@@ -1177,6 +1222,7 @@
       "keywords": [],
       "abilityText": "Destroy an enemy active unit. Grant all allied active units 1 Shield.",
       "designNote": "Hard removal with defensive bonus. FPB finesse.",
+      "flavourText": "An official order retiring a piece.",
       "effects": [
         {
           "type": "Destroy",
@@ -1215,6 +1261,7 @@
       ],
       "abilityText": "Persistent: Heal all allied active units for 3 HP and grant them 2 Shield at the start of each turn.",
       "designNote": "Ultimate sustain protocol. Near-invincible board if not removed.",
+      "flavourText": "A timeless gallery hall.",
       "effects": [
         {
           "type": "Heal",
@@ -1256,6 +1303,7 @@
       ],
       "abilityText": "Shield 3. Deploy: Heal all allied active units for 4 HP. Activate: Repair self for 3 Shield.",
       "designNote": "FPB legendary unit. Nearly unkillable fortress with team heal.",
+      "flavourText": "The bureau's revered director amid a great archive.",
       "effects": [
         {
           "type": "Heal",
@@ -1294,6 +1342,7 @@
       ],
       "abilityText": "Persistent: Heal all allied active units for 4 HP and grant them 3 Shield at the start of each turn.",
       "designNote": "FPB legendary protocol. Overwhelming sustain per turn.",
+      "flavourText": "A single work so perfect it seems alive.",
       "effects": [
         {
           "type": "Heal",
@@ -1331,6 +1380,7 @@
       ],
       "abilityText": "Heal all allied active units for 6 HP. Grant all allied active units 4 Shield. Draw 2 cards.",
       "designNote": "FPB legendary ability. Full defensive reset and card advantage.",
+      "flavourText": "The crowning achievement of the bureau.",
       "effects": [
         {
           "type": "Heal",
@@ -1375,6 +1425,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Aggressive 1-drop. High ATK, low survivability.",
+      "flavourText": "Factory hand at a conveyor.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_001_acc.png"
     },
@@ -1391,6 +1442,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Glass cannon 2-drop. Hits hard, dies fast.",
+      "flavourText": "Worker wielding a pneumatic rivet gun.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_002_acc.png"
     },
@@ -1407,6 +1459,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Balanced 2-drop. Solid stats for cost.",
+      "flavourText": "Loader carrying a heavy metal frame across the factory floor.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_003_acc.png"
     },
@@ -1423,6 +1476,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Cheap blocker. Defensive 1-drop for FRTI.",
+      "flavourText": "Trainee behind a welding mask.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_004_acc.png"
     },
@@ -1439,6 +1493,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Aggressive 3-drop. Premium ATK for cost.",
+      "flavourText": "Machine operator at a rhythmic piston press.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_005_acc.png"
     },
@@ -1455,6 +1510,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Vanilla 3-drop. Even stats distribution.",
+      "flavourText": "Worker overseeing a moving belt of components.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_006_acc.png"
     },
@@ -1471,6 +1527,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "ATK-heavy 4-drop. Classic FRTI profile.",
+      "flavourText": "Operator high in a gantry crane.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_007_acc.png"
     },
@@ -1487,6 +1544,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Durable 4-drop. Balanced between offence and defence.",
+      "flavourText": "Laborer feeding a roaring furnace.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_008_acc.png"
     },
@@ -1505,6 +1563,7 @@
       ],
       "abilityText": "FirstStrike.",
       "designNote": "First striker. Trades up in combat reliably.",
+      "flavourText": "A huge drop-hammer mid-swing.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_009_acc.png"
     },
@@ -1523,6 +1582,7 @@
       ],
       "abilityText": "Deploy: Give an allied active unit +1 ATK this turn.",
       "designNote": "Cheap buff on deploy. Supports aggressive openers.",
+      "flavourText": "Hardened foreman with a tool-belt.",
       "effects": [
         {
           "type": "Buff",
@@ -1549,6 +1609,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Premium vanilla 5-drop. Strong stat line.",
+      "flavourText": "Sturdy worker hauling a heavy crate on a shoulder rig.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_011_acc.png"
     },
@@ -1565,6 +1626,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "High ATK glass cannon at 4 NP. Aggressive curve topper.",
+      "flavourText": "Engineer servicing a spinning turbine.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_012_acc.png"
     },
@@ -1583,6 +1645,7 @@
       ],
       "abilityText": "Deploy: Gain 1 NP.",
       "designNote": "Cheap NP accelerator. Fuels bigger plays.",
+      "flavourText": "Scavenger with a magnetic grapnel.",
       "effects": [
         {
           "type": "GainNP",
@@ -1609,6 +1672,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "High-ATK 5-drop. Threatens lethal damage.",
+      "flavourText": "Watchman beside a pressure boiler.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_014_acc.png"
     },
@@ -1625,6 +1689,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Free body. Board presence at no cost.",
+      "flavourText": "Welder at a pipe junction.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_015_acc.png"
     },
@@ -1641,6 +1706,7 @@
       "keywords": [],
       "abilityText": "Give an allied active unit +2 ATK this turn.",
       "designNote": "Basic combat buff. Cheap and effective.",
+      "flavourText": "An engine pushed past its redline.",
       "effects": [
         {
           "type": "Buff",
@@ -1667,6 +1733,7 @@
       "keywords": [],
       "abilityText": "Grant an allied active unit 2 Shield.",
       "designNote": "Defensive ability. Adds temporary shield.",
+      "flavourText": "Steel plates being bolted over a frame.",
       "effects": [
         {
           "type": "GrantShield",
@@ -1693,6 +1760,7 @@
       "keywords": [],
       "abilityText": "Deal 3 damage to an enemy active unit.",
       "designNote": "Direct damage removal. Clears small-to-mid threats.",
+      "flavourText": "A massive wrench/beam mid-arc.",
       "effects": [
         {
           "type": "DealDamage",
@@ -1719,6 +1787,7 @@
       "keywords": [],
       "abilityText": "Give an allied active unit +3 ATK this turn.",
       "designNote": "Strong single-target buff. Big damage spike.",
+      "flavourText": "A sudden burst of factory power channeled into one unit.",
       "effects": [
         {
           "type": "Buff",
@@ -1747,6 +1816,7 @@
       ],
       "abilityText": "Fast: Give an allied active unit +2 ATK this turn.",
       "designNote": "Fast-speed combat trick. Surprises in combat.",
+      "flavourText": "A fast, bright spot-weld flaring instantly.",
       "effects": [
         {
           "type": "Buff",
@@ -1773,6 +1843,7 @@
       "keywords": [],
       "abilityText": "Deal 2 damage to all enemy active units.",
       "designNote": "AoE without keyword. Clears small boards.",
+      "flavourText": "Precisely rigged charges collapsing a structure.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -1801,6 +1872,7 @@
       ],
       "abilityText": "Activate: Give an allied active unit +1 ATK permanently.",
       "designNote": "Structure that steadily buffs. Slow but persistent value.",
+      "flavourText": "A warehouse of crates and fuel drums.",
       "effects": [
         {
           "type": "Buff",
@@ -1829,6 +1901,7 @@
       ],
       "abilityText": "Activate: Gain 2 NP.",
       "designNote": "NP relay. Industrial resource generation.",
+      "flavourText": "Crushing and refining raw ore into usable energy.",
       "effects": [
         {
           "type": "GainNP",
@@ -1857,6 +1930,7 @@
       ],
       "abilityText": "Persistent: Give all allied active units +1 ATK at the start of each turn.",
       "designNote": "Ongoing ATK buff. Rewards keeping units alive.",
+      "flavourText": "An assembly line in motion.",
       "effects": [
         {
           "type": "Buff",
@@ -1885,6 +1959,7 @@
       ],
       "abilityText": "Persistent: Gain 1 NP at the start of each turn.",
       "designNote": "Ongoing NP generation. Fuels FRTI's expensive units.",
+      "flavourText": "Workers swapping at the factory gate.",
       "effects": [
         {
           "type": "GainNP",
@@ -1913,6 +1988,7 @@
       ],
       "abilityText": "Deploy: Give an allied active unit +2 ATK permanently.",
       "designNote": "Strong body with permanent buff on deploy.",
+      "flavourText": "Master smith at the anvil.",
       "effects": [
         {
           "type": "Buff",
@@ -1941,6 +2017,7 @@
       ],
       "abilityText": "FirstStrike.",
       "designNote": "Big first striker. Dominates combat step.",
+      "flavourText": "Worker commanding a giant hydraulic press.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_027_acc.png"
     },
@@ -1957,6 +2034,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "High ATK 6-drop. Pure damage threat.",
+      "flavourText": "Attendant regulating a blast furnace.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_028_acc.png"
     },
@@ -1976,6 +2054,7 @@
       ],
       "abilityText": "Deploy: Deal 2 damage to all enemy active units.",
       "designNote": "AoE on deploy. Board clear attached to a body.",
+      "flavourText": "Sapper setting a broad charge.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2004,6 +2083,7 @@
       ],
       "abilityText": "Deploy: Grant an allied active unit 3 Shield.",
       "designNote": "Big body that also shields an ally. Defensive utility.",
+      "flavourText": "Pouring a molten alloy into a mold.",
       "effects": [
         {
           "type": "GrantShield",
@@ -2032,6 +2112,7 @@
       ],
       "abilityText": "Piercing.",
       "designNote": "Cheap piercing aggro. Ignores shield HP.",
+      "flavourText": "Worker smashing through waste slag.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_031_acc.png"
     },
@@ -2050,6 +2131,7 @@
       ],
       "abilityText": "Deploy: Deal 2 damage to an enemy active unit.",
       "designNote": "Deploy removal on a solid body. Versatile.",
+      "flavourText": "Rigger setting a steel girder that doubles as a striking beam against an enemy.",
       "effects": [
         {
           "type": "DealDamage",
@@ -2078,6 +2160,7 @@
       ],
       "abilityText": "Deploy: Deal 3 damage to an enemy active unit.",
       "designNote": "Premium removal on a big body. Stabilizes the board.",
+      "flavourText": "A massive engine block given legs.",
       "effects": [
         {
           "type": "DealDamage",
@@ -2106,6 +2189,7 @@
       ],
       "abilityText": "CannotBlock. High ATK but cannot defend.",
       "designNote": "Pure aggro. Cannot block, so all-in offense.",
+      "flavourText": "An experimental electromagnetic cannon on a rig.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_034_acc.png"
     },
@@ -2122,6 +2206,7 @@
       "keywords": [],
       "abilityText": "Deal 5 damage to an enemy active unit.",
       "designNote": "Heavy single-target removal. Kills most mid-cost units.",
+      "flavourText": "A single calibrated shot tracked to a target.",
       "effects": [
         {
           "type": "DealDamage",
@@ -2150,6 +2235,7 @@
       ],
       "abilityText": "Fast: Give an allied active unit +3 ATK this turn and grant it 2 Shield.",
       "designNote": "Fast combat trick with shield. Offensive and defensive.",
+      "flavourText": "A blade quenched and hardened.",
       "effects": [
         {
           "type": "Buff",
@@ -2187,6 +2273,7 @@
       ],
       "abilityText": "Deal 3 damage to all enemy active units.",
       "designNote": "Strong AoE clear. Devastates wide boards.",
+      "flavourText": "An explosion scattering fragments in all directions.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2215,6 +2302,7 @@
       ],
       "abilityText": "Activate: Give all allied active units +2 ATK this turn.",
       "designNote": "High-value relay. Board-wide ATK boost per turn.",
+      "flavourText": "A plant churning out ammunition.",
       "effects": [
         {
           "type": "Buff",
@@ -2243,6 +2331,7 @@
       ],
       "abilityText": "Persistent: Give all allied active units +1 ATK permanently at the start of each turn.",
       "designNote": "Snowball protocol. Permanent stacking ATK buffs.",
+      "flavourText": "Two production lines escalating.",
       "effects": [
         {
           "type": "Buff",
@@ -2272,6 +2361,7 @@
       ],
       "abilityText": "Persistent: Deal 1 damage to all enemy active units at the start of each turn.",
       "designNote": "Ongoing AoE ping. Grinds down enemy boards.",
+      "flavourText": "A reactor overheating.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2300,6 +2390,7 @@
       ],
       "abilityText": "Piercing.",
       "designNote": "Top-end piercing threat. Ignores shields for massive damage.",
+      "flavourText": "A colossal tracked siege machine.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_041_acc.png"
     },
@@ -2319,6 +2410,7 @@
       ],
       "abilityText": "Deploy: Deal 3 damage to all enemy active units.",
       "designNote": "AoE clear on a premium body. Board wipe + threat.",
+      "flavourText": "A heavy industrial mech repurposed for combat.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2347,6 +2439,7 @@
       ],
       "abilityText": "Deploy: Give all allied active units +2 ATK permanently.",
       "designNote": "Permanent board-wide buff. Rally the whole team.",
+      "flavourText": "Veteran overseer in a hard hat.",
       "effects": [
         {
           "type": "Buff",
@@ -2376,6 +2469,7 @@
       ],
       "abilityText": "FirstStrike. CannotBlock.",
       "designNote": "All-in attacker. Massive first strike but no blocking.",
+      "flavourText": "A towering press that strikes first.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/frti/card_frti_044_acc.png"
     },
@@ -2394,6 +2488,7 @@
       ],
       "abilityText": "Deal 4 damage to all enemy active units.",
       "designNote": "Premium board clear. Kills most units outright.",
+      "flavourText": "Every machine rebooting at once.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2420,6 +2515,7 @@
       "keywords": [],
       "abilityText": "Destroy an enemy active unit.",
       "designNote": "Hard removal. Kills any unit regardless of HP.",
+      "flavourText": "A reactor pushed to critical.",
       "effects": [
         {
           "type": "Destroy",
@@ -2448,6 +2544,7 @@
       ],
       "abilityText": "Activate: Give all allied active units +2 ATK permanently.",
       "designNote": "Premium relay. Stacking permanent buffs each turn.",
+      "flavourText": "A fortress-forged production hub.",
       "effects": [
         {
           "type": "Buff",
@@ -2479,6 +2576,7 @@
       ],
       "abilityText": "Piercing. FirstStrike. Deploy: Deal 3 damage to all enemy active units.",
       "designNote": "FRTI legendary unit. Dominant combat stats plus board clear.",
+      "flavourText": "FRTI's iron-willed head in a reinforced command exo-suit.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2508,6 +2606,7 @@
       ],
       "abilityText": "Activate: Give all allied active units +3 ATK permanently and deal 2 damage to all enemy active units.",
       "designNote": "FRTI legendary relay. Ultimate factory. Buffs and damages each turn.",
+      "flavourText": "The institute's legendary mega-forge.",
       "effects": [
         {
           "type": "Buff",
@@ -2545,6 +2644,7 @@
       ],
       "abilityText": "Deal 6 damage to all enemy active units.",
       "designNote": "FRTI legendary ability. Near-total board wipe.",
+      "flavourText": "A full structural failure unleashed.",
       "effects": [
         {
           "type": "DealAoEDamage",
@@ -2573,6 +2673,7 @@
       ],
       "abilityText": "Deploy: Draw 1 card.",
       "designNote": "Cheap cantrip body. Basic card-draw engine.",
+      "flavourText": "Young assistant in a white coat.",
       "effects": [
         {
           "type": "Draw",
@@ -2599,6 +2700,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Vanilla 2-drop. Efficient stats for early board.",
+      "flavourText": "Technician seated at a wall of blinking signal relays.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_002_acc.png"
     },
@@ -2617,6 +2719,7 @@
       ],
       "abilityText": "Deploy: Gain 1 NP.",
       "designNote": "Cheap NP accelerator. Trades board presence for tempo.",
+      "flavourText": "Office worker at a dual-screen terminal.",
       "effects": [
         {
           "type": "GainNP",
@@ -2643,6 +2746,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Defensive 2-drop. Higher HP for holding positions.",
+      "flavourText": "Handheld scanner sweeping a waveform across a dark room.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_004_acc.png"
     },
@@ -2661,6 +2765,7 @@
       ],
       "abilityText": "Deploy: Draw 1 card.",
       "designNote": "Mid-cost body with card draw. Bread and butter.",
+      "flavourText": "Crouched behind a rack of servers.",
       "effects": [
         {
           "type": "Draw",
@@ -2687,6 +2792,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Aggressive 3-drop. Glass cannon profile.",
+      "flavourText": "Peering through a benchtop laser rig.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_006_acc.png"
     },
@@ -2705,6 +2811,7 @@
       ],
       "abilityText": "Deploy: Gain 1 NP.",
       "designNote": "Low HP NP generator. Expendable accelerator.",
+      "flavourText": "Programmer at a curved monitor.",
       "effects": [
         {
           "type": "GainNP",
@@ -2733,6 +2840,7 @@
       ],
       "abilityText": "Piercing.",
       "designNote": "Cheapest piercing unit. Chip damage through shields.",
+      "flavourText": "Small quad-rotor drone with a sensor pod.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_008_acc.png"
     },
@@ -2752,6 +2860,7 @@
       ],
       "abilityText": "Activate: Draw 1 card.",
       "designNote": "Repeatable draw engine. High HP to survive.",
+      "flavourText": "Fully equipped research bench.",
       "effects": [
         {
           "type": "Draw",
@@ -2780,6 +2889,7 @@
       ],
       "abilityText": "Deploy: Gain 2 NP.",
       "designNote": "Bigger NP burst on deploy. Worth the 3-cost.",
+      "flavourText": "Wall of gauges and throughput graphs.",
       "effects": [
         {
           "type": "GainNP",
@@ -2808,6 +2918,7 @@
       ],
       "abilityText": "Deploy: Buff an allied active unit +1 ATK this turn.",
       "designNote": "Cheap tempo swing. Pairs well with aggressive openers.",
+      "flavourText": "Runner with a satchel crossing a research campus.",
       "effects": [
         {
           "type": "Buff",
@@ -2834,6 +2945,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Solid vanilla 4-drop. Reliable mid-game body.",
+      "flavourText": "Scientist studying a 3D holographic wave suspended over a desk.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_012_acc.png"
     },
@@ -2850,6 +2962,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Free 1/1. Board filler, combo enabler.",
+      "flavourText": "Slender instrument on a tripod emitting a fine measuring beam.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_013_acc.png"
     },
@@ -2869,6 +2982,7 @@
       ],
       "abilityText": "Deploy: Draw 2 cards.",
       "designNote": "Big draw burst on a decent body. Late-game refuel.",
+      "flavourText": "Analyst before a panoramic spectrum display.",
       "effects": [
         {
           "type": "Draw",
@@ -2895,6 +3009,7 @@
       "keywords": [],
       "abilityText": "",
       "designNote": "Beefy common. Holds bench position well.",
+      "flavourText": "Large dish antenna at dusk.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_015_acc.png"
     },
@@ -2913,6 +3028,7 @@
       ],
       "abilityText": "Draw 1 card.",
       "designNote": "Cheapest cantrip. Cycles the deck.",
+      "flavourText": "A stylized readout snapping into place over a scanned object.",
       "effects": [
         {
           "type": "Draw",
@@ -2939,6 +3055,7 @@
       "keywords": [],
       "abilityText": "Give an allied active unit +2 ATK this turn.",
       "designNote": "Combat trick. Cheap damage buff.",
+      "flavourText": "Concentric signal rings amplifying outward from an antenna.",
       "effects": [
         {
           "type": "Buff",
@@ -2965,6 +3082,7 @@
       "keywords": [],
       "abilityText": "Gain 1 NP.",
       "designNote": "Free NP. Enables turn-1 acceleration.",
+      "flavourText": "A single sonar-like pulse across a dark network map.",
       "effects": [
         {
           "type": "GainNP",
@@ -2991,6 +3109,7 @@
       "keywords": [],
       "abilityText": "Give an allied active unit +1 ATK permanently.",
       "designNote": "Permanent buff. Stacks over turns.",
+      "flavourText": "Progress bar and chip icon.",
       "effects": [
         {
           "type": "Buff",
@@ -3020,6 +3139,7 @@
       ],
       "abilityText": "Fast: Draw 1 card.",
       "designNote": "Fast-speed cantrip. Playable on opponent's turn.",
+      "flavourText": "Motion-blurred sweeping scan line racing across a target.",
       "effects": [
         {
           "type": "Draw",
@@ -3048,6 +3168,7 @@
       ],
       "abilityText": "Draw 2 cards.",
       "designNote": "Core draw spell. Refuels hand.",
+      "flavourText": "Radial sweep checking a grid of subsystems.",
       "effects": [
         {
           "type": "Draw",
@@ -3077,6 +3198,7 @@
       ],
       "abilityText": "Activate: Draw 1 card.",
       "designNote": "Common relay that generates cards each turn.",
+      "flavourText": "A relay pylon re-broadcasting a beam.",
       "effects": [
         {
           "type": "Draw",
@@ -3105,6 +3227,7 @@
       ],
       "abilityText": "Activate: Gain 1 NP.",
       "designNote": "Cheap NP relay. Slow but persistent value.",
+      "flavourText": "Tiny circuit-board transmitter with a hairline antenna.",
       "effects": [
         {
           "type": "GainNP",
@@ -3134,6 +3257,7 @@
       ],
       "abilityText": "Persistent: Draw 1 card at the start of each turn.",
       "designNote": "Ongoing draw engine. High value if it stays up.",
+      "flavourText": "Multiple file/data blocks streaming down into a storage buffer.",
       "effects": [
         {
           "type": "Draw",
@@ -3162,6 +3286,7 @@
       ],
       "abilityText": "Persistent: Gain 1 NP at the start of each turn.",
       "designNote": "Ongoing NP generation. Ramps into big plays.",
+      "flavourText": "Two nodes exchanging a linked glow.",
       "effects": [
         {
           "type": "GainNP",
@@ -3191,6 +3316,7 @@
       ],
       "abilityText": "Deploy: Draw 1 card. Gain 1 NP.",
       "designNote": "Card draw plus NP on deploy. Key engine piece.",
+      "flavourText": "Specialist aligning a bench of lasers.",
       "effects": [
         {
           "type": "Draw",
@@ -3228,6 +3354,7 @@
       ],
       "abilityText": "Deploy: Give all allied active units +1 ATK this turn.",
       "designNote": "Board-wide ATK buff on deploy. Rewards wide boards.",
+      "flavourText": "Researcher adjusting a floating decision-tree hologram.",
       "effects": [
         {
           "type": "Buff",
@@ -3256,6 +3383,7 @@
       ],
       "abilityText": "Piercing.",
       "designNote": "Mid-cost piercing threat. Punches through shields.",
+      "flavourText": "Worker beside a particle accelerator ring.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_028_acc.png"
     },
@@ -3275,6 +3403,7 @@
       ],
       "abilityText": "Activate: Draw 1 card. Gain 1 NP.",
       "designNote": "Repeatable draw+NP engine. High priority removal target.",
+      "flavourText": "Analyst amid a cloud of probability glyphs.",
       "effects": [
         {
           "type": "Draw",
@@ -3312,6 +3441,7 @@
       ],
       "abilityText": "Deploy: Debuff an enemy active unit -2 ATK this turn.",
       "designNote": "Offensive deploy. Weakens the opponent's attacker.",
+      "flavourText": "Engineer with a calibration wand correcting a distorted field grid.",
       "effects": [
         {
           "type": "Debuff",
@@ -3341,6 +3471,7 @@
       ],
       "abilityText": "Deploy: Exhaust an enemy active unit.",
       "designNote": "Removal-adjacent. Exhausts a key enemy unit.",
+      "flavourText": "Technician venting cold vapor from a cryo-unit.",
       "effects": [
         {
           "type": "Exhaust",
@@ -3370,6 +3501,7 @@
       ],
       "abilityText": "Deploy: Draw 2 cards.",
       "designNote": "Big body with deep draw. Late-game card advantage.",
+      "flavourText": "Operator overseeing a full-room simulated battlefield.",
       "effects": [
         {
           "type": "Draw",
@@ -3398,6 +3530,7 @@
       ],
       "abilityText": "Deploy: Prevent an enemy active unit from blocking this turn.",
       "designNote": "Opens up attacks. Bypasses a blocker.",
+      "flavourText": "Device broadcasting a scrambled noise field.",
       "effects": [
         {
           "type": "PreventBlock",
@@ -3426,6 +3559,7 @@
       ],
       "abilityText": "FirstStrike.",
       "designNote": "Efficient first striker. Trades up against bigger units.",
+      "flavourText": "Visor view in false-color heat signatures.",
       "effects": [],
       "artPath": "Assets/Cards/Arts/fsti/card_fsti_034_acc.png"
     },
@@ -3444,6 +3578,7 @@
       ],
       "abilityText": "Draw 3 cards.",
       "designNote": "Deep draw. Major hand refill.",
+      "flavourText": "A rapid cascade of glowing process steps.",
       "effects": [
         {
           "type": "Draw",
@@ -3472,6 +3607,7 @@
       ],
       "abilityText": "Fast: Give an allied active unit +3 ATK this turn.",
       "designNote": "Strong combat trick at fast speed.",
+      "flavourText": "A unit half-shifted out of phase.",
       "effects": [
         {
           "type": "Buff",
@@ -3498,6 +3634,7 @@
       "keywords": [],
       "abilityText": "Debuff all enemy active units -1 ATK this turn.",
       "designNote": "Board-wide debuff. Punishes wide enemy boards.",
+      "flavourText": "A crack in an enemy's defense grid highlighted in red.",
       "effects": [
         {
           "type": "Debuff",
@@ -3527,6 +3664,7 @@
       ],
       "abilityText": "Activate: Draw 1 card and gain 1 NP.",
       "designNote": "Efficient relay. Draw and NP in one activation.",
+      "flavourText": "Stacked memory cores glowing.",
       "effects": [
         {
           "type": "Draw",
@@ -3565,6 +3703,7 @@
       ],
       "abilityText": "Persistent: Draw 2 cards at the start of each turn.",
       "designNote": "Premium card-draw engine. Game-warping if unanswered.",
+      "flavourText": "A self-referential spiral of repeating glyphs feeding back into itself.",
       "effects": [
         {
           "type": "Draw",
@@ -3593,6 +3732,7 @@
       ],
       "abilityText": "Persistent: Give all allied active units +1 ATK at the start of each turn.",
       "designNote": "Ongoing board-wide buff. Snowballs if not removed.",
+      "flavourText": "Control loop diagram come alive.",
       "effects": [
         {
           "type": "Buff",
@@ -3622,6 +3762,7 @@
       ],
       "abilityText": "Deploy: Draw 3 cards and gain 2 NP.",
       "designNote": "Major refuel on deploy. Restocks hand and ramps.",
+      "flavourText": "Scientist between two linked particles mirroring each other across a gap.",
       "effects": [
         {
           "type": "Draw",
@@ -3660,6 +3801,7 @@
       ],
       "abilityText": "Piercing. Deploy: Debuff all enemy active units -2 ATK this turn.",
       "designNote": "Top-end threat. Piercing plus board-wide debuff.",
+      "flavourText": "Armored custodian before a towering mainframe.",
       "effects": [
         {
           "type": "Debuff",
@@ -3689,6 +3831,7 @@
       ],
       "abilityText": "Activate: Draw 2 cards.",
       "designNote": "Repeatable deep draw. Must-answer engine.",
+      "flavourText": "A multi-core cluster processing simultaneous threads.",
       "effects": [
         {
           "type": "Draw",
@@ -3717,6 +3860,7 @@
       ],
       "abilityText": "Deploy: Give all allied active units +2 ATK permanently.",
       "designNote": "Permanent board-wide buff. Game-changing deploy.",
+      "flavourText": "Distinguished lead scientist at a holo-table.",
       "effects": [
         {
           "type": "Buff",
@@ -3746,6 +3890,7 @@
       ],
       "abilityText": "Deploy: Exhaust all enemy active units.",
       "designNote": "Mass exhaust. Clears the way for an alpha strike.",
+      "flavourText": "Emitter throwing a dissonant wave that stalls every enemy system in its path.",
       "effects": [
         {
           "type": "Exhaust",
@@ -3774,6 +3919,7 @@
       ],
       "abilityText": "Draw 4 cards. Gain 2 NP.",
       "designNote": "Massive hand refill plus NP. Turns the corner.",
+      "flavourText": "A neural network diagram brightening as it trains.",
       "effects": [
         {
           "type": "Draw",
@@ -3811,6 +3957,7 @@
       ],
       "abilityText": "Exhaust all enemy active units and prevent them from blocking this turn.",
       "designNote": "Premium removal spell. Full board lockdown for one turn.",
+      "flavourText": "A red override glyph seizing control.",
       "effects": [
         {
           "type": "Exhaust",
@@ -3849,6 +3996,7 @@
       ],
       "abilityText": "Persistent: Draw 2 cards and gain 2 NP at the start of each turn.",
       "designNote": "Ultimate ongoing engine. Must be removed immediately.",
+      "flavourText": "A fractal corridor of ever-repeating data.",
       "effects": [
         {
           "type": "Draw",
@@ -3888,6 +4036,7 @@
       ],
       "abilityText": "Deploy: Draw 3 cards and gain 3 NP. Activate: Draw 1 card.",
       "designNote": "FSTI legendary. Massive deploy value plus repeatable draw.",
+      "flavourText": "The institute's famed lead.",
       "effects": [
         {
           "type": "Draw",
@@ -3935,6 +4084,7 @@
       ],
       "abilityText": "Persistent: Draw 3 cards, gain 3 NP, and give all allied active units +1 ATK at the start of each turn.",
       "designNote": "FSTI ultimate protocol. Overwhelming recurring value.",
+      "flavourText": "A vast crystalline processing core.",
       "effects": [
         {
           "type": "Draw",

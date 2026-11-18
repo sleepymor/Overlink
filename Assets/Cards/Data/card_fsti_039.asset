@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0c00000003000000
   abilityText: 'Persistent: Draw 2 cards at the start of each turn.'
   designNote: Premium card-draw engine. Game-warping if unanswered.
+  flavourText: 'A self-referential spiral of repeating glyphs feeding back into itself.'
   effects:
   - type: 3
     target: 0

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 03000000
   abilityText: Draw 2 cards.
   designNote: Core draw spell. Refuels hand.
+  flavourText: 'Radial sweep checking a grid of subsystems.'
   effects:
   - type: 3
     target: 0

@@ -8,6 +8,7 @@ import re
 ID_PATTERN = re.compile(r"^card_(fsti|frti|fpb)_\d{3}$")
 MAX_COST = 10
 MAX_REPAIR_AMOUNT = 3
+MAX_FLAVOUR_LENGTH = 80
 
 VALID_FACTIONS = {"fsti", "frti", "fpb"}
 VALID_RARITIES = {"Common", "Rare", "Epic", "Legendary"}
@@ -180,6 +181,8 @@ def validate_card(card, pool_ids):
     has_mechanics = len(keywords) > 0 or len(effects) > 0
     if has_mechanics and not card.get("abilityText"):
         warnings.append(f"{cid}: Has mechanics but abilityText is empty.")
+    if len(card.get("flavourText") or "") > MAX_FLAVOUR_LENGTH:
+        warnings.append(f"{cid}: flavourText is {len(card['flavourText'])} characters; keep it to {MAX_FLAVOUR_LENGTH} or fewer.")
     if not card.get("artPath"):
         infos.append(f"{cid}: ArtPath is empty.")
 
@@ -187,7 +190,7 @@ def validate_card(card, pool_ids):
 
 
 def main():
-    path = r"E:\Games\Overlink\Assets\Cards\card_pool.json"
+    path = sys.argv[1] if len(sys.argv) > 1 else r"E:\Games\Overlink\Archive\cards\card_pool.json"
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Give an allied active unit +3 ATK this turn.
   designNote: Strong single-target buff. Big damage spike.
+  flavourText: 'A sudden burst of factory power channeled into one unit.'
   effects:
   - type: 5
     target: 3

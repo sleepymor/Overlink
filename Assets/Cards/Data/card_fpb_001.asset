@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Cheap defensive body. Holds early positions.
+  flavourText: 'Trainee at a drafting table with T-square.'
   effects: []
   artPath: Assets/Cards/Arts/fpb/card_fpb_001_acc.png
   art: {fileID: 21300000, guid: 1e5f2a0530c21554ebb1cfbe64abb120, type: 3}

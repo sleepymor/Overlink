@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 04000000
   abilityText: Deal 3 damage to all enemy active units.
   designNote: Strong AoE clear. Devastates wide boards.
+  flavourText: 'An explosion scattering fragments in all directions.'
   effects:
   - type: 1
     target: 6

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Durable 4-drop. Balanced between offence and defence.
+  flavourText: 'Laborer feeding a roaring furnace.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_008_acc.png
   art: {fileID: 21300000, guid: ab57d8017cd55f44aa7b7c708039a56e, type: 3}

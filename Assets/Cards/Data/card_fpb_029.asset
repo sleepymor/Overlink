@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Grant all allied active units 2 Shield.'
   designNote: Board-wide shield on deploy. Defensive powerhouse.
+  flavourText: 'Planner over a large city map.'
   effects:
   - type: 7
     target: 5

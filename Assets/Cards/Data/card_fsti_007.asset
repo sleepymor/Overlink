@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Gain 1 NP.'
   designNote: Low HP NP generator. Expendable accelerator.
+  flavourText: 'Programmer at a curved monitor.'
   effects:
   - type: 4
     target: 0

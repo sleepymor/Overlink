@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000e000000
   abilityText: 'Deploy: Repair self for 2 Shield.'
   designNote: Self-repair on deploy. Gains shield when it enters.
+  flavourText: 'Craftsman assembling a scale model.'
   effects:
   - type: 15
     target: 0

@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: Heal all allied active units for 6 HP. Grant all allied active units
     4 Shield. Draw 2 cards.
   designNote: FPB legendary ability. Full defensive reset and card advantage.
+  flavourText: 'The crowning achievement of the bureau.'
   effects:
   - type: 2
     target: 5

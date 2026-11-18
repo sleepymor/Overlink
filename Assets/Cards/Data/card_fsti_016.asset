@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 03000000
   abilityText: Draw 1 card.
   designNote: Cheapest cantrip. Cycles the deck.
+  flavourText: 'A stylized readout snapping into place over a scanned object.'
   effects:
   - type: 3
     target: 0

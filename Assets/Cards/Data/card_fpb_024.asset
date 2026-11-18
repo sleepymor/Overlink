@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Heal all allied active units for 1 HP at the start of
     each turn.'
   designNote: Ongoing board heal. Grinds out attrition.
+  flavourText: 'A pinned timetable of upkeep tasks.'
   effects:
   - type: 2
     target: 5

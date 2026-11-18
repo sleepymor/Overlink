@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 09000000070000000a000000
   abilityText: 'Shield 1. Deploy: Heal an allied active unit for 2 HP.'
   designNote: Shielded healer. Core defensive piece.
+  flavourText: 'Curator in a gallery.'
   effects:
   - type: 2
     target: 3

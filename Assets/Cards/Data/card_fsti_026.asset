@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0700000003000000
   abilityText: 'Deploy: Draw 1 card. Gain 1 NP.'
   designNote: Card draw plus NP on deploy. Key engine piece.
+  flavourText: 'Specialist aligning a bench of lasers.'
   effects:
   - type: 3
     target: 0

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Deal 3 damage to an enemy active unit.'
   designNote: Premium removal on a big body. Stabilizes the board.
+  flavourText: 'A massive engine block given legs.'
   effects:
   - type: 0
     target: 4

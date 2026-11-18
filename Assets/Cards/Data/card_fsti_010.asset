@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Gain 2 NP.'
   designNote: Bigger NP burst on deploy. Worth the 3-cost.
+  flavourText: 'Wall of gauges and throughput graphs.'
   effects:
   - type: 4
     target: 0

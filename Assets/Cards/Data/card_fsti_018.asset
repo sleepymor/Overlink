@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Gain 1 NP.
   designNote: Free NP. Enables turn-1 acceleration.
+  flavourText: 'A single sonar-like pulse across a dark network map.'
   effects:
   - type: 4
     target: 0

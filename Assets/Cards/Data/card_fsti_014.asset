@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0700000003000000
   abilityText: 'Deploy: Draw 2 cards.'
   designNote: Big draw burst on a decent body. Late-game refuel.
+  flavourText: 'Analyst before a panoramic spectrum display.'
   effects:
   - type: 3
     target: 0

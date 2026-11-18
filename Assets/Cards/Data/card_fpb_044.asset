@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Destroy an enemy active unit.'
   designNote: Hard removal on a body. FPB answers any threat.
+  flavourText: 'Senior inspector with final authority.'
   effects:
   - type: 8
     target: 4

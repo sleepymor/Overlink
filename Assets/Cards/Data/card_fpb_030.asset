@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000e000000
   abilityText: 'Deploy: Repair self for 3 Shield.'
   designNote: Self-repair for max shield. Very tanky on arrival.
+  flavourText: 'Teacher demonstrating structure.'
   effects:
   - type: 15
     target: 0

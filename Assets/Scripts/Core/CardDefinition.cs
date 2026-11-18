@@ -17,6 +17,7 @@ namespace Overlink.Core
         public IReadOnlyList<Keyword> Keywords { get; set; } = Array.Empty<Keyword>();
         public string AbilityText { get; set; }
         public string DesignNote { get; set; }
+        public string FlavourText { get; set; }
         public IReadOnlyList<EffectDescriptor> Effects { get; set; } = Array.Empty<EffectDescriptor>();
         public string ArtPath { get; set; }
     }

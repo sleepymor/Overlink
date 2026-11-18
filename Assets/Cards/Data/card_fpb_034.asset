@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0700000003000000
   abilityText: 'Deploy: Draw 1 card and grant an allied active unit 1 Shield.'
   designNote: Card draw plus shield. Versatile FPB rare.
+  flavourText: 'Critic marking up a design.'
   effects:
   - type: 3
     target: 0

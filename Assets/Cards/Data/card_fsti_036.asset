@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 08000000
   abilityText: 'Fast: Give an allied active unit +3 ATK this turn.'
   designNote: Strong combat trick at fast speed.
+  flavourText: 'A unit half-shifted out of phase.'
   effects:
   - type: 5
     target: 3

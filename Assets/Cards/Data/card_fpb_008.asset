@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: High HP wall at 4 cost. Very durable.
+  flavourText: 'Worker setting a solid base layer.'
   effects: []
   artPath: Assets/Cards/Arts/fpb/card_fpb_008_acc.png
   art: {fileID: 21300000, guid: 2ca66e9515c891243bc48ef1c3923af7, type: 3}

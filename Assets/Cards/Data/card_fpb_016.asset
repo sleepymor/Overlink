@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Grant an allied active unit 2 Shield.
   designNote: Cheap shield grant. Defensive trick.
+  flavourText: 'A rapid loose sketch that throws a quick protective shield over an ally.'
   effects:
   - type: 7
     target: 3

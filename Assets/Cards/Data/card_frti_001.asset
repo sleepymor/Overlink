@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Aggressive 1-drop. High ATK, low survivability.
+  flavourText: 'Factory hand at a conveyor.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_001_acc.png
   art: {fileID: 21300000, guid: f63312d8f89a0924fb4dfeb8ba55dbba, type: 3}

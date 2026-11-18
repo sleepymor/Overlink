@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Piercing. FirstStrike. Deploy: Deal 3 damage to all enemy active
     units.'
   designNote: FRTI legendary unit. Dominant combat stats plus board clear.
+  flavourText: 'FRTI''s iron-willed head in a reinforced command exo-suit.'
   effects:
   - type: 1
     target: 6

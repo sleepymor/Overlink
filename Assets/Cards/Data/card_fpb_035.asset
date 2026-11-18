@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Grant all allied active units 3 Shield.
   designNote: Premium board-wide shield. Massive defensive swing.
+  flavourText: 'Multiple varnish coats building up.'
   effects:
   - type: 7
     target: 5

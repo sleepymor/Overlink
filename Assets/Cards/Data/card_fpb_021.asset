@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Grant all allied active units 1 Shield.
   designNote: Board-wide shield. Small but affects everything.
+  flavourText: 'A fine lacquer sprayed evenly.'
   effects:
   - type: 7
     target: 5

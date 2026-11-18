@@ -33,6 +33,53 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
+        public void FlavourText_OverLimit_Warns()
+        {
+            var card = new CardDefinition
+            {
+                Id = "card_fsti_001",
+                Name = "Infantry Squad",
+                Faction = Faction.Fsti,
+                Rarity = Rarity.Common,
+                Type = CardType.Unit,
+                Cost = 2,
+                Atk = 2,
+                Hp = 3,
+                ArtPath = "Art/infantry.png",
+                AbilityText = "Standard unit.",
+                FlavourText = new string('x', CardValidator.MaxFlavourLength + 1)
+            };
+
+            var result = CardValidator.Validate(card);
+
+            Assert.That(result.HasErrors, Is.False);
+            Assert.That(result.Issues.Any(i => i.Severity == Severity.Warning && i.Field == nameof(card.FlavourText)), Is.True);
+        }
+
+        [Test]
+        public void FlavourText_AtLimit_DoesNotWarn()
+        {
+            var card = new CardDefinition
+            {
+                Id = "card_fsti_001",
+                Name = "Infantry Squad",
+                Faction = Faction.Fsti,
+                Rarity = Rarity.Common,
+                Type = CardType.Unit,
+                Cost = 2,
+                Atk = 2,
+                Hp = 3,
+                ArtPath = "Art/infantry.png",
+                AbilityText = "Standard unit.",
+                FlavourText = new string('x', CardValidator.MaxFlavourLength)
+            };
+
+            var result = CardValidator.Validate(card);
+
+            Assert.That(result.Issues.Any(i => i.Field == nameof(card.FlavourText)), Is.False);
+        }
+
+        [Test]
         public void DuplicateId_Error()
         {
             var card1 = new CardDefinition

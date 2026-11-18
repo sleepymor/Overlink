@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000600000003000000
   abilityText: 'Deploy: Draw 3 cards and gain 3 NP. Activate: Draw 1 card.'
   designNote: FSTI legendary. Massive deploy value plus repeatable draw.
+  flavourText: 'The institute''s famed lead.'
   effects:
   - type: 3
     target: 0

@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Shield 3. Deploy: Heal all allied active units for 4 HP. Activate:
     Repair self for 3 Shield.'
   designNote: FPB legendary unit. Nearly unkillable fortress with team heal.
+  flavourText: 'The bureau''s revered director amid a great archive.'
   effects:
   - type: 2
     target: 5

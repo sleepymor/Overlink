@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Balanced 2-drop. Solid stats for cost.
+  flavourText: 'Loader carrying a heavy metal frame across the factory floor.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_003_acc.png
   art: {fileID: 21300000, guid: 28e3e66efff4cc94abff3e4fd8037b9a, type: 3}

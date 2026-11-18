@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0700000003000000
   abilityText: 'Deploy: Draw 2 cards.'
   designNote: Big body with deep draw. Late-game card advantage.
+  flavourText: 'Operator overseeing a full-room simulated battlefield.'
   effects:
   - type: 3
     target: 0

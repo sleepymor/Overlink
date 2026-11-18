@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0a000000
   abilityText: Heal an allied active unit for 3 HP.
   designNote: Basic heal spell. Keeps units alive.
+  flavourText: 'Hands mending a torn drawing with careful patches.'
   effects:
   - type: 2
     target: 3

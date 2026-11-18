@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Grant all allied active units 1 Shield at the start of
     each turn.'
   designNote: Ongoing shield protocol. Stacks shields over time.
+  flavourText: 'A sequence of evolving drafts stacked.'
   effects:
   - type: 7
     target: 5

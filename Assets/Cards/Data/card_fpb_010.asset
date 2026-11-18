@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Grant an allied active unit 2 Shield.'
   designNote: Body plus shield grant. Defensive utility.
+  flavourText: 'Painter mixing pigments.'
   effects:
   - type: 7
     target: 3

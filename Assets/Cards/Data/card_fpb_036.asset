@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0a000000
   abilityText: Heal all allied active units for 4 HP.
   designNote: Deep board-wide heal. Major stabilizer.
+  flavourText: 'A piece returned to pristine condition.'
   effects:
   - type: 2
     target: 5

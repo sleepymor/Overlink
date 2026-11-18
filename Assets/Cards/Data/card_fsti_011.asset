@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Buff an allied active unit +1 ATK this turn.'
   designNote: Cheap tempo swing. Pairs well with aggressive openers.
+  flavourText: 'Runner with a satchel crossing a research campus.'
   effects:
   - type: 5
     target: 3

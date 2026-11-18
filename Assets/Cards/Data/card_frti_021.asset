@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Deal 2 damage to all enemy active units.
   designNote: AoE without keyword. Clears small boards.
+  flavourText: 'Precisely rigged charges collapsing a structure.'
   effects:
   - type: 1
     target: 6

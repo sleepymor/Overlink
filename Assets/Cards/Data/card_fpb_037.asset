@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Deal 4 damage to an enemy active unit.
   designNote: FPB removal spell. Precise damage.
+  flavourText: 'A red-lined critique that dismantles an enemy''s argument with a heavy blow.'
   effects:
   - type: 0
     target: 4

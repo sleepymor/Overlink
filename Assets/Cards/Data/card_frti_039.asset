@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Give all allied active units +1 ATK permanently at the
     start of each turn.'
   designNote: Snowball protocol. Permanent stacking ATK buffs.
+  flavourText: 'Two production lines escalating.'
   effects:
   - type: 5
     target: 5

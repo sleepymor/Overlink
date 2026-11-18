@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Premium vanilla 5-drop. Strong stat line.
+  flavourText: 'Sturdy worker hauling a heavy crate on a shoulder rig.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_011_acc.png
   art: {fileID: 21300000, guid: f3e9a4d238dece54bac3d71e2f0873ef, type: 3}

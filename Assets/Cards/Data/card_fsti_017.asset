@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Give an allied active unit +2 ATK this turn.
   designNote: Combat trick. Cheap damage buff.
+  flavourText: 'Concentric signal rings amplifying outward from an antenna.'
   effects:
   - type: 5
     target: 3

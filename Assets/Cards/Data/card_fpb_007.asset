@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 09000000
   abilityText: Shield 1.
   designNote: Solid mid-cost shielded unit.
+  flavourText: 'Artist drawing vanishing-point lines on a canvas.'
   effects: []
   artPath: Assets/Cards/Arts/fpb/card_fpb_007_acc.png
   art: {fileID: 21300000, guid: 16965606efde24b4d911cb5e9c4180aa, type: 3}

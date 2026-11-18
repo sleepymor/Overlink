@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Heal all allied active units for 4 HP and grant them
     3 Shield at the start of each turn.'
   designNote: FPB legendary protocol. Overwhelming sustain per turn.
+  flavourText: 'A single work so perfect it seems alive.'
   effects:
   - type: 2
     target: 5

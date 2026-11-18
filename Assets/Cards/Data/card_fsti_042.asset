@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0000000007000000
   abilityText: 'Piercing. Deploy: Debuff all enemy active units -2 ATK this turn.'
   designNote: Top-end threat. Piercing plus board-wide debuff.
+  flavourText: 'Armored custodian before a towering mainframe.'
   effects:
   - type: 6
     target: 6

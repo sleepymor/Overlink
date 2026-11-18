@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 03000000
   abilityText: Draw 4 cards. Gain 2 NP.
   designNote: Massive hand refill plus NP. Turns the corner.
+  flavourText: 'A neural network diagram brightening as it trains.'
   effects:
   - type: 3
     target: 0

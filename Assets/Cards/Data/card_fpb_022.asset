@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 060000000a000000
   abilityText: 'Activate: Heal an allied active unit for 2 HP.'
   designNote: Healing relay. Sustains board each turn.
+  flavourText: 'A workbench of brushes and solvents.'
   effects:
   - type: 2
     target: 3

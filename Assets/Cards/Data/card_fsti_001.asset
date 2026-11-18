@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Draw 1 card.'
   designNote: Cheap cantrip body. Basic card-draw engine.
+  flavourText: 'Young assistant in a white coat.'
   effects:
   - type: 3
     target: 0

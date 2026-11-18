@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0c00000003000000
   abilityText: 'Persistent: Draw 2 cards and gain 2 NP at the start of each turn.'
   designNote: Ultimate ongoing engine. Must be removed immediately.
+  flavourText: 'A fractal corridor of ever-repeating data.'
   effects:
   - type: 3
     target: 0

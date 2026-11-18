@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Draw 1 card.'
   designNote: Mid-cost body with card draw. Bread and butter.
+  flavourText: 'Crouched behind a rack of servers.'
   effects:
   - type: 3
     target: 0

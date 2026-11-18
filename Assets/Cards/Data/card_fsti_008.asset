@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 00000000
   abilityText: Piercing.
   designNote: Cheapest piercing unit. Chip damage through shields.
+  flavourText: 'Small quad-rotor drone with a sensor pod.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_008_acc.png
   art: {fileID: 21300000, guid: 7d06df0ce649b3b45b42062deeda23cf, type: 3}

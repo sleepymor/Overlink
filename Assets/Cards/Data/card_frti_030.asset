@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Grant an allied active unit 3 Shield.'
   designNote: Big body that also shields an ally. Defensive utility.
+  flavourText: 'Pouring a molten alloy into a mold.'
   effects:
   - type: 7
     target: 3

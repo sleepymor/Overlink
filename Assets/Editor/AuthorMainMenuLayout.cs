@@ -33,8 +33,7 @@ namespace Overlink.EditorTools
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.5f;
             var backdrop = canvas.Find("Background").GetComponent<Image>();
-            backdrop.sprite = null;
-            backdrop.color = Background;
+            backdrop.color = backdrop.sprite != null ? Color.white : Background;
             backdrop.raycastTarget = false;
             PrefabUtility.RecordPrefabInstancePropertyModifications(backdrop);
 
@@ -71,9 +70,9 @@ namespace Overlink.EditorTools
             if (link != null) { var t = link.GetComponent<TextMeshProUGUI>(); t.text = "TACTICAL NETWORK  //  ONLINE"; t.enableWordWrapping = false; }
             var feature = Get(canvas, "Featured presentation");
             Rect(feature, new Vector2(0, 0), new Vector2(0, 0), new Vector2(58, 130), new Vector2(600, 160));
-            Label(feature, "Eyebrow", "SIGNAL ARCHIVE  /  UNIT 001", 16, Accent, new Vector2(0, 0), new Vector2(600, 28));
-            Label(feature, "Title", "SIGNAL SCOUT", 42, Bright, new Vector2(0, -36), new Vector2(600, 55));
-            Label(feature, "Caption", "A reliable first link.", 18, Dim, new Vector2(0, -102), new Vector2(600, 30));
+            Label(feature, "Eyebrow", "FSTI  /  UNIT  /  CARD_FSTI_044", 16, Accent, new Vector2(0, 0), new Vector2(600, 28));
+            Label(feature, "Title", "SENIOR RESEARCHER", 42, Bright, new Vector2(0, -36), new Vector2(600, 55));
+            Label(feature, "Caption", "Distinguished lead scientist at a holo-table.", 18, Dim, new Vector2(0, -102), new Vector2(600, 30));
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             Debug.Log("[Overlink] Authored main-menu hierarchy.");

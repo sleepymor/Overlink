@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Give all allied active units +2 ATK permanently.'
   designNote: Permanent board-wide buff. Game-changing deploy.
+  flavourText: 'Distinguished lead scientist at a holo-table.'
   effects:
   - type: 5
     target: 5

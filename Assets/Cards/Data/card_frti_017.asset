@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Grant an allied active unit 2 Shield.
   designNote: Defensive ability. Adds temporary shield.
+  flavourText: 'Steel plates being bolted over a frame.'
   effects:
   - type: 7
     target: 3

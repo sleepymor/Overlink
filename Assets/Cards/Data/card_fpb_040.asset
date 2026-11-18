@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Grant all allied active units 2 Shield at the start of
     each turn.'
   designNote: Ongoing shield protocol. Stacking shield over time.
+  flavourText: 'A treatment hardening surfaces.'
   effects:
   - type: 7
     target: 5

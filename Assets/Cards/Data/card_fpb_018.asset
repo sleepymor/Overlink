@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0a000000
   abilityText: Heal all allied active units for 2 HP.
   designNote: Board-wide heal. Keeps the whole team healthy.
+  flavourText: 'A clean second draft laid over the first.'
   effects:
   - type: 2
     target: 5

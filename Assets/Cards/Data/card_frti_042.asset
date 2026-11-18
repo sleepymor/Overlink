@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0700000004000000
   abilityText: 'Deploy: Deal 3 damage to all enemy active units.'
   designNote: AoE clear on a premium body. Board wipe + threat.
+  flavourText: 'A heavy industrial mech repurposed for combat.'
   effects:
   - type: 1
     target: 6

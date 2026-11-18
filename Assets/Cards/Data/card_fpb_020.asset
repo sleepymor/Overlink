@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0a000000
   abilityText: Heal an allied active unit for 1 HP.
   designNote: Free heal. Tiny but free sustain.
+  flavourText: 'A quick inspection tick that patches a small fault.'
   effects:
   - type: 2
     target: 3

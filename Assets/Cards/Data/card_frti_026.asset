@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Give an allied active unit +2 ATK permanently.'
   designNote: Strong body with permanent buff on deploy.
+  flavourText: 'Master smith at the anvil.'
   effects:
   - type: 5
     target: 3

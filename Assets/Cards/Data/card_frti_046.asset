@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Destroy an enemy active unit.
   designNote: Hard removal. Kills any unit regardless of HP.
+  flavourText: 'A reactor pushed to critical.'
   effects:
   - type: 8
     target: 4

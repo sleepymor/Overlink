@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Deal 1 damage to all enemy active units at the start
     of each turn.'
   designNote: Ongoing AoE ping. Grinds down enemy boards.
+  flavourText: 'A reactor overheating.'
   effects:
   - type: 1
     target: 6

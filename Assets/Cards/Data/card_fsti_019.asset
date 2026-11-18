@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Give an allied active unit +1 ATK permanently.
   designNote: Permanent buff. Stacks over turns.
+  flavourText: 'Progress bar and chip icon.'
   effects:
   - type: 5
     target: 3

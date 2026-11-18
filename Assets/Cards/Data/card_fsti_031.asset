@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000d000000
   abilityText: 'Deploy: Exhaust an enemy active unit.'
   designNote: Removal-adjacent. Exhausts a key enemy unit.
+  flavourText: 'Technician venting cold vapor from a cryo-unit.'
   effects:
   - type: 11
     target: 4

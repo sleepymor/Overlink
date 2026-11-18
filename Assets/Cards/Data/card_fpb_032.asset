@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Deal 2 damage to an enemy active unit.'
   designNote: FPB removal option. Defensive deck needs answers too.
+  flavourText: 'Framer mounting a work.'
   effects:
   - type: 0
     target: 4

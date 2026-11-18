@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Give all allied active units +1 ATK this turn.'
   designNote: Board-wide ATK buff on deploy. Rewards wide boards.
+  flavourText: 'Researcher adjusting a floating decision-tree hologram.'
   effects:
   - type: 5
     target: 5

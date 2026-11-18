@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 06000000
   abilityText: 'Activate: Give an allied active unit +1 ATK permanently.'
   designNote: Structure that steadily buffs. Slow but persistent value.
+  flavourText: 'A warehouse of crates and fuel drums.'
   effects:
   - type: 5
     target: 3

@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Draw 3 cards, gain 3 NP, and give all allied active units
     +1 ATK at the start of each turn.'
   designNote: FSTI ultimate protocol. Overwhelming recurring value.
+  flavourText: 'A vast crystalline processing core.'
   effects:
   - type: 3
     target: 0

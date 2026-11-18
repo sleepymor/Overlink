@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: High ATK 6-drop. Pure damage threat.
+  flavourText: 'Attendant regulating a blast furnace.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_028_acc.png
   art: {fileID: 21300000, guid: 7d4770254ad289e4ca1c39f717854c8b, type: 3}

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0800000003000000
   abilityText: 'Fast: Draw 1 card.'
   designNote: Fast-speed cantrip. Playable on opponent's turn.
+  flavourText: 'Motion-blurred sweeping scan line racing across a target.'
   effects:
   - type: 3
     target: 0

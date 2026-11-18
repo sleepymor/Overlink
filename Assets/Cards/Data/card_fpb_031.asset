@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 09000000070000000a000000
   abilityText: 'Shield 2. Deploy: Heal all allied active units for 3 HP.'
   designNote: Big heal on a shielded body. Full team sustain.
+  flavourText: 'Artist on scaffolding before a vast mural.'
   effects:
   - type: 2
     target: 5

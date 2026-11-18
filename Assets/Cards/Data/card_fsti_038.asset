@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0600000003000000
   abilityText: 'Activate: Draw 1 card and gain 1 NP.'
   designNote: Efficient relay. Draw and NP in one activation.
+  flavourText: 'Stacked memory cores glowing.'
   effects:
   - type: 3
     target: 0

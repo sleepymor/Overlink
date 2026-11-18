@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 06000000
   abilityText: 'Activate: Grant an allied active unit 1 Shield.'
   designNote: Shield relay. Slow shield generation.
+  flavourText: 'Shelves of conservation materials.'
   effects:
   - type: 7
     target: 3

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000d000000
   abilityText: 'Deploy: Exhaust all enemy active units.'
   designNote: Mass exhaust. Clears the way for an alpha strike.
+  flavourText: 'Emitter throwing a dissonant wave that stalls every enemy system in its path.'
   effects:
   - type: 11
     target: 6

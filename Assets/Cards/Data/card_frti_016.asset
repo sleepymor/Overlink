@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Give an allied active unit +2 ATK this turn.
   designNote: Basic combat buff. Cheap and effective.
+  flavourText: 'An engine pushed past its redline.'
   effects:
   - type: 5
     target: 3

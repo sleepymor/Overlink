@@ -218,6 +218,7 @@ namespace Overlink.Core
                     case "keywords": keywords = ParseKeywordArray(json, ref pos); break;
                     case "abilityText": card.AbilityText = ReadNullableString(json, ref pos); break;
                     case "designNote": card.DesignNote = ReadNullableString(json, ref pos); break;
+                    case "flavourText": card.FlavourText = ReadNullableString(json, ref pos); break;
                     case "effects": effects = ParseEffectArray(json, ref pos); break;
                     case "artPath": card.ArtPath = ReadNullableString(json, ref pos); break;
                     default: SkipValue(json, ref pos); break;
@@ -638,6 +639,7 @@ namespace Overlink.Core
             AppendKeywords(builder, card.Keywords);
             AppendString(builder, "abilityText", card.AbilityText, false);
             AppendString(builder, "designNote", card.DesignNote, false);
+            AppendString(builder, "flavourText", card.FlavourText, false);
             AppendEffects(builder, card.Effects);
             AppendString(builder, "artPath", card.ArtPath, false);
             builder.Append("}");

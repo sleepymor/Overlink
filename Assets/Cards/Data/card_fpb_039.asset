@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Heal all allied active units for 2 HP at the start of
     each turn.'
   designNote: Premium ongoing heal. Attrition engine.
+  flavourText: 'A formal directive sealed.'
   effects:
   - type: 2
     target: 5

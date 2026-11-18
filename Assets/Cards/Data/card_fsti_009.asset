@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0600000003000000
   abilityText: 'Activate: Draw 1 card.'
   designNote: Repeatable draw engine. High HP to survive.
+  flavourText: 'Fully equipped research bench.'
   effects:
   - type: 3
     target: 0

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 06000000
   abilityText: 'Activate: Gain 1 NP.'
   designNote: Cheap NP relay. Slow but persistent value.
+  flavourText: 'Tiny circuit-board transmitter with a hairline antenna.'
   effects:
   - type: 4
     target: 0

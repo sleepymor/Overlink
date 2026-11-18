@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0600000003000000
   abilityText: 'Activate: Draw 1 card. Gain 1 NP.'
   designNote: Repeatable draw+NP engine. High priority removal target.
+  flavourText: 'Analyst amid a cloud of probability glyphs.'
   effects:
   - type: 3
     target: 0

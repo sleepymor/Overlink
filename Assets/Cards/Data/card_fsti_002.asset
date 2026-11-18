@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Vanilla 2-drop. Efficient stats for early board.
+  flavourText: 'Technician seated at a wall of blinking signal relays.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_002_acc.png
   art: {fileID: 21300000, guid: 705f5e3eb0bc11d4a97d336852a580c8, type: 3}

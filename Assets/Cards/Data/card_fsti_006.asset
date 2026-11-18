@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Aggressive 3-drop. Glass cannon profile.
+  flavourText: 'Peering through a benchtop laser rig.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_006_acc.png
   art: {fileID: 21300000, guid: 0dd5af8b01d222041ae97ccbdd20dbab, type: 3}

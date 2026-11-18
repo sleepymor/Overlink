@@ -389,6 +389,28 @@ namespace Overlink.Core.Tests
             }
         }
 
+        [Test]
+        public void FlavourText_RoundTrips()
+        {
+            var card = MakeCard("card_fsti_001");
+            card.FlavourText = "Distinguished lead scientist at a holo-table.";
+
+            string json = CardJson.Serialize(new List<CardDefinition> { card }, null);
+            var parsed = CardJson.Parse(json);
+
+            Assert.That(parsed[0].FlavourText, Is.EqualTo(card.FlavourText));
+        }
+
+        [Test]
+        public void FlavourText_MissingKey_ParsesAsNull()
+        {
+            string json = "{\"formatVersion\":1,\"cards\":[{\"id\":\"card_fsti_001\",\"name\":\"x\",\"faction\":\"fsti\",\"rarity\":\"Common\",\"type\":\"Unit\",\"cost\":0,\"atk\":1,\"hp\":1,\"shield\":0,\"keywords\":[],\"abilityText\":null,\"designNote\":null,\"effects\":[],\"artPath\":null}]}";
+
+            var parsed = CardJson.Parse(json);
+
+            Assert.That(parsed[0].FlavourText, Is.Null);
+        }
+
         private static void AssertCardEqual(CardDefinition expected, CardDefinition actual)
         {
             Assert.That(actual.Id, Is.EqualTo(expected.Id));
@@ -402,6 +424,7 @@ namespace Overlink.Core.Tests
             Assert.That(actual.Shield, Is.EqualTo(expected.Shield));
             Assert.That(actual.AbilityText, Is.EqualTo(expected.AbilityText));
             Assert.That(actual.DesignNote, Is.EqualTo(expected.DesignNote));
+            Assert.That(actual.FlavourText, Is.EqualTo(expected.FlavourText));
             Assert.That(actual.ArtPath, Is.EqualTo(expected.ArtPath));
 
             Assert.That(actual.Keywords.Count, Is.EqualTo(expected.Keywords?.Count ?? 0));

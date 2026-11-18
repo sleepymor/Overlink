@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Grant all allied active units 3 Shield.'
   designNote: Massive board-wide shield on deploy. Fortress builder.
+  flavourText: 'Visionary sketching bold concepts that project a wide protective shield to all.'
   effects:
   - type: 7
     target: 5

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Debuff all enemy active units -1 ATK this turn.
   designNote: Board-wide debuff. Punishes wide enemy boards.
+  flavourText: 'A crack in an enemy''s defense grid highlighted in red.'
   effects:
   - type: 6
     target: 6

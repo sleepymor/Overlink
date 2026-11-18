@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Activate: Give all allied active units +3 ATK permanently and deal
     2 damage to all enemy active units.'
   designNote: FRTI legendary relay. Ultimate factory. Buffs and damages each turn.
+  flavourText: 'The institute''s legendary mega-forge.'
   effects:
   - type: 5
     target: 5

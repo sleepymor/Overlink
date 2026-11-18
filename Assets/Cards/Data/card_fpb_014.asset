@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 060000000a000000
   abilityText: 'Activate: Heal an allied active unit for 2 HP.'
   designNote: Repeatable healer. Sustains the board each turn.
+  flavourText: 'Fine-detail artist adding finishing touches that restore an adjacent piece.'
   effects:
   - type: 2
     target: 3

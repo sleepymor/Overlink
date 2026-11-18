@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Deal 3 damage to an enemy active unit.
   designNote: Direct damage removal. Clears small-to-mid threats.
+  flavourText: 'A massive wrench/beam mid-arc.'
   effects:
   - type: 0
     target: 4

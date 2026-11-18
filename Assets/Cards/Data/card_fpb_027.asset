@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 09000000
   abilityText: Shield 2.
   designNote: Premium shielded body. Very hard to take down.
+  flavourText: 'Senior architect at a grand drafting table.'
   effects: []
   artPath: Assets/Cards/Arts/fpb/card_fpb_027_acc.png
   art: {fileID: 21300000, guid: 3eaa8dd28ef6e5640927006f1927688a, type: 3}

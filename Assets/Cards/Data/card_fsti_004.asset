@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Defensive 2-drop. Higher HP for holding positions.
+  flavourText: 'Handheld scanner sweeping a waveform across a dark room.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_004_acc.png
   art: {fileID: 21300000, guid: 96bbe0b2439583c4b8f4c984bed3518a, type: 3}

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 06000000
   abilityText: 'Activate: Give all allied active units +2 ATK permanently.'
   designNote: Premium relay. Stacking permanent buffs each turn.
+  flavourText: 'A fortress-forged production hub.'
   effects:
   - type: 5
     target: 5

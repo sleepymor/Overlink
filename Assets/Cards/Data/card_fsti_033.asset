@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Prevent an enemy active unit from blocking this turn.'
   designNote: Opens up attacks. Bypasses a blocker.
+  flavourText: 'Device broadcasting a scrambled noise field.'
   effects:
   - type: 14
     target: 4

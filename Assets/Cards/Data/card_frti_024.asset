@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Give all allied active units +1 ATK at the start of each
     turn.'
   designNote: Ongoing ATK buff. Rewards keeping units alive.
+  flavourText: 'An assembly line in motion.'
   effects:
   - type: 5
     target: 5

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 08000000
   abilityText: 'Fast: Give an allied active unit +2 ATK this turn.'
   designNote: Fast-speed combat trick. Surprises in combat.
+  flavourText: 'A fast, bright spot-weld flaring instantly.'
   effects:
   - type: 5
     target: 3

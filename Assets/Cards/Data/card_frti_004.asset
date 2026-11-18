@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Cheap blocker. Defensive 1-drop for FRTI.
+  flavourText: 'Trainee behind a welding mask.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_004_acc.png
   art: {fileID: 21300000, guid: 381f624eea8c8a242ba169a27c73bc3c, type: 3}

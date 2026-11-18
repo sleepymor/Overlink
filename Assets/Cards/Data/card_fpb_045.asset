@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: Heal all allied active units for 5 HP. Grant all allied active units
     2 Shield.
   designNote: Massive defensive swing. Full team heal and shield.
+  flavourText: 'A masterpiece fully restored under glass.'
   effects:
   - type: 2
     target: 5

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 08000000
   abilityText: 'Fast: Grant an allied active unit 3 Shield.'
   designNote: Fast-speed shield grant. Defensive combat trick.
+  flavourText: 'A clear protective layer brushed quickly over a surface.'
   effects:
   - type: 7
     target: 3

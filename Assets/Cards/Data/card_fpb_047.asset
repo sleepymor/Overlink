@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Persistent: Heal all allied active units for 3 HP and grant them
     2 Shield at the start of each turn.'
   designNote: Ultimate sustain protocol. Near-invincible board if not removed.
+  flavourText: 'A timeless gallery hall.'
   effects:
   - type: 2
     target: 5

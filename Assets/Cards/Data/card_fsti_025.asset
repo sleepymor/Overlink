@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 0c000000
   abilityText: 'Persistent: Gain 1 NP at the start of each turn.'
   designNote: Ongoing NP generation. Ramps into big plays.
+  flavourText: 'Two nodes exchanging a linked glow.'
   effects:
   - type: 4
     target: 0

@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 01000000
   abilityText: FirstStrike.
   designNote: First striker. Trades up in combat reliably.
+  flavourText: 'A huge drop-hammer mid-swing.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_009_acc.png
   art: {fileID: 21300000, guid: 94e46578b227df24aaf738593cbf6bcb, type: 3}

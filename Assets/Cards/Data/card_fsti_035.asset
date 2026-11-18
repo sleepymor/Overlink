@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 03000000
   abilityText: Draw 3 cards.
   designNote: Deep draw. Major hand refill.
+  flavourText: 'A rapid cascade of glowing process steps.'
   effects:
   - type: 3
     target: 0

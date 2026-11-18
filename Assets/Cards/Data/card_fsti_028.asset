@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 00000000
   abilityText: Piercing.
   designNote: Mid-cost piercing threat. Punches through shields.
+  flavourText: 'Worker beside a particle accelerator ring.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_028_acc.png
   art: {fileID: 21300000, guid: c6e61a38d83bafa47813a8b22f5dac2e, type: 3}

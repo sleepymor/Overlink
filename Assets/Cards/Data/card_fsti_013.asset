@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Free 1/1. Board filler, combo enabler.
+  flavourText: 'Slender instrument on a tripod emitting a fine measuring beam.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_013_acc.png
   art: {fileID: 21300000, guid: 97e8b6ab08acd8d4f979d48f4797b50e, type: 3}

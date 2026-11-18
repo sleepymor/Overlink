@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 070000000a000000
   abilityText: 'Deploy: Heal an allied active unit for 2 HP.'
   designNote: Body with healing. Sustains board presence.
+  flavourText: 'Surveyor with a theodolite on site.'
   effects:
   - type: 2
     target: 3

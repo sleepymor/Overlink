@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: High-ATK 5-drop. Threatens lethal damage.
+  flavourText: 'Watchman beside a pressure boiler.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_014_acc.png
   art: {fileID: 21300000, guid: 525bdd90797cfec4fbca4fae5d88eb50, type: 3}

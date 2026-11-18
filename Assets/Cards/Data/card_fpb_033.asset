@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 060000000e000000
   abilityText: 'Activate: Repair self for 2 Shield.'
   designNote: Self-repairing tank. Keeps regenerating shield.
+  flavourText: 'Calligrapher with brush and ink.'
   effects:
   - type: 15
     target: 0

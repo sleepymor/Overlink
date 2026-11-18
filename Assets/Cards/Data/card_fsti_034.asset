@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 01000000
   abilityText: FirstStrike.
   designNote: Efficient first striker. Trades up against bigger units.
+  flavourText: 'Visor view in false-color heat signatures.'
   effects: []
   artPath: Assets/Cards/Arts/fsti/card_fsti_034_acc.png
   art: {fileID: 21300000, guid: 6e5c502429e794f4391561811cf009ff, type: 3}

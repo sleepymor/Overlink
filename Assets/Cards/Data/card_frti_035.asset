@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: Deal 5 damage to an enemy active unit.
   designNote: Heavy single-target removal. Kills most mid-cost units.
+  flavourText: 'A single calibrated shot tracked to a target.'
   effects:
   - type: 0
     target: 4

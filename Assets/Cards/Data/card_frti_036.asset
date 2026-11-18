@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: 'Fast: Give an allied active unit +3 ATK this turn and grant it 2
     Shield.'
   designNote: Fast combat trick with shield. Offensive and defensive.
+  flavourText: 'A blade quenched and hardened.'
   effects:
   - type: 5
     target: 3

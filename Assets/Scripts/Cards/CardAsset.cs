@@ -50,6 +50,7 @@ namespace Overlink.Cards
         public List<Keyword> keywords = new List<Keyword>();
         [TextArea(2, 6)] public string abilityText;
         [TextArea(2, 6)] public string designNote;
+        [TextArea(1, 3)] public string flavourText;
         public List<CardEffectEntry> effects = new List<CardEffectEntry>();
         public string artPath;
         public Sprite art;
@@ -68,6 +69,7 @@ namespace Overlink.Cards
             definition.Shield = shield;
             definition.AbilityText = abilityText;
             definition.DesignNote = designNote;
+            definition.FlavourText = flavourText;
             definition.ArtPath = artPath;
             definition.Keywords = keywords != null ? keywords.ToArray() : Array.Empty<Keyword>();
             definition.Effects = BuildEffects();
@@ -110,6 +112,7 @@ namespace Overlink.Cards
             shield = definition.Shield;
             abilityText = definition.AbilityText;
             designNote = definition.DesignNote;
+            flavourText = definition.FlavourText;
             artPath = definition.ArtPath;
 
             keywords = new List<Keyword>();

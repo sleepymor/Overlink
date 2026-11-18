@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 07000000
   abilityText: 'Deploy: Gain 1 NP.'
   designNote: Cheap NP accelerator. Fuels bigger plays.
+  flavourText: 'Scavenger with a magnetic grapnel.'
   effects:
   - type: 4
     target: 0

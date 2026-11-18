@@ -24,6 +24,7 @@ MonoBehaviour:
   keywords: 
   abilityText: 
   designNote: Free body. Board presence at no cost.
+  flavourText: 'Welder at a pipe junction.'
   effects: []
   artPath: Assets/Cards/Arts/frti/card_frti_015_acc.png
   art: {fileID: 21300000, guid: c0d6cbf5d03a7504d82f1879fc55c8a5, type: 3}

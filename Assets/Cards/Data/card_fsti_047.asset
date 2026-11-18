@@ -25,6 +25,7 @@ MonoBehaviour:
   abilityText: Exhaust all enemy active units and prevent them from blocking this
     turn.
   designNote: Premium removal spell. Full board lockdown for one turn.
+  flavourText: 'A red override glyph seizing control.'
   effects:
   - type: 11
     target: 6

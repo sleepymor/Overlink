@@ -9,6 +9,7 @@ namespace Overlink.Core
     {
         public const int MaxRepairAmount = 3;
         public const int MaxCost = 10;
+        public const int MaxFlavourLength = 80;
         public const int PoolBudgetSize = 150;
         public const int PoolBudgetCommon = 75;
         public const int PoolBudgetRare = 45;
@@ -459,6 +460,11 @@ namespace Overlink.Core
             if (hasMechanics && string.IsNullOrWhiteSpace(card.AbilityText))
             {
                 issues.Add(new ValidationIssue(Severity.Warning, nameof(card.AbilityText), "Card has mechanics but AbilityText is empty."));
+            }
+
+            if (card.FlavourText != null && card.FlavourText.Length > MaxFlavourLength)
+            {
+                issues.Add(new ValidationIssue(Severity.Warning, nameof(card.FlavourText), "FlavourText is " + card.FlavourText.Length + " characters. Keep it to " + MaxFlavourLength + " or fewer so it fits the card and menu."));
             }
 
             if (string.IsNullOrWhiteSpace(card.ArtPath))
