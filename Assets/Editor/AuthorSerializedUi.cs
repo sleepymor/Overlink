@@ -41,9 +41,10 @@ namespace Overlink.EditorTools
             AuthorScene(MainMenuPath, AuthorMainMenu);
             AuthorScene(SettingsPath, AuthorSettings);
             AuthorScene(GachaPath, AuthorSignalBayChoices);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[SerializedUI] Authored Main Menu profile, Settings toggles, and Signal Bay pack-choice buttons.");
+            Debug.Log("[SerializedUI] Authored Main Menu profile, Settings toggles, and Signal Bay visibility.");
         }
 
         [MenuItem("Overlink/UI/Author Auth Screen")]
@@ -371,24 +372,6 @@ namespace Overlink.EditorTools
             {
                 Debug.LogError("[SerializedUI] Figma Signal Bay hierarchy is missing.");
                 return;
-            }
-
-            for (int i = 1; i <= 3; i++)
-            {
-                Transform choice = bay.Find("Pack Choice " + i);
-                if (choice == null)
-                {
-                    Debug.LogError("[SerializedUI] Missing serialized pack choice: Pack Choice " + i);
-                    continue;
-                }
-
-                Button button = choice.GetComponent<Button>() ?? choice.gameObject.AddComponent<Button>();
-                Image image = choice.GetComponent<Image>() ?? choice.gameObject.AddComponent<Image>();
-                image.raycastTarget = true;
-                button.targetGraphic = image;
-                button.transition = Selectable.Transition.ColorTint;
-                foreach (Graphic graphic in choice.GetComponentsInChildren<Graphic>(true))
-                    graphic.raycastTarget = graphic.transform == choice;
             }
 
             // The editable bay is the authored composition. The old full-screen reference remains

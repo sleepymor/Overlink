@@ -153,9 +153,10 @@ namespace Overlink.EditorTools
                 OfflineCollectionData.BundleRevealedKey, OfflineCollectionData.BundleLoyaltyPackKey,
                 OfflineCollectionData.SingleLoyaltyPackKey,
                 OfflineCollectionData.PurchasedPacksKey, OfflineCollectionData.LoyaltyGrantedKey,
-                OfflinePackOpeningController.ModeKey, OfflineCollectionData.SelectedPackKey
+                OfflinePackOpeningController.ModeKey, OfflineCollectionData.SingleDrawKey,
+                OfflineCollectionData.BundleDrawKey, OfflineCollectionData.LoyaltyDrawKey
             };
-            foreach (var card in OfflineCollectionData.Catalog)
+            foreach (var card in OfflineCollectionData.BinderCards())
             {
                 keys.Add(OfflineCollectionData.OwnedKey + card.Id);
                 keys.Add(OfflineCollectionData.DeckKey + card.Id);

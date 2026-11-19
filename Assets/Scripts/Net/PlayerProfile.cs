@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Overlink.Net
 {
@@ -6,10 +7,11 @@ namespace Overlink.Net
     /// The player's account-scoped profile, persisted in Cloud Save by
     /// <see cref="PlayerProfileService"/>.
     /// <para>
-    /// Only what the login flow needs today: an identity, proof the age gate was passed, and a version
-    /// stamp. The version is written from the first save onward so a later migration can tell a profile
-    /// created before a field existed from one that simply left it empty — stats belong to that later
-    /// step and are deliberately not modelled here yet.
+    /// Only what the login flow needs today: an identity, proof the age gate was passed, a version
+    /// stamp, the player's obtained-card set, and the active deck. The version is written from the
+    /// first save onward so a later migration can tell a profile created before a field existed from
+    /// one that simply left it empty — stats belong to that later step and are deliberately not
+    /// modelled here yet.
     /// </para>
     /// </summary>
     [Serializable]

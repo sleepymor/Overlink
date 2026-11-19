@@ -212,13 +212,23 @@ namespace Overlink.Cards
             if (text == null) return;
             float worldEm = faceSize.y * zone.Em / FrameHeightPixels;
             float scale = worldEm / TextAtlasPointSize;
+            if (multiLine)
+            {
+                // Hang the box from the zone's top edge so wrapped text starts at the top of the container.
+                text.rectTransform.pivot = new Vector2(0.5f, 1f);
+                localPosition = PixelPosition(faceSize, zone.X, zone.Y - zone.H * 0.5f);
+            }
+            else
+            {
+                text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            }
             text.transform.localPosition = localPosition;
             text.transform.localScale = new Vector3(scale, scale, scale);
             text.fontSize = TextAtlasPointSize;
             text.fontSizeMax = TextAtlasPointSize;
             text.fontSizeMin = TextAtlasPointSize * 0.6f;
             // Shrink-to-fit is only for the multi-line panel. A single-line zone keeps one em for
-            // every card and condenses horizontally instead - see CondenseToFitWidth.
+            // every card, and FitToPlate shrinks or stacks it to fit the plate.
             text.enableAutoSizing = multiLine;
             text.enableWordWrapping = multiLine;
             // TMP 3.0.7 names: Left/Center/Right are vertically centred; TopLeft hangs from the top.
@@ -243,7 +253,7 @@ namespace Overlink.Cards
             text.rectTransform.sizeDelta = new Vector2(
                 TextAtlasPointSize * zone.W / zone.Em,
                 TextAtlasPointSize * zone.H / zone.Em);
-            if (!multiLine) CondenseToFitWidth(text, scale);
+            if (!multiLine) FitToPlate(text, scale);
         }
 
         /// <summary>
@@ -257,12 +267,38 @@ namespace Overlink.Cards
         /// Runs under the card's roll, and the scale is in the label's own frame, so the roll
         /// composes outside it and the glyphs stay square-on-the-card rather than sheared.
         /// </summary>
-        static void CondenseToFitWidth(TextMeshPro text, float baseScale)
+        static void FitToPlate(TextMeshPro text, float baseScale)
         {
             if (text.rectTransform == null) return;
+            string source = (text.text ?? string.Empty).Replace('\n', ' ');
+            int space = source.IndexOf(' ');
+            if (space <= 0 || space >= source.Length - 1)
+            {
+                text.transform.localScale = Vector3.one * baseScale;
+                return;
+            }
+
+            // Rect units and glyph-mesh units are the same units here: the rect is authored as
+            // pointSize x (plate px / em px), and the mesh comes back in pointSize units too.
+            float plate = text.rectTransform.rect.width;
+            string stacked = source.Substring(0, space) + "\n" + source.Substring(space + 1);
+
+            text.enableWordWrapping = false;
+            float oneLine = MeasureWidest(text, source);
+            float twoLine = MeasureWidest(text, stacked);
+            text.text = source;
+
+            CardNameFit.Result fit = CardNameFit.Plan(oneLine, twoLine, plate);
+            text.text = fit.Stacked ? stacked : source;
+            text.transform.localScale = Vector3.one * baseScale * fit.Scale;
+        }
+
+        static float MeasureWidest(TextMeshPro text, string value)
+        {
+            text.text = value;
             text.ForceMeshUpdate();
             TMP_TextInfo info = text.textInfo;
-            if (info == null || info.lineCount <= 0) return;
+            if (info == null || info.lineCount <= 0) return 0f;
 
             float widest = 0f;
             for (int i = 0; i < info.lineCount; i++)
@@ -271,13 +307,7 @@ namespace Overlink.Cards
                 float width = extents.max.x - extents.min.x;
                 if (width > widest) widest = width;
             }
-
-            // Rect units and glyph-mesh units are the same units here: the rect above is authored as
-            // pointSize x (plate px / em px), and the mesh comes back in pointSize units too.
-            float plate = text.rectTransform.rect.width;
-            if (plate <= 0f || widest <= plate) return;
-            text.transform.localScale = new Vector3(
-                baseScale * plate / widest, baseScale, baseScale);
+            return widest;
         }
 
         public void SetSize(Vector3 size)

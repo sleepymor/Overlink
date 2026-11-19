@@ -271,32 +271,6 @@ namespace Overlink.EditorTools
             Debug.Log("[Overlink] Editable bay identity uses a safe fallback; save the scene.");
         }
 
-        [MenuItem("Overlink/Scenes/Mark Unavailable Signal Bay Packs")]
-        public static void MarkUnavailablePacks()
-        {
-            var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
-            var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
-            if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || bay == null)
-            {
-                Debug.LogError("Open Gacha.unity in edit mode before marking unavailable packs.");
-                return;
-            }
-            var count = bay.Find("Pack Count")?.GetComponent<TMP_Text>();
-            var second = bay.Find("Pack Choice 2 Price")?.GetComponent<TMP_Text>();
-            var third = bay.Find("Pack Choice 3 Price")?.GetComponent<TMP_Text>();
-            if (count == null || second == null || third == null)
-            {
-                Debug.LogError("[Overlink] Pack choice text missing; no changes made.");
-                return;
-            }
-            Undo.RecordObjects(new Object[] { count, second, third }, "Mark unavailable packs");
-            count.text = "1 SIGNAL AVAILABLE";
-            second.text = third.text = "NOT AVAILABLE";
-            EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("[Overlink] Unimplemented pack choices marked unavailable; save the scene to keep the change.");
-        }
-
         [MenuItem("Overlink/Scenes/Refine Signal Bay Pack Information")]
         public static void RefinePackInformation()
         {
@@ -355,80 +329,6 @@ namespace Overlink.EditorTools
             Panel(accents, "Composition lower rule", new Vector2(500, 120), new Vector2(440, 1), new Color32(39, 64, 77, 255));
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log("[Overlink] Editable pack information refined; save the scene to keep the change.");
-        }
-
-        [MenuItem("Overlink/Scenes/Refine Signal Bay Pack Choices")]
-        public static void RefinePackChoices()
-        {
-            var scene = SceneManager.GetActiveScene();
-            if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity")
-            {
-                Debug.LogError("Open Gacha.unity in edit mode before refining pack choices.");
-                return;
-            }
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
-            var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
-            if (bay == null || bay.Find("Pack Choice 1/Editable choice accents") != null)
-            {
-                Debug.LogWarning("[Overlink] Pack choices missing or already refined; leaving existing edits intact.");
-                return;
-            }
-            var panel = bay.Find("Pack Selection Panel")?.GetComponent<Image>();
-            var choices = new Image[3];
-            var labels = new TMP_Text[3];
-            var prices = new TMP_Text[3];
-            var meta = new TMP_Text[3];
-            for (int i = 0; i < 3; i++)
-            {
-                string prefix = "Pack Choice " + (i + 1);
-                choices[i] = bay.Find(prefix)?.GetComponent<Image>();
-                labels[i] = bay.Find(prefix + " Label")?.GetComponent<TMP_Text>();
-                prices[i] = bay.Find(prefix + " Price")?.GetComponent<TMP_Text>();
-                meta[i] = bay.Find(prefix + " Meta")?.GetComponent<TMP_Text>();
-                if (choices[i] == null || labels[i] == null || prices[i] == null || meta[i] == null)
-                {
-                    Debug.LogError("[Overlink] Pack choice element missing; no changes made.");
-                    return;
-                }
-            }
-            if (panel == null) { Debug.LogError("[Overlink] Pack selection panel missing; no changes made."); return; }
-            Undo.RegisterFullObjectHierarchyUndo(bay.gameObject, "Refine Signal Bay pack choices");
-            panel.color = new Color32(7, 18, 28, 60);
-            Color muted = new Color32(135, 157, 171, 255);
-            for (int i = 0; i < 3; i++)
-            {
-                bool selected = i == 0;
-                choices[i].color = selected ? new Color32(13, 51, 61, 240) : new Color32(8, 20, 30, 220);
-                labels[i].color = selected ? Cyan : Bright;
-                labels[i].fontSize = 16;
-                prices[i].color = muted;
-                meta[i].color = muted;
-                foreach (var text in new[] { labels[i], prices[i] })
-                {
-                    var rect = (RectTransform)text.transform;
-                    rect.anchoredPosition += new Vector2(46, 0);
-                    rect.sizeDelta = new Vector2(145, rect.sizeDelta.y);
-                }
-                var accents = Box(choices[i].transform, "Editable choice accents", Vector2.zero, new Vector2(232, 92));
-                Undo.RegisterCreatedObjectUndo(accents.gameObject, "Create Signal Bay choice accents");
-                Color edge = selected ? Cyan : new Color32(95, 130, 145, 255);
-                Panel(accents, "Bottom rule", new Vector2(0, -45.5f), new Vector2(232, 1), edge);
-                if (selected) Panel(accents, "Selected edge", new Vector2(-115, 0), new Vector2(2, 92), Cyan);
-                Vector2 icon = new Vector2(-86, 12);
-                Panel(accents, "Icon backing", icon, new Vector2(36, 50), new Color32(27, 53, 64, 255));
-                Panel(accents, "Icon top", icon + new Vector2(0, 24), new Vector2(36, 1), edge);
-                Panel(accents, "Icon bottom", icon + new Vector2(0, -24), new Vector2(36, 1), edge);
-                Panel(accents, "Icon left", icon + new Vector2(-17.5f, 0), new Vector2(1, 50), edge);
-                Panel(accents, "Icon right", icon + new Vector2(17.5f, 0), new Vector2(1, 50), edge);
-                Label(accents, "Icon code", i == 0 ? "SA / 01" : i == 1 ? "FP / 01" : "RN / 01", 7, edge,
-                    icon + new Vector2(0, -15), new Vector2(34, 10), TextAlignmentOptions.Center);
-                Label(accents, "Icon mark", i == 0 ? "+" : i == 1 ? "O" : "#", 17, edge,
-                    icon + new Vector2(0, 4), new Vector2(30, 25), TextAlignmentOptions.Center);
-                if (selected) Label(accents, "Active status", "ACTIVE", 8, Cyan,
-                    new Vector2(88, -27), new Vector2(48, 12), TextAlignmentOptions.Right);
-            }
-            EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("[Overlink] Editable pack-choice accents and typography refined; save the scene to keep them.");
         }
 
         [MenuItem("Overlink/Scenes/Detail Signal Bay Pack Draft")]

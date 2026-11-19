@@ -106,11 +106,11 @@ namespace Overlink.EditorTools
             }
 
             SerializedProperty slots = so.FindProperty("slots");
-            if (slots == null || slots.arraySize != OfflineCollectionData.PackManifest.Length)
+            if (slots == null || slots.arraySize != OfflineCollectionData.SinglePackSize)
             {
                 Debug.LogError("[OfflineGachaVerification] slots count is "
                     + (slots == null ? -1 : slots.arraySize) + ", expected "
-                    + OfflineCollectionData.PackManifest.Length + ".");
+                    + OfflineCollectionData.SinglePackSize + ".");
                 missing++;
             }
             else
@@ -229,39 +229,43 @@ namespace Overlink.EditorTools
         public static void AssertTenPackRules()
         {
             int failures = 0;
-            OfflineCollectionData.PackCard[] manifest = OfflineCollectionData.TenPackManifest;
 
-            if (manifest.Length != 50)
-            {
-                Debug.LogError("[OfflineGachaVerification] Bundle card count is " + manifest.Length + ", expected 50.");
-                failures++;
-            }
+            // Every drawn card must come from the library, and the featured legendaries must exist.
+            OfflineCollectionData.Reset();
+            OfflineCollectionData.EnsureBundleResolved();
+            OfflineCollectionData.PackCard[] manifest = OfflineCollectionData.BundlePack();
 
-            if (OfflineCollectionData.PacksInBundle != 10)
+            if (manifest.Length != OfflineCollectionData.BundleSize)
             {
-                Debug.LogError("[OfflineGachaVerification] Bundle pack count is " + OfflineCollectionData.PacksInBundle + ", expected 10.");
+                Debug.LogError("[OfflineGachaVerification] Bundle card count is " + manifest.Length
+                    + ", expected " + OfflineCollectionData.BundleSize + ".");
                 failures++;
             }
 
             for (int i = 0; i < manifest.Length; i++)
             {
-                if (OfflineCollectionData.Find(manifest[i].Id) == null)
+                if (!OfflineCollectionData.IsLibraryCard(manifest[i].Id))
                 {
-                    Debug.LogError("[OfflineGachaVerification] TenPackManifest[" + i + "] id '" + manifest[i].Id + "' is not in the catalog.");
+                    Debug.LogError("[OfflineGachaVerification] Bundle card " + i + " id '" + manifest[i].Id + "' is not in the library.");
                     failures++;
                 }
             }
 
-            int guarantee = OfflineCollectionData.BundleGuaranteeIndex();
-            if (guarantee < 0)
+            foreach (string featured in OfflineCollectionData.FeaturedIds)
             {
-                Debug.LogError("[OfflineGachaVerification] No Epic-or-better card in the bundle; the ten-pack guarantee would fail.");
-                failures++;
+                if (!OfflineCollectionData.IsLibraryCard(featured))
+                {
+                    Debug.LogError("[OfflineGachaVerification] Featured id '" + featured + "' is not in the library.");
+                    failures++;
+                }
             }
 
-            // Deterministic duplicate audit from a clean ledger: exactly the intra-bundle repeats flag
-            // as duplicates. Reset clears ownership/fragments/deck, same as Reset Pack State.
-            OfflineCollectionData.Reset();
+            // The persisted draw must read back identically, so reopening the reveal shows the same cards.
+            PackStateSnapshotCheck(manifest, ref failures);
+
+            // Duplicate audit against the bundle just rolled, from a clean ledger (no reset in between, or the
+            // stored draw would be re-rolled and the flags would describe different cards). A fresh bundle has
+            // no prior ownership, so the flags must equal the intra-bundle repeats only.
             var seen = new HashSet<string>();
             int expectedDuplicates = 0;
             int flaggedDuplicates = 0;
@@ -311,13 +315,29 @@ namespace Overlink.EditorTools
             OfflineCollectionData.Reset();
             if (failures == 0)
             {
-                Debug.Log("[OfflineGachaVerification] PASS — ten-pack rules: 50 cards / 10 packs, guarantee at index "
-                    + guarantee + " (pack " + ((guarantee / 5) + 1) + " slot " + ((guarantee % 5) + 1) + "), "
-                    + expectedDuplicates + " duplicates flagged, loyalty 96→106 grants exactly one bonus pack.");
+                Debug.Log("[OfflineGachaVerification] PASS — ten-pack rules: 50 random library cards / 10 packs, "
+                    + expectedDuplicates + " duplicates flagged, persisted draw reads back, loyalty 96→106 grants exactly one bonus pack.");
             }
             else
             {
                 Debug.LogError("[OfflineGachaVerification] FAIL — " + failures + " ten-pack rule violation(s). Local demo state was reset.");
+            }
+        }
+
+        /// <summary>Reading the persisted draw back must return the same ids in the same order as the first read.</summary>
+        static void PackStateSnapshotCheck(OfflineCollectionData.PackCard[] first, ref int failures)
+        {
+            OfflineCollectionData.PackCard[] again = OfflineCollectionData.BundlePack();
+            bool same = again.Length == first.Length;
+            for (int i = 0; same && i < first.Length; i++)
+            {
+                same = again[i].Id == first[i].Id;
+            }
+
+            if (!same)
+            {
+                Debug.LogError("[OfflineGachaVerification] Persisted bundle draw did not read back identically.");
+                failures++;
             }
         }
 
@@ -405,11 +425,11 @@ namespace Overlink.EditorTools
             OfflineCollectionData.Reset();
             OfflineCollectionData.CommitPurchase(99);
             OfflineCollectionData.EnsurePurchasedSingleResolved();
-            int owned = OfflineCollectionData.Owned(OfflineCollectionData.PackManifest[0].Id);
+            string probe = OfflineCollectionData.SinglePack()[0].Id;
+            int owned = OfflineCollectionData.PulledCopies(probe);
             OfflineCollectionData.EnsurePurchasedSingleResolved();
             if (OfflineCollectionData.PurchasedPacks() != 100 || OfflineCollectionData.LoyaltyGranted() != 1
-                || owned != 4 || OfflineCollectionData.Owned(OfflineCollectionData.PackManifest[0].Id) != owned
-                || OfflineCollectionData.Fragments() != 62)
+                || OfflineCollectionData.PulledCopies(probe) != owned)
                 throw new System.InvalidOperationException("Single-pack threshold or idempotency verification failed.");
             Debug.Log("[BayPointer] PASS: collection initialization uncharged; 99→100 grants one bonus pack exactly once.");
             SessionState.SetBool("Overlink.BayPointer.SingleAccountingVerified", true);
@@ -709,7 +729,7 @@ namespace Overlink.EditorTools
                     OfflinePackOpeningController reveal = RevealController();
                     Transform openAgain = reveal != null ? reveal.transform.Find("Open Again") : null;
                     if (openAgain == null || !openAgain.gameObject.activeSelf) return;
-                    SessionState.SetInt(OwnedBeforeReopenKey, OfflineCollectionData.Owned(OfflineCollectionData.PackManifest[0].Id));
+                    SessionState.SetInt(OwnedBeforeReopenKey, OfflineCollectionData.Owned(OfflineCollectionData.SinglePack()[0].Id));
                     Debug.Log("[OfflineGachaVerification] bay step6 open again t=" + t.ToString("0.00"));
                     openAgain.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                     SetStep(7);
@@ -754,7 +774,7 @@ namespace Overlink.EditorTools
                     if (reveal == null || reveal.IsRevealInProgress || reveal.RevealedCount < 5) return;
                     Transform back = reveal.transform.Find("Back");
                     if (back == null || !back.gameObject.activeSelf) return;
-                    SessionState.SetInt(OwnedBeforeReentryKey, OfflineCollectionData.Owned(OfflineCollectionData.PackManifest[0].Id));
+                    SessionState.SetInt(OwnedBeforeReentryKey, OfflineCollectionData.Owned(OfflineCollectionData.SinglePack()[0].Id));
                     Debug.Log("[OfflineGachaVerification] bay step9 back t=" + t.ToString("0.00"));
                     back.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                     SetStep(10);
@@ -881,7 +901,7 @@ namespace Overlink.EditorTools
                 var queue = so.FindProperty("queueRoot").objectReferenceValue as Transform;
                 var progress = so.FindProperty("progressText").objectReferenceValue as TMPro.TMP_Text;
                 if (OfflineCollectionData.PurchasedPacks() != 100 || OfflineCollectionData.SingleLoyaltyPacks() != 1
-                    || OfflineCollectionData.LoyaltyGranted() != 1 || OfflineCollectionData.Owned(OfflineCollectionData.PackManifest[0].Id) != 4
+                    || OfflineCollectionData.LoyaltyGranted() != 1
                     || queue == null || !queue.gameObject.activeInHierarchy || queue.Find("Capsule 2/State") == null
                     || !queue.Find("Capsule 2/State").GetComponent<TMPro.TMP_Text>().text.Contains("LOYALTY PACK")
                     || progress == null || !progress.text.Contains("/ 10"))
@@ -937,7 +957,7 @@ namespace Overlink.EditorTools
         static void UpdateBayPointer(float t, bool ten)
         {
             string label = ten ? "ten-pack" : "single-pack";
-            var manifest = ten ? OfflineCollectionData.TenPackManifest : OfflineCollectionData.PackManifest;
+            var manifest = ten ? OfflineCollectionData.BundlePack() : OfflineCollectionData.SinglePack();
             int step = SessionState.GetInt(StepKey, 0);
             if (t > (step == 2 ? 180f : 20f)) { PointerFailure("timeout at step " + step); return; }
             var reveal = RevealController();
@@ -1083,9 +1103,9 @@ namespace Overlink.EditorTools
 
         static void CheckFreshResolution(string baselineKey, string action)
         {
-            string id = OfflineCollectionData.PackManifest[0].Id;
+            string id = OfflineCollectionData.SinglePack()[0].Id;
             int copiesPerPack = 0;
-            foreach (var card in OfflineCollectionData.PackManifest)
+            foreach (var card in OfflineCollectionData.SinglePack())
                 if (card.Id == id) copiesPerPack++;
             int delta = OfflineCollectionData.Owned(id) - SessionState.GetInt(baselineKey, -1000);
             if (delta == copiesPerPack)

@@ -62,7 +62,7 @@ E:\Games\Overlink\
   Assets\Scripts\Net\         AuthFlowController.cs, LobbyManager.cs, GoogleTokenProvider.cs
   Assets\Scripts\VFX\         UiBar.cs, UiCounter.cs, UiFx*.cs, UiTween.cs, shaders
   Assets\Scenes\              Gameplay.unity, MainMenu.unity, Deckbuilder.unity (placeholder), Collection.unity, Gacha.unity
-  Assets\Cards\card_pool.json   150-card pool (75C/45R/22E/8L, 50 per faction); schema = Assets\Examples\Cards\card_examples.json; validate with Tools\validate_card_pool.py
+  Tools\mneme-review\card_pool.json   150-card pool (75C/45R/22E/8L, 50 per faction); schema = Assets\Examples\Cards\card_examples.json; validate with Tools\validate_card_pool.py (backup at Archive\cards\card_pool.json)
   Assets\Tests\Core\ / Match\ / Net\   EditMode NUnit tests
   Assets\Tests\Cards\         PlayMode-only — 22 tests, never executed
   GDD\GDD-Overlink-v0.17-PreDevDraft.pdf   Stale v0.17 export — do not treat as current

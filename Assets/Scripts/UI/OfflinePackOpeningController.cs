@@ -292,8 +292,7 @@ namespace Overlink.UI
         readonly List<GameObject> capsules = new List<GameObject>();
         readonly List<GameObject> summaryLines = new List<GameObject>();
         readonly List<GameObject> activeRevealVfx = new List<GameObject>();
-        OfflineCollectionData.PackCard[] activeManifest = OfflineCollectionData.PackManifest;
-        OfflineCollectionData.SignalPackId selectedPack = OfflineCollectionData.SignalPackId.SignalArchive;
+        OfflineCollectionData.PackCard[] activeManifest = new OfflineCollectionData.PackCard[0];
         PackMode mode = PackMode.Single;
         int revealed;
         int fragments;
@@ -351,10 +350,9 @@ namespace Overlink.UI
             mode = PlayerPrefs.GetInt(ModeKey, 0) == 1 ? PackMode.Ten : PackMode.Single;
             if (openingPack)
             {
-                selectedPack = OfflineCollectionData.SelectedPack();
-                OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten, selectedPack);
-                if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved(selectedPack);
-                else OfflineCollectionData.EnsurePurchasedSingleResolved(selectedPack);
+                OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten);
+                if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved();
+                else OfflineCollectionData.EnsurePurchasedSingleResolved();
             }
             BuildActiveManifest();
             // Every entry is a fresh resolution: the flip cursor is never restored, while the meta
@@ -410,12 +408,11 @@ namespace Overlink.UI
         void OpenFromBay(PackMode selectedMode)
         {
             mode = selectedMode;
-            selectedPack = OfflineCollectionData.SelectedPack();
             PlayerPrefs.SetInt(ModeKey, mode == PackMode.Ten ? 1 : 0);
             PlayerPrefs.Save();
-            OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten, selectedPack);
-            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved(selectedPack);
-            else OfflineCollectionData.EnsurePurchasedSingleResolved(selectedPack);
+            OfflineCollectionData.BeginFreshPack(mode == PackMode.Ten);
+            if (mode == PackMode.Ten) OfflineCollectionData.EnsureBundleResolved();
+            else OfflineCollectionData.EnsurePurchasedSingleResolved();
             BuildActiveManifest();
             revealed = 0;
             fragments = OfflineCollectionData.Fragments();
@@ -437,17 +434,12 @@ namespace Overlink.UI
 
         // ── Mode and manifest ───────────────────────────────────────────────────────────────────
 
-        /// <summary>Purchased cards plus any earned loyalty packs, presented in the same queue.</summary>
+        /// <summary>The purchased cards followed by any loyalty bonus cards, presented in the same queue.</summary>
         void BuildActiveManifest()
         {
             var cards = new List<OfflineCollectionData.PackCard>(mode == PackMode.Single
-                ? OfflineCollectionData.ManifestFor(selectedPack) : OfflineCollectionData.BundleManifestFor(selectedPack));
-            int loyaltyPacks = mode == PackMode.Single ? OfflineCollectionData.SingleLoyaltyPacks() : OfflineCollectionData.BundleLoyaltyPacks();
-            for (int l = 0; l < loyaltyPacks; l++)
-            {
-                cards.AddRange(OfflineCollectionData.ManifestFor(selectedPack));
-            }
-
+                ? OfflineCollectionData.SinglePack() : OfflineCollectionData.BundlePack());
+            cards.AddRange(OfflineCollectionData.LoyaltyPack());
             activeManifest = cards.ToArray();
         }
 
@@ -542,9 +534,10 @@ namespace Overlink.UI
         {
             int owned = 0;
             var uniqueIds = new HashSet<string>();
-            for (int i = 0; i < OfflineCollectionData.Catalog.Length; i++)
+            var binderCards = OfflineCollectionData.BinderCards();
+            for (int i = 0; i < binderCards.Count; i++)
             {
-                if (OfflineCollectionData.Owned(OfflineCollectionData.Catalog[i].Id) > 0) owned++;
+                if (OfflineCollectionData.Owned(binderCards[i].Id) > 0) owned++;
             }
 
             collectionOwned = owned;
@@ -656,7 +649,7 @@ namespace Overlink.UI
                 capsule.SetActive(true);
                 capsules.Add(capsule);
 
-                int purchasedPacks = mode == PackMode.Single ? 1 : OfflineCollectionData.PacksInBundle;
+                int purchasedPacks = mode == PackMode.Single ? 1 : OfflineCollectionData.BundlePackCount;
                 bool loyalty = p >= purchasedPacks;
                 string state = p < currentPack || revealed >= activeManifest.Length ? "DONE" : p == currentPack ? "OPEN" : "SEALED";
                 SetCapsuleText(capsule, "Number", loyalty ? "L" + (p - purchasedPacks + 1) : (p + 1).ToString("00"));
@@ -1302,7 +1295,7 @@ namespace Overlink.UI
             }
             int copies = 0;
             foreach (var card in activeManifest) if (card.Id == id) copies++;
-            return OfflineCollectionData.Owned(id) > copies;
+            return OfflineCollectionData.PulledCopies(id) > copies;
         }
 
         // ── Final summary (§6.3) ─────────────────────────────────────────────────────────────────
@@ -1331,7 +1324,7 @@ namespace Overlink.UI
             bool complete = shown >= activeManifest.Length;
             for (int p = 0; p < PackCount && p * CardsPerPack < shown; p++)
             {
-                bool loyalty = p >= (mode == PackMode.Single ? 1 : OfflineCollectionData.PacksInBundle);
+                bool loyalty = p >= (mode == PackMode.Single ? 1 : OfflineCollectionData.BundlePackCount);
                 AddSummaryLine("PACK " + (p + 1).ToString("00") + (loyalty ? "  •  LOYALTY BONUS PACK" : string.Empty),
                     new Color(0.42f, 0.72f, 1f), 20f, TextAnchor.MiddleLeft);
                 for (int s = 0; s < CardsPerPack; s++)
@@ -1355,28 +1348,15 @@ namespace Overlink.UI
 
             if (summaryGuaranteeText != null)
             {
-                if (mode == PackMode.Single)
+                if (!complete)
                 {
-                    summaryGuaranteeText.text = PackCount > 1 ? "SINGLE PACK + LOYALTY BONUS  •  RESOLUTION COMPLETE" : "SINGLE PACK  •  FIVE-CARD RESOLUTION COMPLETE";
+                    summaryGuaranteeText.text = "RESOLUTION IN PROGRESS  •  SUMMARY COMPLETES WHEN ALL CARDS ARE REVEALED";
                 }
                 else
                 {
-                    int guarantee = complete ? OfflineCollectionData.BundleGuaranteeIndex(selectedPack) : -2;
-                    if (guarantee == -2)
-                    {
-                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  AUDIT UNLOCKS WHEN THE BUNDLE IS COMPLETE";
-                    }
-                    else if (guarantee >= 0)
-                    {
-                        OfflineCollectionData.PackCard card = OfflineCollectionData.BundleManifestFor(selectedPack)[guarantee];
-                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  EPIC-OR-BETTER SATISFIED BY PACK "
-                            + ((guarantee / CardsPerPack) + 1) + " SLOT " + ((guarantee % CardsPerPack) + 1) + "  —  "
-                            + card.Name.ToUpperInvariant() + " (" + card.Rarity.ToString().ToUpperInvariant() + ")";
-                    }
-                    else
-                    {
-                        summaryGuaranteeText.text = "TEN-PACK GUARANTEE  •  NO QUALIFYING RESULT (AUDIT FAILURE)";
-                    }
+                    summaryGuaranteeText.text = mode == PackMode.Single
+                        ? (PackCount > 1 ? "SINGLE PACK + LOYALTY BONUS  •  RESOLUTION COMPLETE" : "SINGLE PACK  •  FIVE-CARD RESOLUTION COMPLETE")
+                        : "TEN PACKS  •  " + OfflineCollectionData.BundleSize + " CARDS  •  RESOLUTION COMPLETE";
                 }
             }
 

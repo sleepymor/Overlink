@@ -105,7 +105,8 @@ namespace Overlink.EditorTools
             // World-space row the card camera sees. Slots hang off this root so the hover/flip
             // animation moves them in world units; the controller binds each slot's parts.
             GameObject rowRoot = new GameObject("Pack Card Row");
-            OfflineCollectionData.PackCard[] manifest = OfflineCollectionData.PackManifest;
+            int slotCount = OfflineCollectionData.SinglePackSize;
+            var manifest = new OfflineCollectionData.PackCard[slotCount];
             var slotAnchors = new List<Transform>();
             var slotPivots = new List<Transform>();
             var slotBacks = new List<GameObject>();
@@ -556,6 +557,12 @@ namespace Overlink.EditorTools
             so.FindProperty("openOneButton").objectReferenceValue = BayButton(bay, "Figma Open One");
             so.FindProperty("openTenButton").objectReferenceValue = BayButton(bay, "Figma Open Ten");
             so.FindProperty("returnButton").objectReferenceValue = BayButton(bay, "Figma Return");
+            so.FindProperty("templateCatalog").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<CardTemplateCatalog>(PresentationRoot + "/CardTemplateCatalog.asset");
+            so.FindProperty("frameCatalog").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<CardFrameCatalog>(PresentationRoot + "/CardFrameCatalog.asset");
+            so.FindProperty("tierMaterials").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<CardTierMaterialSet>(PresentationRoot + "/CardTierMaterialSet.asset");
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(shop);
 

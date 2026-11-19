@@ -125,8 +125,6 @@ namespace Overlink.EditorTools
             {
                 Transform bay = FindSceneTransform(scene, "Figma Signal Bay");
                 if (bay == null) { Debug.LogError("[SerializedUIAudit] Gacha: Figma Signal Bay missing."); errors++; }
-                else
-                    for (int i = 1; i <= 3; i++) errors += Require(bay, "Pack Choice " + i, typeof(Button));
             }
             else if (screen == "Gameplay")
             {

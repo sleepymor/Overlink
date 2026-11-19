@@ -242,6 +242,7 @@ namespace Overlink.Net
             IsReady = true;
             AccountManager.Instance.ApplyIdentity(draft.username, draft.tag);
             SetStatus($"Profile saved: {draft.username}#{draft.tag}");
+
             ProfileLoaded?.Invoke(draft);
             return AuthResult.Ok();
         }

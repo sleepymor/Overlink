@@ -1,5 +1,9 @@
 # Overlink — v0.18 Main Menu Implementation Plan
 
+**Status: ✅ COMPLETE** — all scoped scenes exist in `Assets/Scenes/` and the menu compiles
+and navigates. This plan is retained as a record of completed work; it is no longer active
+implementation guidance. Current source of truth: `AGENTS.md`.
+
 **Scope:** A working main menu scene that connects to all other scenes. Destination
 scenes do not need to be complete — placeholder stubs are acceptable. The menu must
 compile and navigate in the Unity editor with no missing references.
