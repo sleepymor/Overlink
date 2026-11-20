@@ -20,7 +20,8 @@ than the things a player must read.
 | Signal (player / FSTI accent) | `#6FE3D0` | player glows, focus, hover, emissive rims on player side |
 | Primary UI blue | `#2E7AD4` (UiKit `Primary`) | buttons, links |
 | Accent UI blue | `#7AB4F8` (UiKit `Accent`) | text accents, highlights |
-| Warm (opponent / FRTI accent) | `#E8A33D` | opponent glows, Active socket rims, warnings |
+| Enemy (opponent) | `#F25B67` | opponent glows, node and Core edges, Enemy socket rims |
+| Warm (FRTI accent / Neutral) | `#E8A33D` | FRTI faction accents, Neutral node edges, warnings |
 | FPB slate | `#2F3E5C` / accent `#8FB8E8` | FPB faction frames and chips |
 | FRTI gunmetal | `#3A4048` / accent `#E8A33D` | FRTI faction frames and chips |
 | Danger | `#C84A44` (UiKit `Danger`) | destructive actions, concede |
@@ -41,6 +42,14 @@ Value rules:
   buttons keep a 4 px radius so the notch reads as deliberate, not rounded-cute.
 - **Motion:** ease-out for settles, BACK-overshoot for pops, 120-220 ms for UI, 80-140 ms for
   combat feedback. Nothing linear except scrolling backdrops.
+
+### Board crystal finish (exception, board only)
+
+The battle board (table, sockets, node plates, piles, node X-links) may take a crystal finish
+on top of the matte base. Surfaces stay matte: no translucent glass and no mirror specular. The
+crystal read comes from emissive edge glow in the owner colour, a fresnel sheen on rims, and
+faceted inlays. Decorative chevrons and registration ticks are drawn in the shader. Everything
+else in the UI keeps the strict matte rule above.
 
 ## Board skin contract (binding for all supplied art)
 
@@ -72,14 +81,16 @@ in is a drop onto the five slots (no code change).
 
 ## Typography
 
-- **Rajdhani** (OFL): Bold = logo, turn banner, screen titles; SemiBold = HUD numerals, buttons;
-  Medium = labels, body where space is tight.
+- **Chakra Petch** (OFL) is the single UI family, replacing Rajdhani across the whole UI.
+  Bold = logo, turn banner, screen titles, HUD numerals, buttons; Regular = labels and body.
+  Chakra Petch has no SemiBold cut, so Bold stands in for it.
 - **LiberationSans** remains the TMP fallback asset only; no new copy sets it deliberately.
 - TMP SDF atlases at 1024, static, ASCII + the glyphs used by HUD symbols (◆ ● ▲ / digits).
 
 ## What this doc forbids
 
 - Pure-white albedos on board surfaces (kills the tint multiply).
+- Rajdhani as a UI face. The font asset is retired from runtime use.
 - Drop shadows baked into UI sprites (shadows are code-side, 1 px outline or scrim).
 - New hues outside the palette table; factions keep exactly their two colours each.
 - Juice at rest: every exaggeration returns to rest (see `game-feel` tiers in the uplift plan).

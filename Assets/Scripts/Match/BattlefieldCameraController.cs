@@ -59,18 +59,19 @@ namespace Overlink.Match
         public float yaw = 0f;
         [Tooltip("Opening distance, derived from the tabletop footprint rather than copied from the ceiling. " +
                  "At the shipped 38 degree field of view this frames the 16.5-unit-wide table with about an " +
-                 "eleventh of a table edge of air on each side at 16:9.")]
-        public float distance = 15f;
+                 "eleventh of a table edge of air on each side at 16:9. Scaled by BoardScale when the board " +
+                 "is scaled up.")]
+        public float distance = 22f;
         public float fieldOfView = 38f;
 
         [Header("Zoom (mouse wheel)")]
-        public float minDistance = 8.8f;
+        public float minDistance = 12f;
         [Tooltip("Deepest zoom-out of the tilted tabletop view, and the point past which the same wheel input " +
                  "starts lifting the camera toward bird's-eye. Deliberately beyond the opening framing: when " +
                  "the opening sat exactly on the ceiling, one stray scroll at the start of a match began " +
                  "craning the camera off the board instead of pulling back. Two notches of headroom means a " +
                  "single accidental scroll now does nothing visible at all.")]
-        public float maxDistance = 17f;
+        public float maxDistance = 28f;
         [Tooltip("Distance change per scroll notch. Six or seven notches span the tabletop range; at the old 6 " +
                  "units one notch ate 37% of it, which left the view with effectively two zoom positions.")]
         public float zoomStep = 1.5f;
@@ -79,10 +80,8 @@ namespace Overlink.Match
         [Tooltip("Distance the crane settles at when fully overhead. Sized by the fit contract pinned in " +
                  "BattlefieldCameraControllerTests: the whole 16.5 x 10.3 tabletop has to read as a plan view " +
                  "at the narrowest aspect the game ships (1.5:1) with no more than 15% of slack in the tight " +
-                 "axis. That ceiling is what keeps the tabletop tier squeezed, because fitting the same table " +
-                 "at a tilt costs almost the same distance - the two tiers are neighbours by geometry, not by " +
-                 "accident, and buying zoom headroom by pushing this number out floats the board in void.")]
-        public float birdDistance = 18f;
+                 "axis. Scaled by BoardScale when the board is scaled up.")]
+        public float birdDistance = 30f;
         [Tooltip("Pitch the view settles at when fully overhead. 89 rather than 90 keeps the ground-plane " +
                  "raycast used by drag-panning non-degenerate.")]
         public float birdPitch = 89f;
@@ -94,20 +93,15 @@ namespace Overlink.Match
         public float smooth = 12f;
 
         [Header("Pan")]
-        [Tooltip("How far past the point where the tabletop exactly fills the frame the focus may still " +
-                 "drift, in board units. Half the widest socket on the table, so a board edge never lands " +
-                 "flush against the screen border.")]
-        public float panSlackX = 0.55f;
-        public float panSlackZ = 0.55f;
+        [Header("Ground")]
+        [Tooltip("World Y of the board plane used to interpret drags.")]
+        public float groundY = 0f;
+
         [Tooltip("Aspect used to widen the vertical field of view into a horizontal one when no camera is " +
                  "attached, which is the case for a bare test rig. In play mode the real camera's aspect " +
                  "always wins.")]
         public float referenceAspect = 16f / 9f;
         public float keyboardPanSpeed = 10f;
-
-        [Header("Ground")]
-        [Tooltip("World Y of the board plane used to interpret drags.")]
-        public float groundY = 0f;
 
         Camera cam;
         BattlefieldPresenter inspectionPresenter;
@@ -130,6 +124,12 @@ namespace Overlink.Match
 
         /// <summary>Distance the camera is easing toward.</summary>
         public float TargetDistance => targetDistance;
+
+        /// <summary>Computed pan slack in X, scaled by <see cref="BattlefieldPresenter.BoardScale"/>.</summary>
+        public float PanSlackX => 15f * BattlefieldPresenter.BoardScale;
+
+        /// <summary>Computed pan slack in Z, scaled by <see cref="BattlefieldPresenter.BoardScale"/>.</summary>
+        public float PanSlackZ => 12f * BattlefieldPresenter.BoardScale;
 
         /// <summary>
         /// The board point the pan clamp is built around: the authored <see cref="focus"/>, captured once.
@@ -363,10 +363,13 @@ namespace Overlink.Match
         /// </summary>
         void ClampFocus()
         {
+            // Pan slack scales with the board so a corner Node can be centred on screen even on the
+            // scaled-up table. Computed from BoardScale rather than stored as serialized fields, because
+            // scene-authored values would otherwise outlive the code defaults.
             float slackX = Mathf.Max(0f, BattlefieldPresenter.TableWidth * 0.5f - VisibleHalfWidth())
-                + Mathf.Max(0f, panSlackX);
+                + 15f * BattlefieldPresenter.BoardScale;
             float slackZ = Mathf.Max(0f, BattlefieldPresenter.TableDepth * 0.5f - VisibleHalfDepth())
-                + Mathf.Max(0f, panSlackZ);
+                + 12f * BattlefieldPresenter.BoardScale;
 
             targetFocus.x = Mathf.Clamp(targetFocus.x, boardCenter.x - slackX, boardCenter.x + slackX);
             targetFocus.z = Mathf.Clamp(targetFocus.z, boardCenter.z - slackZ, boardCenter.z + slackZ);

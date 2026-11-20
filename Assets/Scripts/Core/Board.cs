@@ -59,6 +59,8 @@ namespace Overlink.Core
                 case SlotType.NodeActive:
                 case SlotType.NodeBench:
                     return cardType == CardType.Unit || cardType == CardType.Relay;
+                case SlotType.Protocol:
+                    return cardType == CardType.Protocol;
                 default:
                     return false;
             }
@@ -335,6 +337,8 @@ namespace Overlink.Core
                         return NodeBench[nodeIndex][index];
                     }
                     return null;
+                case SlotType.Protocol:
+                    return new BoardSlot(SlotType.Protocol, 0, -1) { Card = Protocol };
                 default:
                     return null;
             }

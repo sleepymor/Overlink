@@ -79,6 +79,18 @@ namespace Overlink.Match.Tests
         }
 
         [Test]
+        public void SlotIdentity_PlayerProtocolIsADropTarget()
+        {
+            // The player's Protocol has exactly one home, so its slot is fixed. It still has to parse, or a
+            // Protocol dragged onto its socket would find nothing under the card.
+            Assert.IsTrue(BattlefieldPresenter.TryParseSlotIdentity("PlayProtocol",
+                out SlotType type, out int index, out int nodeIndex));
+            Assert.AreEqual(SlotType.Protocol, type);
+            Assert.AreEqual(0, index);
+            Assert.AreEqual(-1, nodeIndex, "The Protocol belongs to the player, not to a Node.");
+        }
+
+        [Test]
         public void SlotIdentity_NodeTileSplitsNodeAndSlotIndices()
         {
             // "NodePlayActive2_1" carries two numbers: the node first, then the slot. Getting the order
@@ -112,7 +124,6 @@ namespace Overlink.Match.Tests
         [TestCase("NodeOppActive2_0")]
         [TestCase("NodeOppBench0_1")]
         [TestCase("NodePlate1")]
-        [TestCase("PlayProtocol")]
         [TestCase("PlayCorePlate")]
         [TestCase("OppCorePlate")]
         [TestCase("Header")]
@@ -122,7 +133,7 @@ namespace Overlink.Match.Tests
         [TestCase(null)]
         public void SlotIdentity_NonTargetsDoNotParse(string name)
         {
-            // Opponent sockets, Node plates, the Protocol tiles, the two Core plates and the board furniture
+            // Opponent sockets, Node plates, the opponent's Protocol, the two Core plates and the board furniture
             // are never drop targets. Parsing one as a slot would let a unit be deployed onto the opponent's
             // half — or, for the plates, onto scenery that holds no unit at all. The plates are clickable and
             // the ownership parser knows them; being a drop target is a strictly narrower claim.
@@ -409,7 +420,7 @@ namespace Overlink.Match.Tests
             Vector3 focus = shipped.focus;
             float pitch = shipped.pitch;
             float yaw = shipped.yaw;
-            float distance = shipped.distance;
+            float distance = ShippedFraming.Distance;
             float fieldOfView = shipped.fieldOfView;
             Object.DestroyImmediate(defaults);
 

@@ -76,6 +76,11 @@ namespace Overlink.Match
         CardInstance selected;
         readonly List<CardInstance> targets = new List<CardInstance>();
 
+        // Two-click deploy: the player taps a card in the hand, which sets this, then taps a socket to
+        // deploy it there. Cleared on deploy, cancel, or a click on anything that is not a legal deploy
+        // socket. While set, board clicks go to deploy first and the attack/block/inspect paths sleep.
+        CardData deployCard;
+
         // The Bench units the picked-up Active may be traded for: the second half of what an Attack pick
         // offers. Deliberately not a third PickMode - the player does not announce whether they mean to attack
         // or to retreat, they pick the unit up and both lists light at once, and the click on a red or a blue
@@ -119,6 +124,11 @@ namespace Overlink.Match
             }
 
             WireHud();
+
+            if (hand != null)
+            {
+                hand.CardClicked += OnHandCardClicked;
+            }
         }
 
         /// <summary>
@@ -149,6 +159,11 @@ namespace Overlink.Match
             if (hud != null)
             {
                 hud.RailPressed -= OnRailPressed;
+            }
+
+            if (hand != null)
+            {
+                hand.CardClicked -= OnHandCardClicked;
             }
         }
 
@@ -364,6 +379,28 @@ namespace Overlink.Match
                 ClearSelection();
                 ClearBrowse();
                 presenter.ClearDetails();
+                return;
+            }
+
+            // Two-click deploy takes priority: a card was tapped in the hand and the player is now
+            // choosing which socket to deploy it to. A click on a free, player-owned socket deploys;
+            // anything else cancels the deploy and returns to ordinary clicks.
+            if (deployCard != null)
+            {
+                if (hit != null && (hit.Kind == BoardHitKind.Socket || hit.Kind == BoardHitKind.Protocol)
+                    && hit.Owner == PlayerIndex.Player && hit.Card == null)
+                {
+                    var slot = new BoardSlot(hit.SlotType, hit.SlotIndex, hit.NodeIndex);
+                    if (coordinator.TryPlayFromUISlot(deployCard, slot))
+                    {
+                        ClearDeployMode();
+                        return;
+                    }
+                    // The engine rejected the play (cost, phase, etc.) - keep deploy mode active so the
+                    // player can try another socket without re-selecting the card.
+                    return;
+                }
+                ClearDeployMode();
                 return;
             }
 
@@ -778,5 +815,33 @@ namespace Overlink.Match
 
         /// <summary>Whether the current pick is an attack or a block. Diagnostic and test surface.</summary>
         public bool PickedToBlock => mode == PickMode.Block;
+
+        // ---- Two-click deploy ------------------------------------------------------------------------
+
+        void OnHandCardClicked(CardData cardData)
+        {
+            // Two-click deploy is a Main-phase, player-turn gesture. Setup and the opponent's turn
+            // have their own click flows and must not be interrupted by a hand tap.
+            if (coordinator == null) return;
+            var state = coordinator.GetMatchState();
+            if (state == null || state.CurrentPhase != TurnPhase.Main
+                || state.ActivePlayer != PlayerIndex.Player) return;
+
+            deployCard = cardData;
+            if (presenter != null)
+            {
+                presenter.ShowDeployTargets(cardData.Definition.Type);
+            }
+            coordinator.ShowNotice($"Tap a socket to deploy {cardData.title}.");
+        }
+
+        void ClearDeployMode()
+        {
+            deployCard = null;
+            if (presenter != null)
+            {
+                presenter.ClearMarks();
+            }
+        }
     }
 }

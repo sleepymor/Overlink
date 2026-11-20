@@ -37,21 +37,22 @@ namespace Overlink.Match.Tests
         // what it just said proves nothing at all. These are the numbers the shipped board was judged on;
         // changing one deliberately means changing it here in the same commit, which is the point.
 
-        static readonly Color ShippedTableTint = new Color(0.09f, 0.11f, 0.15f);
-        static readonly Color ShippedActiveEmpty = new Color(0.30f, 0.27f, 0.19f);
-        static readonly Color ShippedBenchEmpty = new Color(0.13f, 0.15f, 0.19f);
+        static readonly Color ShippedTableTint = new Color(0.055f, 0.075f, 0.086f);
+        static readonly Color ShippedActiveEmpty = new Color(0.086f, 0.129f, 0.149f);
+        static readonly Color ShippedBenchEmpty = new Color(0.043f, 0.067f, 0.078f);
         static readonly Color ShippedProtocolEmpty = new Color(0.23f, 0.18f, 0.31f);
         static readonly Color ShippedActiveRim = new Color(0.80f, 0.64f, 0.28f);
         static readonly Color ShippedBenchRim = new Color(0.28f, 0.39f, 0.54f);
         static readonly Color ShippedProtocolRim = new Color(0.58f, 0.36f, 0.78f);
         static readonly Color ShippedPlayerTint = new Color(0.20f, 0.42f, 0.72f);
         static readonly Color ShippedOpponentTint = new Color(0.62f, 0.24f, 0.24f);
-        static readonly Color ShippedCorePlateTint = new Color(0.16f, 0.18f, 0.25f);
-        static readonly Color ShippedNodeFree = new Color(0.26f, 0.28f, 0.32f);
-        static readonly Color ShippedNodePlayer = new Color(0.14f, 0.48f, 0.28f);
-        static readonly Color ShippedNodeOpponent = new Color(0.56f, 0.38f, 0.12f);
-        static readonly Color ShippedDeckTint = new Color(0.13f, 0.19f, 0.25f);
-        static readonly Color ShippedDiscardTint = new Color(0.21f, 0.17f, 0.14f);
+        static readonly Color ShippedCorePlateTint = new Color(0.090f, 0.129f, 0.149f);
+        static readonly Color ShippedNodeFree = new Color(1.00f, 0.75f, 0.27f);
+        static readonly Color ShippedNodePlayer = new Color(0.25f, 0.62f, 1.00f);
+        static readonly Color ShippedNodeOpponent = new Color(0.95f, 0.36f, 0.40f);
+        static readonly Color ShippedNodePlateBody = new Color(0.114f, 0.161f, 0.180f);
+        static readonly Color ShippedDeckTint = new Color(0.063f, 0.090f, 0.098f);
+        static readonly Color ShippedDiscardTint = new Color(0.102f, 0.098f, 0.094f);
 
         // Mirrored from the presenter's construction, for the same reason the colours are: the board's shape is
         // what the families have to account for, and reading it back off the built board would let a body
@@ -202,7 +203,10 @@ namespace Overlink.Match.Tests
                     return 2 + Board.NodeCount;                        // two Core plates, one per Node
                 case BattlefieldPresenter.Surface.Rim:
                     return 4 * (2 * (Board.CoreActiveSlots + Board.CoreBenchSlots + 1)
-                        + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots));
+                        + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots)
+                        + Board.NodeCount);                            // a Node plate edge, one per Node
+                case BattlefieldPresenter.Surface.Link:
+                    return Board.NodeCount;
                 case BattlefieldPresenter.Surface.Pile:
                     return 2 * (1 + BuriedLayersPerPile);               // two tops, stacked
                 default:
@@ -220,6 +224,7 @@ namespace Overlink.Match.Tests
                 BattlefieldPresenter.Surface.Plate,
                 BattlefieldPresenter.Surface.Pile,
                 BattlefieldPresenter.Surface.Rim,
+                BattlefieldPresenter.Surface.Link,
             };
         }
 
@@ -251,6 +256,7 @@ namespace Overlink.Match.Tests
             AssertSame(presenter.nodeFree, ShippedNodeFree, "nodeFree");
             AssertSame(presenter.nodePlayer, ShippedNodePlayer, "nodePlayer");
             AssertSame(presenter.nodeOpponent, ShippedNodeOpponent, "nodeOpponent");
+            AssertSame(presenter.nodePlateBody, ShippedNodePlateBody, "nodePlateBody");
             AssertSame(presenter.deckTint, ShippedDeckTint, "deckTint");
             AssertSame(presenter.discardTint, ShippedDiscardTint, "discardTint");
         }
@@ -266,6 +272,7 @@ namespace Overlink.Match.Tests
             Assert.IsNull(presenter.tableSkin, "tableSkin");
             Assert.IsNull(presenter.socketSkin, "socketSkin");
             Assert.IsNull(presenter.plateSkin, "plateSkin");
+            Assert.IsNull(presenter.corePlateSkin, "corePlateSkin");
             Assert.IsNull(presenter.pileSkin, "pileSkin");
             Assert.IsNull(presenter.rimSkin, "rimSkin");
         }
@@ -284,6 +291,27 @@ namespace Overlink.Match.Tests
             var lightMode = shader.FindPassTagValue(pass, new UnityEngine.Rendering.ShaderTagId("LightMode"));
             Assert.AreEqual(new UnityEngine.Rendering.ShaderTagId("SRPDefaultUnlit"), lightMode,
                 "Renderer2D skips UniversalForward passes, making all fallback board surfaces invisible.");
+        }
+
+        static List<CardDefinition> RepaintDeck()
+        {
+            var deck = new List<CardDefinition>();
+            for (int i = 0; i < 30; i++)
+            {
+                deck.Add(new CardDefinition
+                {
+                    Id = $"skin_test_{i}",
+                    Name = "Skin Test Unit",
+                    Faction = Faction.Fsti,
+                    Rarity = Rarity.Common,
+                    Type = CardType.Unit,
+                    Cost = 1,
+                    Atk = 1,
+                    Hp = 2
+                });
+            }
+
+            return deck;
         }
 
         [Test]
@@ -308,6 +336,41 @@ namespace Overlink.Match.Tests
         }
 
         [Test]
+        public void EveryNodeHasOneXLinkToItsOwnHalfsCore()
+        {
+            // The reference board draws one diagonal filament from each Node to the Core plate on its own
+            // half. Missing one would leave a Node unconnected, and the tests on the board's population would
+            // not notice, since the links carry no tile name the families claim.
+            NewBoard(out Transform board);
+
+            for (int n = 0; n < Board.NodeCount; n++)
+            {
+                Transform link = FindDeepTransform(board, $"NodeLink{n}");
+                Assert.IsNotNull(link, $"NodeLink{n} must exist.");
+                Assert.IsNotNull(link.Find("Body"), $"NodeLink{n} must carry its filament quad.");
+            }
+        }
+
+        static Transform FindDeepTransform(Transform root, string name)
+        {
+            if (root.name == name)
+            {
+                return root;
+            }
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDeepTransform(root.GetChild(i), name);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        [Test]
         public void SurfaceFor_TellsTheRimApartFromASocket()
         {
             // The gold border cube is literally named "Socket", which is why the rim test has to precede the
@@ -320,6 +383,7 @@ namespace Overlink.Match.Tests
             Assert.AreEqual(BattlefieldPresenter.Surface.Pile, BattlefieldPresenter.SurfaceFor("Stack2"));
             Assert.AreEqual(BattlefieldPresenter.Surface.Plate, BattlefieldPresenter.SurfaceFor("NodePlate3"));
             Assert.AreEqual(BattlefieldPresenter.Surface.Plate, BattlefieldPresenter.SurfaceFor("OppCorePlate"));
+            Assert.AreEqual(BattlefieldPresenter.Surface.Link, BattlefieldPresenter.SurfaceFor("NodeLink0"));
             Assert.AreEqual(BattlefieldPresenter.Surface.Socket, BattlefieldPresenter.SurfaceFor("PlayProtocol"));
             Assert.AreEqual(BattlefieldPresenter.Surface.Socket,
                 BattlefieldPresenter.SurfaceFor("NodePlayBench1_1"));
@@ -345,7 +409,7 @@ namespace Overlink.Match.Tests
                 ("DiscardPile", ShippedDiscardTint),
                 ("PlayCorePlate", ShippedCorePlateTint),
                 ("OppCorePlate", ShippedCorePlateTint),
-                ("NodePlate0", ShippedNodeFree),
+                ("NodePlate0", ShippedNodePlateBody),
                 ("PlayCoreActive0", ShippedActiveEmpty),
                 ("PlayCoreBench0", ShippedBenchEmpty),
                 ("PlayProtocol", ShippedProtocolEmpty),
@@ -403,9 +467,10 @@ namespace Overlink.Match.Tests
             }
 
             int expectedFrames = 4 * (2 * (Board.CoreActiveSlots + Board.CoreBenchSlots + 1)
-                + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots));
+                + Board.NodeCount * 2 * (Board.NodeActiveSlots + Board.NodeBenchSlots)
+                + Board.NodeCount);
             Assert.AreEqual(expectedFrames, frames,
-                "Every card slot must have four visible editable edge frames.");
+                "Every card slot and Node plate must have four visible editable edge frames.");
 
             Renderer benchFrame = null;
             foreach (Renderer body in bodies)
@@ -432,12 +497,79 @@ namespace Overlink.Match.Tests
         // ---- Skin ----------------------------------------------------------------------
 
         [Test]
+        public void CoreOutlineSkin_OverridesOnlyCorePlatesAndTracksLiveChanges()
+        {
+            BattlefieldPresenter presenter = NewBoard(out Transform board);
+            Material plates = NewProbe(board);
+            Material core = NewProbe(board);
+            presenter.plateSkin = plates;
+            presenter.corePlateSkin = core;
+            presenter.ApplySkinsIfChanged();
+            List<Renderer> bodies = Bodies(board);
+            Assert.AreSame(core, BodyNamed(bodies, "PlayCorePlate").sharedMaterial);
+            Assert.AreSame(core, BodyNamed(bodies, "OppCorePlate").sharedMaterial);
+            Assert.AreSame(plates, BodyNamed(bodies, "NodePlate0").sharedMaterial);
+
+            presenter.corePlateSkin = null;
+            presenter.ApplySkinsIfChanged();
+            Assert.AreSame(plates, BodyNamed(bodies, "PlayCorePlate").sharedMaterial,
+                "Clearing the Core override restores the shared plate skin when one is assigned.");
+        }
+
+        [Test]
+        public void CoreOutlineSkin_IsUsedDuringFreshConstruction()
+        {
+            var go = new GameObject("CoreOutlineBuildTest");
+            spawned.Add(go);
+            var presenter = go.AddComponent<BattlefieldPresenter>();
+            presenter.corePlateSkin = AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Materials/Battlefield/Skin_CorePlate.mat");
+            Assert.IsNotNull(presenter.corePlateSkin);
+            Assert.AreEqual(5f, presenter.corePlateSkin.GetFloat("_Pattern"));
+            presenter.BuildBoard();
+            List<Renderer> bodies = Bodies(presenter.transform.Find("Battlefield"));
+            Assert.AreSame(presenter.corePlateSkin, BodyNamed(bodies, "OppCorePlate").sharedMaterial);
+            Assert.AreNotSame(presenter.corePlateSkin, BodyNamed(bodies, "NodePlate0").sharedMaterial);
+        }
+
+        [Test]
+        public void PlateAccents_PreserveMatteFillAndMirrorIntoTheSideGutters()
+        {
+            BattlefieldPresenter presenter = NewBoard(out Transform board);
+            presenter.plateSkin = AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Materials/Battlefield/Skin_Plate.mat");
+            presenter.corePlateSkin = AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Materials/Battlefield/Skin_CorePlate.mat");
+            presenter.ApplySkins();
+            var state = new MatchState();
+            state.InitializeMatch(RepaintDeck(), RepaintDeck());
+            presenter.Repaint(state);
+
+            List<Renderer> bodies = Bodies(board);
+            var block = new MaterialPropertyBlock();
+            for (int n = 0; n < Board.NodeCount; n++)
+            {
+                BodyNamed(bodies, $"NodePlate{n}").GetPropertyBlock(block);
+                AssertSame(block.GetColor("_BaseColor"), presenter.nodePlateBody, "plate fill");
+                AssertSame(block.GetColor("_AccentColor"), presenter.nodeFree, "neutral chevrons");
+                Assert.AreEqual(n == 0 || n == 3 ? 1f : -1f, block.GetFloat("_ChevronSide"));
+                Assert.AreEqual(1f, block.GetFloat("_Chevrons"));
+            }
+
+            BodyNamed(bodies, "PlayCorePlate").GetPropertyBlock(block);
+            AssertSame(block.GetColor("_AccentColor"), presenter.nodePlayer, "ally Core outline");
+            Assert.AreEqual(0f, block.GetFloat("_Chevrons"));
+            BodyNamed(bodies, "OppCorePlate").GetPropertyBlock(block);
+            AssertSame(block.GetColor("_AccentColor"), presenter.nodeOpponent, "enemy Core outline");
+        }
+
+        [Test]
         public void ASkinClaimsItsWholeFamilyAndNotOneBodyOutsideIt()
         {
             BattlefieldPresenter presenter = NewBoard(out Transform board);
             List<Renderer> bodies = Bodies(board);
 
-            // Five distinct probes at once, so a body wearing the wrong one is a positive statement about which
+            // Six distinct probes at once, so a body wearing the wrong one is a positive statement about which
             // two families overlap. Testing them one at a time would let a leak pass as an untouched neighbour.
             var skin = new Dictionary<BattlefieldPresenter.Surface, Material>
             {
@@ -446,6 +578,7 @@ namespace Overlink.Match.Tests
                 { BattlefieldPresenter.Surface.Plate, NewProbe(board) },
                 { BattlefieldPresenter.Surface.Pile, NewProbe(board) },
                 { BattlefieldPresenter.Surface.Rim, NewProbe(board) },
+                { BattlefieldPresenter.Surface.Link, NewProbe(board) },
             };
 
             presenter.tableSkin = skin[BattlefieldPresenter.Surface.Table];
@@ -453,6 +586,7 @@ namespace Overlink.Match.Tests
             presenter.plateSkin = skin[BattlefieldPresenter.Surface.Plate];
             presenter.pileSkin = skin[BattlefieldPresenter.Surface.Pile];
             presenter.rimSkin = skin[BattlefieldPresenter.Surface.Rim];
+            presenter.linkSkin = skin[BattlefieldPresenter.Surface.Link];
             presenter.ApplySkins();
 
             foreach (Renderer body in bodies)
@@ -505,7 +639,7 @@ namespace Overlink.Match.Tests
             spawned.Add(go);
             var presenter = go.AddComponent<BattlefieldPresenter>();
             presenter.tableTint = new Color(0.045f, 0.07f, 0.12f, 1f);
-            var skin = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Battlefield/Fallback_Table.mat");
+            var skin = AssetDatabase.LoadAssetAtPath<Material>("Assets/Battlefield/Fallback_Table.mat");
             Assert.IsNotNull(skin);
             presenter.tableSkin = skin;
             presenter.BuildBoard();

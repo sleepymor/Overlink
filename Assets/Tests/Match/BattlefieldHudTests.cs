@@ -976,6 +976,7 @@ namespace Overlink.Match.Tests
             var defaultsGo = new GameObject("FramingDefaults");
             spawned.Add(defaultsGo);
             BattlefieldCameraController shipped = defaultsGo.AddComponent<BattlefieldCameraController>();
+            shipped.distance = ShippedFraming.Distance;
             Quaternion rot = Quaternion.Euler(shipped.pitch, shipped.yaw, 0f);
             Vector3 rigPosition = shipped.focus - rot * Vector3.forward * shipped.distance;
 

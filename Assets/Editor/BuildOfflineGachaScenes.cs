@@ -61,7 +61,7 @@ namespace Overlink.EditorTools
         static readonly Color TextBright = new Color(0.871f, 0.910f, 0.933f); // #DDE8ED
         static readonly Color TextDim = new Color(0.510f, 0.588f, 0.663f); // #8296A9
 
-        // Chakra Petch SDF for the reveal screen only; other screens keep the shared Rajdhani default.
+        // Chakra Petch SDF is the shared UI face; the reveal screen also takes the Regular cut for body copy.
         const string RevealFontPath = "Assets/UI/Fonts/ChakraPetch-Regular SDF.asset";
         const string RevealFontBoldPath = "Assets/UI/Fonts/ChakraPetch-Bold SDF.asset";
         static TMP_FontAsset textFontOverride;
@@ -674,7 +674,7 @@ namespace Overlink.EditorTools
             tmp.text = value;
             tmp.fontSize = fontSize;
             tmp.color = color;
-            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/ChakraPetch-Bold");
             if (font != null) tmp.font = font;
             tmp.alignment = alignment;
             tmp.enableWordWrapping = true;
@@ -967,7 +967,7 @@ namespace Overlink.EditorTools
             tmp.text = value;
             tmp.fontSize = size;
             tmp.color = color;
-            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+            TMP_FontAsset font = textFontOverride != null ? textFontOverride : Resources.Load<TMP_FontAsset>("Fonts/ChakraPetch-Bold");
             if (font != null) tmp.font = font;
             tmp.richText = false;
             tmp.enableWordWrapping = true;

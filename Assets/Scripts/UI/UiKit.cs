@@ -344,7 +344,7 @@ namespace Overlink.UI
             get
             {
                 if (displayFont == null)
-                    displayFont = Resources.Load<TMP_FontAsset>("Fonts/Rajdhani-SemiBold");
+                    displayFont = Resources.Load<TMP_FontAsset>("Fonts/ChakraPetch-Bold");
                 return displayFont;
             }
         }

@@ -9,17 +9,18 @@ namespace Overlink.Editor
     /// <summary>One-shot editor utility for the runtime-loadable Overlink display font.</summary>
     public static class OverlinkFontAssetGenerator
     {
-        const string FontPath = "Assets/TextMesh Pro/Fonts/Rajdhani-SemiBold.ttf";
+        const string FontPath = "Assets/UI/Fonts/ChakraPetch-Bold.ttf";
         const string Folder = "Assets/Resources/Fonts";
-        const string AssetPath = Folder + "/Rajdhani-SemiBold.asset";
+        const string AssetName = "ChakraPetch-Bold";
+        const string AssetPath = Folder + "/" + AssetName + ".asset";
 
-        [MenuItem("Overlink/Visuals/Generate Rajdhani TMP Font")]
+        [MenuItem("Overlink/Visuals/Generate Chakra Petch TMP Font")]
         public static void Generate()
         {
             Font font = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
             if (font == null)
             {
-                Debug.LogError("[Overlink] Rajdhani font not found at " + FontPath);
+                Debug.LogError("[Overlink] Chakra Petch font not found at " + FontPath);
                 return;
             }
 
@@ -34,22 +35,22 @@ namespace Overlink.Editor
                 AtlasPopulationMode.Dynamic, true);
             if (asset == null)
             {
-                Debug.LogError("[Overlink] Could not create the Rajdhani TMP font asset.");
+                Debug.LogError("[Overlink] Could not create the Chakra Petch TMP font asset.");
                 return;
             }
 
-            asset.name = "Rajdhani-SemiBold";
+            asset.name = AssetName;
             AssetDatabase.CreateAsset(asset, AssetPath);
 
             // CreateFontAsset returns the atlas and material as in-memory objects. They must be
             // registered as sub-assets before saving; otherwise the YAML asset contains {fileID: 0}
             // for m_AtlasTextures and TMP throws when it tries to resolve a character at runtime.
             Texture2D atlas = asset.atlasTextures[0];
-            atlas.name = "Rajdhani-SemiBold Atlas";
+            atlas.name = AssetName + " Atlas";
             AssetDatabase.AddObjectToAsset(atlas, asset);
 
             Material material = asset.material;
-            material.name = "Rajdhani-SemiBold Atlas Material";
+            material.name = AssetName + " Atlas Material";
             AssetDatabase.AddObjectToAsset(material, asset);
 
             // Populate the complete printable ASCII set up front. This produces a self-contained

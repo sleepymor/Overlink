@@ -253,6 +253,10 @@ namespace Overlink.Cards
         /// </summary>
         public event Action<CardData, BoardSlot> CardNominated;
 
+        /// <summary>Raised when the player taps a hand card - a short press-and-release with no drag movement
+        /// and no hold-to-zoom. The front end can use this for a two-click deploy: tap a card, then tap a socket.</summary>
+        public event Action<CardData> CardClicked;
+
         public int CardCount => cards.Count;
 
         /// <summary>The live views, in slot order. Read-only; the gallery captions use it.</summary>
@@ -1091,15 +1095,18 @@ namespace Overlink.Cards
             dropTargetCleared?.Invoke();
 
             // Either a resolved socket or the classic fling past the play line. The socket route is what
-            // makes the player's own ranks - which sit below that line - reachable at all.
+            // makes the player's own ranks - which sit below that line - reachable at all. Abilities occupy
+            // no socket, so a fling above the play line plays them even when resolvers are installed in a
+            // match; everything else needs a lit socket.
             if (pendingDropSlot != null || (dropTargetResolver == null && card.transform.localPosition.y > playLineY)
                 || (dropTargetResolver != null && card.transform.localPosition.y > playLineY
-                    && playResolverWithSlot == null))
+                    && (playResolverWithSlot == null || card.Data.Definition.Type == CardType.Ability)))
             {
                 PlayCard(card);
             }
             else
             {
+                Debug.Log($"[Hand] {card.Data.title} could not be played - no socket lit and not flung above the play line.");
                 SlotFor(card.SlotIndex,
                     out Vector3 pos, out Quaternion rot);
                 card.Tween.Play(pos, rot, card.BaseScale, layoutDuration, CardEase.OutCubic);

@@ -581,7 +581,7 @@ namespace Overlink.EditorTools
             get
             {
                 if (displayFont == null)
-                    displayFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Resources/Fonts/Rajdhani-SemiBold.asset");
+                    displayFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Resources/Fonts/ChakraPetch-Bold.asset");
                 return displayFont;
             }
         }

@@ -79,22 +79,28 @@ namespace Overlink.Match
         [Tooltip("The plates behind the ranks - the two Core plates and the four Node plates.")]
         public Material plateSkin;
 
+        [Tooltip("Optional thin-outline Core inset. Empty uses the shared plate skin.")]
+        public Material corePlateSkin;
+
         [Tooltip("The deck and discard stacks, top card and buried layers alike.")]
         public Material pileSkin;
 
         [Tooltip("The rim cube behind every Active socket.")]
         public Material rimSkin;
 
+        [Tooltip("The X-link filament from each Node plate to its half's Core plate.")]
+        public Material linkSkin;
+
         [Header("Board albedo (what the skins above are tinted with)")]
         [Tooltip("The backdrop slab.")]
-        public Color tableTint = new Color(0.09f, 0.11f, 0.15f);
+        public Color tableTint = new Color(0.055f, 0.075f, 0.086f);
 
-        [Tooltip("An empty Active socket - deliberately the brightest thing on the board, so a row of " +
-                 "[Active][Bench][Bench] never reads as three identical slots.")]
-        public Color activeEmpty = new Color(0.30f, 0.27f, 0.19f);
+        [Tooltip("An empty Active socket. Set to the Figma board shade, so it sits close to the Core plate " +
+                 "and is told apart by its rim (activeRim), not by its body.")]
+        public Color activeEmpty = new Color(0.086f, 0.129f, 0.149f);
 
         [Tooltip("An empty Bench socket.")]
-        public Color benchEmpty = new Color(0.13f, 0.15f, 0.19f);
+        public Color benchEmpty = new Color(0.043f, 0.067f, 0.078f);
 
         [Tooltip("An empty Protocol socket, on its own hue.")]
         public Color protocolEmpty = new Color(0.23f, 0.18f, 0.31f);
@@ -134,23 +140,27 @@ namespace Overlink.Match
 
         [Tooltip("The plate behind a Core rank. Darker than a Node plate on purpose: it sits under two full " +
                  "ranks, and at nodeFree it would compete with the socket fills stacked on top of it.")]
-        public Color corePlateTint = new Color(0.16f, 0.18f, 0.25f);
+        public Color corePlateTint = new Color(0.090f, 0.129f, 0.149f);
 
-        [Tooltip("A Node plate nobody controls.")]
-        public Color nodeFree = new Color(0.26f, 0.28f, 0.32f);
+        [Tooltip("A Node plate nobody controls (Neutral).")]
+        public Color nodeFree = new Color(1.00f, 0.75f, 0.27f);
 
-        [Tooltip("A Node plate the player holds.")]
-        public Color nodePlayer = new Color(0.14f, 0.48f, 0.28f);
+        [Tooltip("A Node plate the player holds (Ally).")]
+        public Color nodePlayer = new Color(0.25f, 0.62f, 1.00f);
 
-        [Tooltip("A Node plate the opponent holds.")]
-        public Color nodeOpponent = new Color(0.56f, 0.38f, 0.12f);
+        [Tooltip("A Node plate the opponent holds (Enemy).")]
+        public Color nodeOpponent = new Color(0.95f, 0.36f, 0.40f);
+
+        [Tooltip("The body of every Node plate. Dark, so the plate reads as a slab; ownership is carried by the " +
+                 "thin edge around it, not by the body.")]
+        public Color nodePlateBody = new Color(0.114f, 0.161f, 0.180f);
 
         [Tooltip("The deck stack: a card back, cooler and darker than any empty socket, so a face-down stack " +
                  "can never be mistaken for somewhere a card can be dropped.")]
-        public Color deckTint = new Color(0.13f, 0.19f, 0.25f);
+        public Color deckTint = new Color(0.063f, 0.090f, 0.098f);
 
         [Tooltip("The spent pile, warmer and greyer still.")]
-        public Color discardTint = new Color(0.21f, 0.17f, 0.14f);
+        public Color discardTint = new Color(0.102f, 0.098f, 0.094f);
 
         // ---- Board cards ------------------------------------------------------------
         // A unit standing on a socket used to be drawn as a name and three numbers painted onto a tinted cube,
@@ -223,13 +233,24 @@ namespace Overlink.Match
         //
         // Public because the camera's overhead tier is defined by these numbers: it exists to frame exactly
         // this rectangle, and its test reads them rather than copying them so the two cannot drift apart.
-        public const float TableWidth = 16.5f;
-        public const float TableDepth = 10.3f;
+        public const float TableWidth = 16.5f * BoardScale;
+        // The reference is a portrait board capture: its framed field is roughly 1.27:1, not the old
+        // 1.60:1 tabletop. Keep the width contract and give the deployment band the vertical room it has
+        // in the reference.
+        public const float TableDepth = 12.8f * BoardScale;
         public const float TableCenterY = -0.2f;
 
         // Name of the child this component paints. The scene ships it as a prefab instance so the board
         // is a real, editable hierarchy object; BuildBoard() binds to it by name rather than rebuilding.
         const string BoardRootName = "Battlefield";
+
+        /// <summary>Uniform scale applied to the board root when it is built from scratch. An existing
+        /// prefab instance kept by the scene keeps its authored scale; this only applies to fresh builds.
+        /// Public so <see cref="BattlefieldCameraController"/> can scale the camera framing and pan limits
+        /// to match the bigger table.</summary>
+        // Keep the authored board unit scale; the portrait reference is matched by its deeper table contract and
+        // the bird's-eye camera, not by shrinking every card/socket on the board.
+        public const float BoardScale = 1f;
 
         // Every slot tile is a 5:7 portrait footprint, matching the hand cards, so the board reads as
         // empty card sockets rather than flat bars. Each battlefield fields TWO ranks per player and the
@@ -247,19 +268,19 @@ namespace Overlink.Match
 
         // Public for the same reason TableWidth is: the resting camera framing is derived from where this row
         // lands on screen, and BattlefieldCameraControllerTests pins the seam between it and the hand fan.
-        public const float CorePlayerBenchY = -2.5f;
+        public const float CorePlayerBenchY = -2.72f;
         const float CoreOpponentActiveY = 1.12f;
-        const float CoreOpponentBenchY = 2.5f;
+        const float CoreOpponentBenchY = 2.72f;
         const float CoreSpacing = 0.9f;
-        // Clears the wider Active: half its width (0.55) + half the Protocol's (0.36) + a 0.14 gutter.
-        const float CoreProtocolX = 1.05f;
-        static readonly Vector3 CoreActiveSize = new Vector3(1.10f, 1.54f, 0.06f);
+        // Clears the wider Active: half its width (0.55) + half the Protocol's (0.36) + a 0.30 gutter.
+        const float CoreProtocolX = 1.21f;
+        static readonly Vector3 CoreActiveSize = new Vector3(0.88f, 1.24f, 0.06f);
         // The back rank is a touch smaller than the Protocol socket beside the Active. Being the furthest
         // thing from the centre line it is also the furthest from the camera, and a slightly tighter
         // footprint is what leaves the status strip a clear band between here and the hand fan.
         // Public because the near edge of this row is the number the camera's rest bias is derived against.
-        public static readonly Vector3 CoreBenchSize = new Vector3(0.66f, 0.924f, 0.06f);
-        static readonly Vector3 CoreProtocolSize = new Vector3(0.72f, 1.008f, 0.06f);
+        public static readonly Vector3 CoreBenchSize = new Vector3(0.62f, 0.80f, 0.06f);
+        static readonly Vector3 CoreProtocolSize = new Vector3(0.72f, 1.24f, 0.06f);
 
         // ---- The Core plate -------------------------------------------------------
         // Each half of the Core battlefield gets a plate behind its two ranks, mirroring what a Node plate
@@ -268,28 +289,30 @@ namespace Overlink.Match
         // the opponent putting a unit down, so a direct attack always has a visible place to be aimed at
         // rather than an invisible rectangle of empty tabletop or a screen-space hit into the UI.
         //
-        // Centred on the two ranks it backs: the Active spans y -1.89..-0.35 and the Bench -2.96..-2.04 on
-        // the player's side, so the block is 2.61 tall about -1.656, and 3.36 wide across the Bench row.
-        // The plate is that plus a margin, and it is mirrored exactly about the centre line.
+        // Centred on the two ranks it backs: the Active spans y -1.81..-0.27 and the Bench -2.96..-2.04 on
+        // the player's side, so the block is 2.69 tall about -1.615, and 3.36 wide across the Bench row.
+        // The plate is that plus a margin of about 0.15 at the top and 0.20 at the bottom, and it is
+        // mirrored exactly about the centre line.
         //
         // Public because the targeting test probes the plate's own margin to prove it is still reachable
         // under the ranks, and copying this size into the test is how the two drift apart.
-        const float CorePlayerPlateY = -1.656f;
-        const float CoreOpponentPlateY = 1.656f;
-        public static readonly Vector3 CorePlateSize = new Vector3(3.7f, 2.95f, 0.05f);
+        const float CorePlayerPlateY = -1.76f;
+        const float CoreOpponentPlateY = 1.76f;
+        public static readonly Vector3 CorePlateSize = new Vector3(3.7f, 3.28f, 0.05f);
 
         // ---- Node battlefields (four corners): the same two-rank shape at a smaller scale. ----
-        const float NodeCenterX = 5.5f;
-        const float NodeTopY = 2.3f;
-        const float NodeBottomY = -2.3f;
-        const float NodePlayerActiveY = -0.72f;
-        const float NodePlayerBenchY = -1.74f;
-        const float NodeOpponentActiveY = 0.72f;
-        const float NodeOpponentBenchY = 1.74f;
+        const float NodeCenterX = 5.95f;
+        const float NodeTopY = 3.05f;
+        const float NodeBottomY = -3.05f;
+        const float NodePlayerActiveY = -0.62f;
+        const float NodePlayerBenchY = -1.82f;
+        const float NodeOpponentActiveY = 0.62f;
+        const float NodeOpponentBenchY = 1.82f;
         const float NodeSpacing = 0.86f;
         static readonly Vector3 NodeActiveSize = new Vector3(0.74f, 1.036f, 0.06f);
         static readonly Vector3 NodeBenchSize = new Vector3(0.54f, 0.756f, 0.06f);
-        static readonly Vector3 NodePlateSize = new Vector3(2.8f, 4.4f, 0.05f);
+        // Tall enough that the Bench rank (centre 1.82, half-height 0.378) keeps about 0.2 of plate beyond it.
+        static readonly Vector3 NodePlateSize = new Vector3(2.8f, 5.0f, 0.05f);
 
         /// <summary>
         /// Corner positions, indexed by the Core Node index: 0 = player bottom-left, 1 = player
@@ -306,17 +329,16 @@ namespace Overlink.Match
         // ---- Piles: the deck and the discard, printed onto the tabletop. ----
         // The hand's draw and discard anchors were invisible markers floating in the Match root's plane, so
         // cards appeared from nowhere and vanished into nowhere. These are those two spots as real geometry,
-        // flanking the hand fan: the deck on the drawing side, the discard on the spending side. They sit
-        // clear of the fan's outermost card (which reaches to 2.56 from the centre line) and of the inner
-        // Node plate edges (4.1), and below the player status strip, which has no vertical room left
-        // beside the Bench rank.
+        // between the two bottom Node plates: the deck on the drawing side, the discard on the spending side.
+        // They sit beside the player's Bench rank, clear of the Core plate's inner edge (1.85) and of the
+        // Node plates' inner edges (4.1).
         // <para>
         // The scene builder seeds the anchors from these same coordinates and the presenter re-aligns them
         // once its board exists (see SyncPileAnchors), so dragging a pile in the editor takes the card
         // flight path with it instead of leaving it behind.
-        public static readonly Vector2 DeckPilePosition = new Vector2(-3f, -4.35f);
-        public static readonly Vector2 DiscardPilePosition = new Vector2(3f, -4.35f);
-        static readonly Vector3 PileSize = new Vector3(0.72f, 1.008f, 0.04f);
+        public static readonly Vector2 DeckPilePosition = new Vector2(-2.3f, -5.15f);
+        public static readonly Vector2 DiscardPilePosition = new Vector2(2.3f, -5.15f);
+        static readonly Vector3 PileSize = new Vector3(0.72f, 1.20f, 0.04f);
         // The two pile albedos live in the Board albedo region with the rest of the palette: a pile is a
         // surface, and a surface is tunable.
 
@@ -428,12 +450,25 @@ namespace Overlink.Match
 
         // Node battlefield tiles, [node][slot].
         Tile[] nodePlate;
+
+        // Event-driven glow (see SlotGlow). Nothing glows at rest. The owner and turn last seen are remembered so
+        // a change fires once: nodeOwnerSeen stores owner + 1, so 0 means not yet painted.
+        readonly SlotGlow glow = new SlotGlow();
+        int[] nodeOwnerSeen;
+        int turnSeen = -1;
+        static readonly Color DeployGlow = new Color(0.25f, 0.95f, 1f);
+        static readonly Color AttackGlow = new Color(1f, 0.6f, 0.2f);
+        static readonly Color CoreScanGlow = new Color(0.25f, 0.62f, 1f);
         Tile[][] nodePlayerActive, nodePlayerBench;
         Tile[][] nodeOpponentActive, nodeOpponentBench;
 
         // The deck and discard stacks. Not sockets: they carry no slot identity and are never probed as drop
         // targets, because nothing is played TO the deck or the discard from the hand.
         Tile deckPile, discardPile;
+
+        // Card backs on the two piles: face-down sprites that show when the pile is non-empty, hidden when it
+        // drains so the empty slab reads as the end of the deck.
+        CardBackView deckBackView, discardBackView;
 
         Tile highlightedTile;
 
@@ -458,6 +493,10 @@ namespace Overlink.Match
 
             ResolveHud();
             BuildBoard();
+            if (GetComponent<BattlefieldBackdrop>() == null)
+            {
+                gameObject.AddComponent<BattlefieldBackdrop>();
+            }
         }
 
         /// <summary>Resolves and validates the screen-space HUD shipped by Gameplay.unity.</summary>
@@ -488,6 +527,8 @@ namespace Overlink.Match
 
         void LateUpdate()
         {
+            glow.Tick();
+
             // A domain reload while playing (an editor script hot-reload) wipes every non-serialized
             // field, including these tile bindings, and Start() is not called again. BuildBoard()
             // re-binds by name without duplicating any geometry, so the presenter recovers instead of
@@ -534,6 +575,9 @@ namespace Overlink.Match
             {
                 boardRoot = existing;
                 pickablesValid = false;
+                ApplyReferenceLayout(boardRoot);
+                BuildNodeLinks();
+                BuildReferenceComposition(boardRoot);
                 SyncPileAnchors();
                 return;
             }
@@ -546,11 +590,12 @@ namespace Overlink.Match
 
             boardRoot = new GameObject(BoardRootName).transform;
             boardRoot.SetParent(transform, false);
+            boardRoot.localScale = new Vector3(BoardScale, BoardScale, BoardScale);
             pickablesValid = false;
 
             // Tabletop backdrop.
             MakeBody(boardRoot, "Table", new Vector3(0f, TableCenterY, TableZ),
-                new Vector3(TableWidth, TableDepth, 0.05f), tableTint);
+                new Vector3(TableWidth / BoardScale, TableDepth / BoardScale, 0.05f), tableTint);
 
             // Everything that used to be painted here — the turn header, the key legend, the two status
             // strips, the victory banner and the notice line — now lives on BattlefieldHud's overlay canvas.
@@ -559,10 +604,301 @@ namespace Overlink.Match
 
             BuildCoreBattlefield();
             BuildNodeBattlefields();
+            BuildNodeLinks();
             BuildPiles();
+
+            ApplyReferenceLayout(boardRoot);
+            BuildReferenceComposition(boardRoot);
 
             SyncPileAnchors();
         }
+
+        /// <summary>
+        /// Migrates the authored prefab to the measured tactical-cyan composition. The prefab is intentionally
+        /// still bindable by name, but its old positions were from the cropped tabletop mock-up; keeping this
+        /// small layout pass here means an existing scene instance and a fresh procedural board share one frame.
+        /// </summary>
+        void ApplyReferenceLayout(Transform root)
+        {
+            if (root == null) return;
+            root.localScale = Vector3.one * BoardScale;
+
+            Transform table = FindChildRecursive(root, "Table");
+            SetBodySize(table, new Vector3(TableWidth / BoardScale, TableDepth / BoardScale, 0.05f));
+
+            Transform[] nodes = new Transform[Board.NodeCount];
+            for (int n = 0; n < Board.NodeCount; n++)
+            {
+                nodes[n] = FindChildRecursive(root, $"Node {n + 1}");
+                if (nodes[n] != null)
+                {
+                    Vector2 c = NodeCenter[n];
+                    nodes[n].localPosition = new Vector3(c.x, c.y, 0f);
+                    SetBodySize(FindChildRecursive(nodes[n], $"NodePlate{n}"), NodePlateSize);
+                    SetLocalPosition(FindChildRecursive(nodes[n], $"NodePlate{n}"), new Vector3(0f, 0f, PlateZ));
+                    LayoutNodeSlots(nodes[n], n);
+                }
+            }
+
+            Transform core = FindChildRecursive(root, "Core");
+            if (core != null)
+            {
+                Transform oppPlate = FindChildRecursive(core, "OppCorePlate");
+                Transform playPlate = FindChildRecursive(core, "PlayCorePlate");
+                SetLocalPosition(oppPlate, new Vector3(0f, CoreOpponentPlateY, PlateZ));
+                SetLocalPosition(playPlate, new Vector3(0f, CorePlayerPlateY, PlateZ));
+                SetBodySize(oppPlate, CorePlateSize);
+                SetBodySize(playPlate, CorePlateSize);
+                LayoutCoreSlots(core);
+            }
+
+            SetLocalPosition(FindChildRecursive(root, "DeckPile"), new Vector3(DeckPilePosition.x, DeckPilePosition.y, CardZ));
+            SetLocalPosition(FindChildRecursive(root, "DiscardPile"), new Vector3(DiscardPilePosition.x, DiscardPilePosition.y, CardZ));
+        }
+
+        void LayoutCoreSlots(Transform core)
+        {
+            for (int i = 0; i < Board.CoreActiveSlots; i++)
+            {
+                LayoutTile(FindChildRecursive(core, $"OppCoreActive{i}"), new Vector3(0f, CoreOpponentActiveY, CardZ), CoreActiveSize);
+                LayoutTile(FindChildRecursive(core, $"PlayCoreActive{i}"), new Vector3(0f, CorePlayerActiveY, CardZ), CoreActiveSize);
+            }
+
+            LayoutTile(FindChildRecursive(core, "OppProtocol"), new Vector3(CoreProtocolX, CoreOpponentActiveY, CardZ), CoreProtocolSize);
+            LayoutTile(FindChildRecursive(core, "PlayProtocol"), new Vector3(CoreProtocolX, CorePlayerActiveY, CardZ), CoreProtocolSize);
+
+            for (int i = 0; i < Board.CoreBenchSlots; i++)
+            {
+                float x = CoreSlotX(i, Board.CoreBenchSlots);
+                LayoutTile(FindChildRecursive(core, $"OppCoreBench{i}"), new Vector3(x, CoreOpponentBenchY, CardZ), CoreBenchSize);
+                LayoutTile(FindChildRecursive(core, $"PlayCoreBench{i}"), new Vector3(x, CorePlayerBenchY, CardZ), CoreBenchSize);
+            }
+        }
+
+        void LayoutNodeSlots(Transform node, int index)
+        {
+            for (int i = 0; i < Board.NodeActiveSlots; i++)
+            {
+                float x = NodeSlotOffset(i, Board.NodeActiveSlots);
+                LayoutTile(FindChildRecursive(node, $"NodeOppActive{index}_{i}"), new Vector3(x, NodeOpponentActiveY, CardZ), NodeActiveSize);
+                LayoutTile(FindChildRecursive(node, $"NodePlayActive{index}_{i}"), new Vector3(x, NodePlayerActiveY, CardZ), NodeActiveSize);
+            }
+
+            for (int i = 0; i < Board.NodeBenchSlots; i++)
+            {
+                float x = NodeSlotOffset(i, Board.NodeBenchSlots);
+                LayoutTile(FindChildRecursive(node, $"NodeOppBench{index}_{i}"), new Vector3(x, NodeOpponentBenchY, CardZ), NodeBenchSize);
+                LayoutTile(FindChildRecursive(node, $"NodePlayBench{index}_{i}"), new Vector3(x, NodePlayerBenchY, CardZ), NodeBenchSize);
+            }
+        }
+
+        static void LayoutTile(Transform holder, Vector3 position, Vector3 size)
+        {
+            if (holder == null) return;
+            holder.localPosition = position;
+            SetBodySize(holder, size);
+        }
+
+        static Transform FindChildRecursive(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindChildRecursive(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        static void SetLocalPosition(Transform target, Vector3 position)
+        {
+            if (target != null) target.localPosition = position;
+        }
+
+        static void SetBodySize(Transform holder, Vector3 size)
+        {
+            if (holder == null) return;
+            Transform body = holder.Find("Body");
+            if (body != null) body.localScale = size;
+        }
+
+        /// <summary>
+        /// The reference is a complete tactical field, not only a collection of card sockets. These are quiet
+        /// world-space marks so they remain part of the board during a HUD-hidden comparison capture: frame,
+        /// corner registration, grid, central Core panel and the single deployment-field marker.
+        /// </summary>
+        void BuildReferenceComposition(Transform root)
+        {
+            if (root == null) return;
+
+            Transform existing = root.Find("ReferenceComposition");
+            // Rebuild the composition group as one deterministic layer. This prevents a domain reload or a
+            // prefab bind from preserving an older text-heavy decoration set on top of the live tile captions.
+            // The group contains no gameplay state, so replacing it is safe and keeps the visual hierarchy tidy.
+            Transform decor;
+            if (existing != null)
+            {
+                for (int i = existing.childCount - 1; i >= 0; i--)
+                    DestroyTarget(existing.GetChild(i).gameObject);
+                decor = existing;
+            }
+            else
+            {
+                decor = Group(root, "ReferenceComposition");
+            }
+            float width = TableWidth / BoardScale;
+            float depth = TableDepth / BoardScale;
+            float left = -width * 0.5f + 0.22f;
+            float right = width * 0.5f - 0.22f;
+            float bottom = TableCenterY - depth * 0.5f + 0.22f;
+            float top = TableCenterY + depth * 0.5f - 0.22f;
+            Color line = new Color(0.20f, 0.38f, 0.47f, 1f);
+            Color grid = new Color(0.08f, 0.15f, 0.19f, 1f);
+            Color panel = new Color(0.035f, 0.065f, 0.075f, 1f);
+
+            Material lineMaterial = tableSkin != null ? tableSkin : MaterialForColor(tableTint);
+            Material panelMaterial = MaterialForColor(panel);
+
+            // Central panel behind both Core plates. Its proportions are measured from the 1440x1160 reference.
+            MakeDecorBody(decor, "CorePanel", new Vector3(0f, -0.05f, 0.12f),
+                new Vector3(4.25f, 8.55f, 0.035f), panelMaterial, panel);
+            MakeDecorLine(decor, "CorePanelTop", new Vector2(-2.12f, 4.22f), new Vector2(2.12f, 4.22f), lineMaterial, line);
+            MakeDecorLine(decor, "CorePanelBottom", new Vector2(-2.12f, -4.32f), new Vector2(2.12f, -4.32f), lineMaterial, line);
+            MakeDecorLine(decor, "CorePanelLeft", new Vector2(-2.12f, -4.32f), new Vector2(-2.12f, 4.22f), lineMaterial, line);
+            MakeDecorLine(decor, "CorePanelRight", new Vector2(2.12f, -4.32f), new Vector2(2.12f, 4.22f), lineMaterial, line);
+
+            // Full-field grid. It is deliberately below plates and links, and quiet enough to disappear under a
+            // deployed card rather than compete with it.
+            for (float x = -width * 0.5f + 0.55f; x < width * 0.5f; x += 1.1f)
+                MakeDecorLine(decor, "GridV", new Vector2(x, bottom), new Vector2(x, top), lineMaterial, grid, 0.012f);
+            for (float y = bottom + 0.65f; y < top; y += 0.9f)
+                MakeDecorLine(decor, "GridH", new Vector2(left, y), new Vector2(right, y), lineMaterial, grid, 0.012f);
+
+            // Outer frame and the four L-shaped registration marks.
+            MakeDecorLine(decor, "FrameTop", new Vector2(left, top), new Vector2(right, top), lineMaterial, line, 0.028f);
+            MakeDecorLine(decor, "FrameBottom", new Vector2(left, bottom), new Vector2(right, bottom), lineMaterial, line, 0.028f);
+            MakeDecorLine(decor, "FrameLeft", new Vector2(left, bottom), new Vector2(left, top), lineMaterial, line, 0.028f);
+            MakeDecorLine(decor, "FrameRight", new Vector2(right, bottom), new Vector2(right, top), lineMaterial, line, 0.028f);
+            MakeCornerMark(decor, left, bottom, 1f, 1f, lineMaterial, line);
+            MakeCornerMark(decor, right, bottom, -1f, 1f, lineMaterial, line);
+            MakeCornerMark(decor, left, top, 1f, -1f, lineMaterial, line);
+            MakeCornerMark(decor, right, top, -1f, -1f, lineMaterial, line);
+
+            // Keep composition decoration separate from gameplay captions. Core/Node ownership, sector IDs and
+            // pile captions are live labels owned by their tile presenters; duplicating them here made the field
+            // look cluttered and caused labels to collide whenever the camera changed aspect.
+            MakeDecorLabel(decor, "DeploymentLabel", new Vector3(0f, bottom + 0.22f, 0.035f), "DEPLOYMENT FIELD", 8f, Color.white, FontStyles.Bold);
+
+        }
+
+        void MakeCornerMark(Transform parent, float x, float y, float sx, float sy, Material material, Color color)
+        {
+            MakeDecorLine(parent, "Corner", new Vector2(x, y), new Vector2(x + sx * 0.34f, y), material, color, 0.025f);
+            MakeDecorLine(parent, "Corner", new Vector2(x, y), new Vector2(x, y + sy * 0.34f), material, color, 0.025f);
+        }
+
+        void MakeDecorLine(Transform parent, string name, Vector2 from, Vector2 to, Material material, Color color, float width = 0.018f)
+        {
+            Vector2 delta = to - from;
+            float length = delta.magnitude;
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            Vector2 midpoint = (from + to) * 0.5f;
+            Transform holder = new GameObject(name).transform;
+            holder.SetParent(parent, false);
+            holder.localPosition = new Vector3(midpoint.x, midpoint.y, 0.095f);
+            holder.localRotation = Quaternion.Euler(0f, 0f, angle);
+            MakeDecorBody(holder, "Decor", Vector3.zero, new Vector3(length, width, 0.018f), material, color);
+        }
+
+        Renderer MakeDecorBody(Transform parent, string name, Vector3 position, Vector3 size, Material material, Color color)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = position;
+            go.transform.localScale = size;
+            Collider collider = go.GetComponent<Collider>();
+            if (collider != null) DestroyTarget(collider);
+            Renderer renderer = go.GetComponent<Renderer>();
+            renderer.sharedMaterial = material;
+            SetBodyColor(renderer, color);
+            return renderer;
+        }
+
+        void MakeDecorLabel(Transform parent, string name, Vector3 position, string text, float size, Color color,
+            FontStyles style)
+        {
+            TextMeshPro label = MakeLabel(parent, name, position, new Vector2(3.0f, 0.32f), size, style);
+            label.text = text;
+            label.color = color;
+            label.characterSpacing = 4f;
+            ApplyCaptionSorting(label);
+        }
+
+        /// <summary>
+        /// One thin filament per Node, from the Node plate's inner corner to the outer corner of the Core
+        /// plate on the same half. Built under the plates so the plates stay on top of the ends.
+        /// </summary>
+        void BuildNodeLinks()
+        {
+            Transform links = Group(boardRoot, "Links");
+            nodeLink = new Renderer[Board.NodeCount];
+
+            for (int n = 0; n < Board.NodeCount; n++)
+            {
+                Transform existing = links.Find($"NodeLink{n}");
+                Renderer found = existing != null ? existing.Find("Body")?.GetComponent<Renderer>() : null;
+                if (found != null)
+                {
+                    nodeLink[n] = found;
+                    continue;
+                }
+
+                Vector2 c = NodeCenter[n % NodeCenter.Length];
+                bool playerSide = c.y < 0f;
+                Vector2 nodeEnd = new Vector2(c.x - Mathf.Sign(c.x) * NodePlateSize.x * 0.5f,
+                    c.y + (playerSide ? NodePlateSize.y * 0.5f : -NodePlateSize.y * 0.5f));
+                Vector2 coreEnd = new Vector2(Mathf.Sign(c.x) * CorePlateSize.x * 0.5f,
+                    playerSide ? CorePlayerPlateY : CoreOpponentPlateY);
+
+                nodeLink[n] = MakeLink(links, $"NodeLink{n}", nodeEnd, coreEnd);
+            }
+        }
+
+        /// <summary>
+        /// A quad stretched between two points on the board plane, at the plate depth. Spans one unit, so
+        /// the transform carries its length and angle and the shader needs only the across-width UV.
+        /// </summary>
+        Renderer MakeLink(Transform parent, string name, Vector2 from, Vector2 to)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+
+            Vector2 delta = to - from;
+            float length = delta.magnitude;
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            Vector2 mid = (from + to) * 0.5f;
+
+            go.transform.localPosition = new Vector3(mid.x, mid.y, PlateZ + 0.01f);
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "Body";
+            quad.transform.SetParent(go.transform, false);
+            quad.transform.localScale = new Vector3(length, LinkWidth, 1f);
+            DestroyTarget(quad.GetComponent<Collider>());
+
+            Renderer renderer = quad.GetComponent<Renderer>();
+            renderer.sharedMaterial = linkSkin != null ? linkSkin : MaterialForColor(nodePlayer);
+            SetBodyColor(renderer, nodePlayer);
+            return renderer;
+        }
+
+        const float LinkWidth = 0.028f;
+
+        /// <summary>The filament for each Node, indexed like <see cref="nodePlate"/>. Re-coloured on ownership.</summary>
+        Renderer[] nodeLink;
 
         /// <summary>
         /// Re-resolves every tile and label from an already-built hierarchy. Returns false if the
@@ -571,6 +907,7 @@ namespace Overlink.Match
         bool TryBindBoard(Transform root)
         {
             boardRoot = root;
+            boardRoot.localScale = new Vector3(BoardScale, BoardScale, BoardScale);
             bindFailed = false;
 
             // Binding mints a fresh set of Tile records, and a pooled card hangs off the record that created it.
@@ -641,6 +978,10 @@ namespace Overlink.Match
 
             deckPile = FindTile("DeckPile");
             discardPile = FindTile("DiscardPile");
+
+            // Card backs on the two piles: face-down sprites that show when the pile is non-empty.
+            deckBackView = MakePileBack(deckPile);
+            discardBackView = MakePileBack(discardPile);
 
             if (bindFailed || root.Find("Table/Body") == null)
             {
@@ -774,7 +1115,7 @@ namespace Overlink.Match
             // Older authored battlefield prefabs only framed Active sockets. Add the missing Bench and
             // Protocol boxes when they bind so an existing scene receives the presentation upgrade immediately;
             // the prefab builder persists the same hierarchy for the editable source asset.
-            if (IsCardSlotName(name) && FindSlotFrame(slot) == null)
+            if (HasSocketFrame(name) && FindSlotFrame(slot) == null)
             {
                 MakeSlotFrame(slot, name, body.localScale, false);
             }
@@ -982,7 +1323,8 @@ namespace Overlink.Match
         /// The tile-name to slot contract, exposed for tests because the whole drop-target feature rests on
         /// it: <c>PlayCoreActive0</c>, <c>PlayCoreBench3</c>, <c>NodePlayActive2_1</c> and
         /// <c>NodePlayBench0_0</c> name the player's hosting sockets, and nothing else does. Opponent tiles
-        /// (<c>Opp*</c>, <c>NodeOpp*</c>), Node plates and Protocol tiles return false.
+        /// (<c>Opp*</c>, <c>NodeOpp*</c>), Node plates and the opponent's Protocol return false. The player's
+        /// own <c>PlayProtocol</c> parses as <see cref="SlotType.Protocol"/>: it is the one slot with a fixed home.
         /// </summary>
         public static bool TryParseSlotIdentity(string name, out SlotType type, out int index, out int nodeIndex)
         {
@@ -1025,6 +1367,14 @@ namespace Overlink.Match
                 return true;
             }
 
+            if (name.StartsWith("PlayProtocol"))
+            {
+                type = SlotType.Protocol;
+                index = 0;
+                nodeIndex = -1;
+                return true;
+            }
+
             return false;
         }
 
@@ -1060,6 +1410,7 @@ namespace Overlink.Match
             Plate,
             Pile,
             Rim,
+            Link,
         }
 
         /// <summary>
@@ -1085,6 +1436,9 @@ namespace Overlink.Match
                 return Surface.Socket;
             }
 
+            // Links live under their own holder and must be claimed before any broad socket fallback. Keep this
+            // ahead of the other name families so a future link naming convention cannot silently become a socket.
+            if (name.StartsWith("NodeLink")) return Surface.Link;
             if (name.StartsWith("Table")) return Surface.Table;
             if (name == "SlotFrame" || name == "Socket" || name.StartsWith("Frame")) return Surface.Rim;
             if (name.Contains("Socket")) return Surface.Rim;
@@ -1103,7 +1457,7 @@ namespace Overlink.Match
             if (name == "DiscardPile") return discardTint;
             if (name.StartsWith("Table")) return tableTint;
             if (name.Contains("Socket")) return activeRim;
-            if (name.StartsWith("NodePlate")) return nodeFree;
+            if (name.StartsWith("NodePlate")) return nodePlateBody;
             if (name.EndsWith("CorePlate")) return corePlateTint;
             if (name.Contains("Active")) return activeEmpty;
             if (name.Contains("Bench")) return benchEmpty;
@@ -1119,6 +1473,7 @@ namespace Overlink.Match
             }
 
             if (name.EndsWith("Protocol")) return protocolRim;
+            if (name.StartsWith("NodePlate")) return nodeFree;
             if (name.Contains("Bench")) return benchRim;
             return activeRim;
         }
@@ -1163,6 +1518,11 @@ namespace Overlink.Match
                 && (name.Contains("Active") || name.Contains("Bench") || name.EndsWith("Protocol"));
         }
 
+        static bool HasSocketFrame(string name)
+        {
+            return IsCardSlotName(name) || (!string.IsNullOrEmpty(name) && name.StartsWith("NodePlate"));
+        }
+
         void BuildCoreBattlefield()
         {
             int activeCount = Board.CoreActiveSlots;
@@ -1204,25 +1564,25 @@ namespace Overlink.Match
             {
                 opponentCoreActive[i] = MakeTile(opponentActiveGroup, $"OppCoreActive{i}",
                     new Vector3(0f, CoreOpponentActiveY, CardZ), CoreActiveSize, activeEmpty,
-                    "ACTIVE", 20, true);
+                    "", 20, true);
                 playerCoreActive[i] = MakeTile(playerActiveGroup, $"PlayCoreActive{i}",
                     new Vector3(0f, CorePlayerActiveY, CardZ), CoreActiveSize, activeEmpty,
-                    "ACTIVE", 20, true);
+                    "", 20, true);
             }
 
             opponentProtocol = MakeTile(opponentProtocolGroup, "OppProtocol",
-                new Vector3(CoreProtocolX, CoreOpponentActiveY, CardZ), CoreProtocolSize, protocolEmpty, "PROT", 12);
+                new Vector3(CoreProtocolX, CoreOpponentActiveY, CardZ), CoreProtocolSize, protocolEmpty, "", 12);
             playerProtocol = MakeTile(playerProtocolGroup, "PlayProtocol",
-                new Vector3(CoreProtocolX, CorePlayerActiveY, CardZ), CoreProtocolSize, protocolEmpty, "PROT", 12);
+                new Vector3(CoreProtocolX, CorePlayerActiveY, CardZ), CoreProtocolSize, protocolEmpty, "", 12);
 
             // Back rank: the four Bench sockets, behind the Active rank, toward its owner's own edge.
             for (int i = 0; i < benchCount; i++)
             {
                 float x = CoreSlotX(i, benchCount);
                 opponentCoreBench[i] = MakeTile(opponentBenchGroup, $"OppCoreBench{i}",
-                    new Vector3(x, CoreOpponentBenchY, CardZ), CoreBenchSize, benchEmpty, "BENCH", 14);
+                    new Vector3(x, CoreOpponentBenchY, CardZ), CoreBenchSize, benchEmpty, "", 14);
                 playerCoreBench[i] = MakeTile(playerBenchGroup, $"PlayCoreBench{i}",
-                    new Vector3(x, CorePlayerBenchY, CardZ), CoreBenchSize, benchEmpty, "BENCH", 14);
+                    new Vector3(x, CorePlayerBenchY, CardZ), CoreBenchSize, benchEmpty, "", 14);
             }
         }
 
@@ -1259,7 +1619,7 @@ namespace Overlink.Match
                 // anyone contests the node. Riding the plate's own label rather than a sibling means the tag
                 // travels with the plate when a node is moved in the editor.
                 nodePlate[n] = MakeTile(node, $"NodePlate{n}",
-                    new Vector3(0f, 0f, PlateZ), NodePlateSize, nodeFree, $"NODE {n + 1}", 14);
+                    new Vector3(0f, 0f, PlateZ), NodePlateSize, nodePlateBody, $"NODE {n + 1}", 14);
 
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
@@ -1280,10 +1640,10 @@ namespace Overlink.Match
                     float x = NodeSlotOffset(i, Board.NodeActiveSlots);
                     nodeOpponentActive[n][i] = MakeTile(opponentActiveGroup, $"NodeOppActive{n}_{i}",
                         new Vector3(x, NodeOpponentActiveY, CardZ), NodeActiveSize, activeEmpty,
-                        "ACTIVE", 13, true);
+                        "", 13, true);
                     nodePlayerActive[n][i] = MakeTile(playerActiveGroup, $"NodePlayActive{n}_{i}",
                         new Vector3(x, NodePlayerActiveY, CardZ), NodeActiveSize, activeEmpty,
-                        "ACTIVE", 13, true);
+                        "", 13, true);
                 }
 
                 // Back rank: the Bench sockets, behind the Active rank, toward its owner's own edge.
@@ -1291,9 +1651,9 @@ namespace Overlink.Match
                 {
                     float x = NodeSlotOffset(i, Board.NodeBenchSlots);
                     nodeOpponentBench[n][i] = MakeTile(opponentBenchGroup, $"NodeOppBench{n}_{i}",
-                        new Vector3(x, NodeOpponentBenchY, CardZ), NodeBenchSize, benchEmpty, "BENCH", 11);
+                        new Vector3(x, NodeOpponentBenchY, CardZ), NodeBenchSize, benchEmpty, "", 11);
                     nodePlayerBench[n][i] = MakeTile(playerBenchGroup, $"NodePlayBench{n}_{i}",
-                        new Vector3(x, NodePlayerBenchY, CardZ), NodeBenchSize, benchEmpty, "BENCH", 11);
+                        new Vector3(x, NodePlayerBenchY, CardZ), NodeBenchSize, benchEmpty, "", 11);
                 }
             }
         }
@@ -1321,6 +1681,26 @@ namespace Overlink.Match
 
             deckPile = MakePile(piles, "DeckPile", DeckPilePosition, "DECK", deckTint);
             discardPile = MakePile(piles, "DiscardPile", DiscardPilePosition, "DISCARD", discardTint);
+
+            // Card backs: face-down sprites on each pile holder, shown when the pile is non-empty.
+            deckBackView = MakePileBack(deckPile);
+            discardBackView = MakePileBack(discardPile);
+        }
+
+        /// <summary>
+        /// Stands a face-down card back on a pile tile's holder, sized to the pile footprint and sorted
+        /// just in front of the tile body so it reads as the top card of the stack.
+        /// </summary>
+        CardBackView MakePileBack(Tile tile)
+        {
+            if (tile == null || tile.Body == null) return null;
+            Transform holder = tile.Body.transform.parent;
+
+            // The body spans z in [-0.02, 0.02] around the holder, so the sprite sits just outside its face.
+            var back = CardBackView.Create(holder, PileSize, 0);
+            back.transform.localPosition = new Vector3(0f, 0f, -0.03f);
+            back.gameObject.SetActive(false);
+            return back;
         }
 
         /// <summary>
@@ -1359,8 +1739,8 @@ namespace Overlink.Match
         /// Hit-tests the player's own slot tiles against a world position and highlights the closest match.
         /// <para>
         /// Only the player's half is probed: you cannot deploy onto the opponent's ranks. The Protocol socket
-        /// is excluded because nothing is targeted there (Abilities take no slot and a Protocol has exactly
-        /// one home, which the engine already enforces). Depth is ignored on purpose, since a card dragged
+        /// is probed too: a Protocol has exactly one home, so the target only confirms where it lands, and the
+        /// engine already enforces that home. Depth is ignored on purpose, since a card dragged
         /// along the table floats only a little above it on the board's local Z.
         /// </para>
         /// That last clause is the limit of this method: it is the right test for a point that lies near the
@@ -1491,6 +1871,7 @@ namespace Overlink.Match
             // authored localScale, which is expressed in board-root units.
             Probe(playerCoreActive, ref best, ref bestDistance, point);
             Probe(playerCoreBench, ref best, ref bestDistance, point);
+            Probe(new[] { playerProtocol }, ref best, ref bestDistance, point);
             for (int n = 0; n < Board.NodeCount; n++)
             {
                 Probe(nodePlayerActive[n], ref best, ref bestDistance, point);
@@ -1937,6 +2318,33 @@ namespace Overlink.Match
             ClearMarks();
             MarkCards(new[] { blocker }, PickMark.Selected);
             MarkCards(attackers, PickMark.BlockTarget);
+        }
+
+        /// <summary>
+        /// Lights every player-side socket that can host <paramref name="cardType"/> and is currently free.
+        /// Used by two-click deploy: the player taps a card in the hand, these sockets light, then a tap on one
+        /// of them deploys. Returns the number of sockets lit.
+        /// </summary>
+        public int ShowDeployTargets(CardType cardType)
+        {
+            CollectPickables();
+            ClearMarks();
+
+            int lit = 0;
+            for (int i = 0; i < pickables.Count; i++)
+            {
+                Tile tile = pickables[i];
+                if (tile == null || tile.Owner != PlayerIndex.Player) continue;
+                if (tile.Card != null) continue;
+
+                var slot = new BoardSlot(tile.SlotType, tile.SlotIndex, tile.NodeIndex);
+                if (!slot.CanHost(cardType)) continue;
+
+                tile.Mark = PickMark.DeployTarget;
+                lit++;
+            }
+
+            return lit;
         }
 
         // ---- Details ------------------------------------------------------------------
@@ -2703,6 +3111,14 @@ namespace Overlink.Match
                     ClearDetails();
                 }
 
+                if (battleEvent.Kind == BattleEventKind.Attacked)
+                {
+                    if (tileByCard.TryGetValue(battleEvent.SourceId, out Tile glowAttacker))
+                        GlowTile(glowAttacker, AttackGlow, 0.35f, 1.2f);
+                    if (tileByCard.TryGetValue(battleEvent.SubjectId, out Tile glowTarget))
+                        GlowTile(glowTarget, AttackGlow, 0.35f, 1.2f);
+                }
+
                 Tile subjectTile = TileOf(subject);
                 if (subjectTile != null && (battleEvent.Kind == BattleEventKind.Attacked
                     || battleEvent.Kind == BattleEventKind.Damaged
@@ -2720,6 +3136,7 @@ namespace Overlink.Match
                     impactPulseTile = battleEvent.Player == (int)PlayerIndex.Player
                         ? playerCorePlate : opponentCorePlate;
                     impactPulseUntil = Time.unscaledTime + 0.42f;
+                    GlowScan(impactPulseTile);
                 }
 
                 if (hud != null)
@@ -2831,6 +3248,18 @@ namespace Overlink.Match
             ShowNotice($"Deploying {card.Definition.Name}...");
         }
 
+        void GlowTile(Tile tile, Color color, float duration, float peak)
+        {
+            if (tile == null || tile.Body == null) return;
+            glow.Flash(tile.Body.transform.parent, new Vector2(tile.Size.x, tile.Size.y), color, duration, peak);
+        }
+
+        void GlowScan(Tile tile)
+        {
+            if (tile == null || tile.Body == null) return;
+            glow.Scan(tile.Body.transform.parent, new Vector2(tile.Size.x, tile.Size.y), CoreScanGlow, 0.7f);
+        }
+
         void PlayTileBurst(Tile tile, Color color, float duration)
         {
             if (tile != null && tile.Body != null && MatchFeedback.Instance != null)
@@ -2929,6 +3358,13 @@ namespace Overlink.Match
                 SetBannerTags($"TURN {state.TurnNumber}",
                     state.ActivePlayer == PlayerIndex.Player ? "YOUR ACTION" : "THEIR ACTION");
             }
+
+            if (turnSeen >= 0 && state.TurnNumber != turnSeen)
+            {
+                GlowScan(playerCorePlate);
+                GlowScan(opponentCorePlate);
+            }
+            turnSeen = state.TurnNumber;
 
             PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench,
                 opponentProtocol, opponentCorePlate);
@@ -3035,11 +3471,11 @@ namespace Overlink.Match
         void PaintPiles(MatchState state)
         {
             PlayerState p = state.GetPlayer(PlayerIndex.Player);
-            PaintPile(deckPile, p.Deck.Count, "DECK");
-            PaintPile(discardPile, p.Discard.Count, "DISCARD");
+            PaintPile(deckPile, deckBackView, p.Deck.Count, "DECK", false);
+            PaintPile(discardPile, discardBackView, p.Discard.Count, "DISCARD", true);
         }
 
-        void PaintPile(Tile tile, int count, string caption)
+        void PaintPile(Tile tile, CardBackView back, int count, string caption, bool alwaysShowBack)
         {
             if (tile == null)
             {
@@ -3052,6 +3488,13 @@ namespace Overlink.Match
                 count > 0 ? tile.BaseColor : Darken(tile.BaseColor, 0.45f)))));
             tile.Label.text = caption + "\n" + count;
             tile.Label.color = count > 0 ? new Color(0.80f, 0.85f, 0.92f) : new Color(0.46f, 0.48f, 0.54f);
+
+            // The deck's back vanishes when it drains. The discard always shows its back, even empty, so the
+            // spent pile keeps its place on the table and its count label is the only change.
+            if (back != null)
+            {
+                back.gameObject.SetActive(alwaysShowBack || count > 0);
+            }
         }
 
         /// <summary>
@@ -3106,6 +3549,8 @@ namespace Overlink.Match
             {
                 SetBodyColor(plate.Body, TintForHover(plate, TintForCombatPulse(plate,
                     TintForMark(plate, plate.BaseColor))));
+                SetPlateAccent(plate.Body, TintForHover(plate, TintForCombatPulse(plate,
+                    TintForMark(plate, who == PlayerIndex.Player ? nodePlayer : nodeOpponent))), 1f);
             }
 
             // The readout moved off the table onto this side's chip. Formatting stays here because the HUD is
@@ -3149,11 +3594,28 @@ namespace Overlink.Match
                 bool pControls = pHolds && !oHolds;
                 bool oControls = oHolds && !pHolds;
 
-                SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n], TintForMark(nodePlate[n],
-                    pHolds && oHolds ? nodeFree
+                int owner = pControls ? 1 : oControls ? 2 : 0;
+                if (nodeOwnerSeen == null) nodeOwnerSeen = new int[Board.NodeCount];
+                int ownerSeen = nodeOwnerSeen[n];
+                if (ownerSeen != 0 && ownerSeen != owner + 1)
+                {
+                    GlowTile(nodePlate[n], owner == 1 ? nodePlayer : owner == 2 ? nodeOpponent : nodeFree, 0.6f, 1.2f);
+                }
+                nodeOwnerSeen[n] = owner + 1;
+
+                Color ownership = pHolds && oHolds ? nodeFree
                     : pControls ? nodePlayer
                     : oControls ? nodeOpponent
-                    : nodeFree))));
+                    : nodeFree;
+                nodePlate[n].FrameBaseColor = ownership;
+                PaintSlotFrame(nodePlate[n]);
+                if (nodeLink != null && nodeLink[n] != null)
+                {
+                    SetBodyColor(nodeLink[n], ownership);
+                }
+                SetBodyColor(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n], TintForMark(nodePlate[n], nodePlateBody))));
+                SetPlateAccent(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n],
+                    TintForMark(nodePlate[n], ownership))), NodeCenter[n].x < 0f ? 1f : -1f);
 
                 // The bonus text and the ownership readout, which used to be the plate caption. The plate keeps
                 // only its bare NODE tag now, so this is the one place a player can read what holding a node
@@ -3261,6 +3723,19 @@ namespace Overlink.Match
             renderer.SetPropertyBlock(tintBlock);
         }
 
+        // Preserve the fill already written by SetBodyColor: accents never replace the matte albedo.
+        void SetPlateAccent(Renderer renderer, Color accent, float side)
+        {
+            if (renderer == null) return;
+            if (tintBlock == null) tintBlock = new MaterialPropertyBlock();
+            tintBlock.Clear();
+            renderer.GetPropertyBlock(tintBlock);
+            tintBlock.SetColor("_AccentColor", accent);
+            tintBlock.SetFloat("_ChevronSide", side);
+            tintBlock.SetFloat("_Chevrons", renderer.transform.parent.name.StartsWith("NodePlate") ? 1f : 0f);
+            renderer.SetPropertyBlock(tintBlock);
+        }
+
         void PaintSlotFrame(Tile tile)
         {
             if (tile == null)
@@ -3307,6 +3782,7 @@ namespace Overlink.Match
                 if (!preview && card.InstanceId == deployBurstCardId && Time.unscaledTime < deployPulseUntil)
                 {
                     PlayTileBurst(tile, new Color(0.25f, 0.95f, 1f, 0.9f), 0.4f);
+                    GlowTile(tile, DeployGlow, 0.45f, 1.6f);
                     deployBurstCardId = -1;
                 }
             }
@@ -3958,7 +4434,8 @@ namespace Overlink.Match
         /// </summary>
         Material MaterialFor(Color color, string name)
         {
-            Material skin = SkinFor(SurfaceFor(name));
+            Material skin = name.EndsWith("CorePlate") && corePlateSkin != null
+                ? corePlateSkin : SkinFor(SurfaceFor(name));
             return skin != null ? skin : MaterialForColor(color);
         }
 
@@ -3975,6 +4452,7 @@ namespace Overlink.Match
                 case Surface.Plate: return plateSkin;
                 case Surface.Pile: return pileSkin;
                 case Surface.Rim: return rimSkin;
+                case Surface.Link: return linkSkin;
                 default: return null;
             }
         }
@@ -4013,7 +4491,8 @@ namespace Overlink.Match
                 }
 
                 Surface surface = SurfaceFor(renderer.transform.parent.name);
-                Material skin = SkinFor(surface);
+                Material skin = renderer.transform.parent.name.EndsWith("CorePlate") && corePlateSkin != null
+                    ? corePlateSkin : SkinFor(surface);
                 if (skin != null)
                 {
                     renderer.sharedMaterial = skin;
@@ -4031,8 +4510,21 @@ namespace Overlink.Match
             appliedTableSkin = tableSkin;
             appliedSocketSkin = socketSkin;
             appliedPlateSkin = plateSkin;
+            appliedCorePlateSkin = corePlateSkin;
             appliedPileSkin = pileSkin;
             appliedRimSkin = rimSkin;
+            appliedLinkSkin = linkSkin;
+
+            if (nodeLink != null)
+            {
+                for (int n = 0; n < nodeLink.Length; n++)
+                {
+                    if (nodeLink[n] != null && linkSkin != null)
+                    {
+                        nodeLink[n].sharedMaterial = linkSkin;
+                    }
+                }
+            }
         }
 
         // The five slots as they stood the last time the board was walked. A skin dropped mid-match has to
@@ -4043,8 +4535,10 @@ namespace Overlink.Match
         Material appliedTableSkin;
         Material appliedSocketSkin;
         Material appliedPlateSkin;
+        Material appliedCorePlateSkin;
         Material appliedPileSkin;
         Material appliedRimSkin;
+        Material appliedLinkSkin;
 
         /// <summary>
         /// Walks the board only if one of the five slots has moved since the last walk.
@@ -4059,7 +4553,7 @@ namespace Overlink.Match
         {
             if (tableSkin == appliedTableSkin && socketSkin == appliedSocketSkin &&
                 plateSkin == appliedPlateSkin && pileSkin == appliedPileSkin &&
-                rimSkin == appliedRimSkin)
+                rimSkin == appliedRimSkin && linkSkin == appliedLinkSkin && corePlateSkin == appliedCorePlateSkin)
             {
                 return;
             }
@@ -4191,7 +4685,7 @@ namespace Overlink.Match
             // Every card socket gets an editable box and the caption is a sibling of that box. Active keeps the
             // historical Socket name for prefab/test compatibility; Bench and Protocol use SlotFrame so the
             // hierarchy makes their role explicit. None of these visual children receive a collider.
-            if (socketBorder || IsCardSlotName(name))
+            if (socketBorder || HasSocketFrame(name))
             {
                 MakeSlotFrame(holder, name, size, socketBorder);
             }
@@ -4346,6 +4840,9 @@ namespace Overlink.Match
 
             /// <summary>The five player-side Active sockets that accept the opening lineup.</summary>
             LineupTarget,
+
+            /// <summary>A player-side socket that accepts the card tapped in the hand for two-click deploy.</summary>
+            DeployTarget,
         }
     }
 }

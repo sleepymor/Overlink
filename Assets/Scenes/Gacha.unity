@@ -296,7 +296,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _MainTex:
-        m_Texture: {fileID: -124280822077424510, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
+        m_Texture: {fileID: -2465839900411854371, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -9517,7 +9517,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: 0
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
   m_sharedMaterial: {fileID: 1263868221}
   m_fontSharedMaterials:
   - {fileID: 1263868221}
@@ -10606,7 +10606,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _MainTex:
-        m_Texture: {fileID: -124280822077424510, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
+        m_Texture: {fileID: -2465839900411854371, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -11593,7 +11593,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: 0
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
   m_sharedMaterial: {fileID: 6894098}
   m_fontSharedMaterials:
   - {fileID: 6894098}
@@ -13119,7 +13119,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: GACHA // SIGNAL BAY
+  m_text: SIGNAL BAY
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cc22ff94e21ebdb4ab034787abc5dfe9, type: 2}
   m_sharedMaterial: {fileID: 9075866700831747235, guid: cc22ff94e21ebdb4ab034787abc5dfe9, type: 2}
@@ -15608,8 +15608,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 0
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
-  m_sharedMaterial: {fileID: 5639120396458949605, guid: 7ffd8c9875df2544fa613c90621b68c1, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
+  m_sharedMaterial: {fileID: 9075866700831747235, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -16167,7 +16167,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "NETWORK STABLE   \u2022   v2026.11.7 Alpha"
+  m_text: v2026.11.7 Alpha
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: bf827d1ce9ec9194c9f71156101406a1, type: 2}
   m_sharedMaterial: {fileID: 4341420182423400765, guid: bf827d1ce9ec9194c9f71156101406a1, type: 2}

@@ -100,12 +100,15 @@ namespace Overlink.Match.Tests
         [OneTimeSetUp]
         public void OneTimeSetUp()
         {
-            // Real component, real defaults: reading the lens out of the shipped controller is what keeps
-            // these tests honest when somebody retunes the framing in the scene. A hard-coded framing is a
-            // framing that nobody re-checks.
+            // Real component, real lens. The zoom is not the component default: the Gameplay scene serializes
+            // its own distance and limits, and ShippedFramingTests fails if they move, so this is the frame the
+            // player sees.
             var go = new GameObject("IdleHandSinkFramingDefaults");
             spawned.Add(go);
             shipped = go.AddComponent<BattlefieldCameraController>();
+            shipped.distance = ShippedFraming.Distance;
+            shipped.minDistance = ShippedFraming.MinDistance;
+            shipped.maxDistance = ShippedFraming.MaxDistance;
         }
 
         /// <summary>

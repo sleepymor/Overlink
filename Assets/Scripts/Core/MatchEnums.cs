@@ -19,7 +19,8 @@ namespace Overlink.Core
         CoreActive,
         CoreBench,
         NodeActive,
-        NodeBench
+        NodeBench,
+        Protocol
     }
 
     public enum PlayerIndex
