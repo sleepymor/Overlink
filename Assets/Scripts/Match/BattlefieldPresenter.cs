@@ -958,6 +958,7 @@ namespace Overlink.Match
             for (int n = 0; n < Board.NodeCount; n++)
             {
                 nodePlate[n] = FindTile($"NodePlate{n}");
+                ClearNodePlateCaption(nodePlate[n]);
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
                 nodePlayerActive[n] = new Tile[Board.NodeActiveSlots];
@@ -1612,14 +1613,10 @@ namespace Overlink.Match
                 Transform node = Group(nodes, $"Node {n + 1}");
                 node.localPosition = new Vector3(c.x, c.y, 0f);
 
-                // The plate keeps a bare NODE tag so the HUD's bonus list still reads against the board — you
-                // can see which plate row 2 of the list is describing — but the bonus wording itself moved to
-                // that list. It used to be a 13pt caption on the plate, which is the least legible place on
-                // the table for it: dead centre, foreshortened by the pitch, and under a card as soon as
-                // anyone contests the node. Riding the plate's own label rather than a sibling means the tag
-                // travels with the plate when a node is moved in the editor.
+                // Node identity and bonuses live in BattlefieldHud. The plate itself stays visually clean so
+                // the card sockets and ownership accent remain the only marks inside the node battlefield.
                 nodePlate[n] = MakeTile(node, $"NodePlate{n}",
-                    new Vector3(0f, 0f, PlateZ), NodePlateSize, nodePlateBody, $"NODE {n + 1}", 14);
+                    new Vector3(0f, 0f, PlateZ), NodePlateSize, nodePlateBody, "", 14);
 
                 nodeOpponentActive[n] = new Tile[Board.NodeActiveSlots];
                 nodeOpponentBench[n] = new Tile[Board.NodeBenchSlots];
@@ -1664,6 +1661,18 @@ namespace Overlink.Match
         static float NodeSlotOffset(int index, int perRow)
         {
             return (index - (perRow - 1) * 0.5f) * NodeSpacing;
+        }
+
+        /// <summary>
+        /// Node identity and ownership are already represented by the plate colour/link and the HUD node rows.
+        /// Keep the authored label component for prefab binding compatibility, but do not print a second node
+        /// identifier inside the battlefield plate.
+        /// </summary>
+        static void ClearNodePlateCaption(Tile tile)
+        {
+            if (tile == null || tile.Label == null) return;
+            tile.EmptyLabel = string.Empty;
+            tile.Label.text = string.Empty;
         }
 
         /// <summary>
@@ -3617,9 +3626,8 @@ namespace Overlink.Match
                 SetPlateAccent(nodePlate[n].Body, TintForHover(nodePlate[n], TintForCombatPulse(nodePlate[n],
                     TintForMark(nodePlate[n], ownership))), NodeCenter[n].x < 0f ? 1f : -1f);
 
-                // The bonus text and the ownership readout, which used to be the plate caption. The plate keeps
-                // only its bare NODE tag now, so this is the one place a player can read what holding a node
-                // is actually worth.
+                // The bonus text and ownership readout belong to the HUD. The battlefield plate remains free of
+                // node text so it can focus on sockets, ownership colour and links.
                 if (hud != null)
                 {
                     bool contested = pHolds && oHolds;
