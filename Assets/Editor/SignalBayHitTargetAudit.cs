@@ -10,7 +10,7 @@ namespace Overlink.EditorTools
     /// <summary>Non-destructive pointer audit against the visible raster bay's 1600×900 design.</summary>
     public static class SignalBayHitTargetAudit
     {
-        [MenuItem("Tools/Offline Gacha/Audit Bay Pointer Targets")]
+        [MenuItem("Tools/Gacha/Audit Bay Pointer Targets")]
         public static void Audit()
         {
             if (!Application.isPlaying)
@@ -19,7 +19,7 @@ namespace Overlink.EditorTools
                 return;
             }
 
-            var controller = Object.FindObjectOfType<OfflineSignalBayController>();
+            var controller = Object.FindObjectOfType<SignalBayController>();
             var eventSystem = EventSystem.current;
             if (controller == null || eventSystem == null)
             {
@@ -36,7 +36,7 @@ namespace Overlink.EditorTools
             else Debug.LogError("[BayHitAudit] FAIL: " + failures + " visible button center(s) missed their wired controls.");
         }
 
-        [MenuItem("Tools/Offline Gacha/Audit Editable Bay Button Surfaces")]
+        [MenuItem("Tools/Gacha/Audit Editable Bay Button Surfaces")]
         public static void AuditEditableSurfaces()
         {
             if (!Application.isPlaying)
@@ -44,7 +44,7 @@ namespace Overlink.EditorTools
                 Debug.LogError("[BaySurfaceAudit] Enter Play mode in Gacha before auditing.");
                 return;
             }
-            var controller = Object.FindObjectOfType<OfflineSignalBayController>();
+            var controller = Object.FindObjectOfType<SignalBayController>();
             var events = EventSystem.current;
             var bay = controller != null ? controller.transform.Find("Figma Signal Bay") : null;
             var group = bay != null ? bay.GetComponent<CanvasGroup>() : null;

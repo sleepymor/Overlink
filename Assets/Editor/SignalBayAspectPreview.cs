@@ -31,19 +31,19 @@ namespace Overlink.EditorTools
             };
         }
 
-        [MenuItem("Tools/Offline Gacha/Preview Bay at 16 by 10")]
+        [MenuItem("Tools/Gacha/Preview Bay at 16 by 10")]
         static void PreviewSixteenByTen()
         {
             PreviewAspect(false);
         }
 
-        [MenuItem("Tools/Offline Gacha/Preview Bay at 4 by 3")]
+        [MenuItem("Tools/Gacha/Preview Bay at 4 by 3")]
         static void PreviewFourByThree()
         {
             PreviewAspect(true);
         }
 
-        [MenuItem("Tools/Offline Gacha/Remove Temporary Bay Aspect")]
+        [MenuItem("Tools/Gacha/Remove Temporary Bay Aspect")]
         static void RemoveTemporaryAspect()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogError("[BayAspect] Stop Play mode before cleanup."); return; }

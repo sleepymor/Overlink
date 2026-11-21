@@ -57,6 +57,8 @@ namespace Overlink.UI
             {
                 case AuthState.SignedOut:
                 case AuthState.Error:
+                case AuthState.VersionCheckFailed:
+                case AuthState.UpdateRequired:
                 case AuthState.NeedsProfileSetup:
                     Debug.Log($"[ProtectedSceneGuard] '{scene.name}' requires sign-in; returning to Auth ({flow.CurrentState}).");
                     SceneManager.LoadScene(SceneIndex.Auth);

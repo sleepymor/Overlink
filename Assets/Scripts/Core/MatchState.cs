@@ -97,8 +97,14 @@ namespace Overlink.Core
         /// </summary>
         public List<BattleEvent> PendingEvents { get; }
 
-        public MatchState(int? seed = null)
+        readonly bool matchLocalCardIds;
+        int nextMatchCardId = 1;
+
+        /// <param name="matchLocalCardIds">Use only when all cards are created by this match;
+        /// standalone CardInstance objects can otherwise collide with its IDs.</param>
+        public MatchState(int? seed = null, bool matchLocalCardIds = false)
         {
+            this.matchLocalCardIds = matchLocalCardIds;
             Seed = seed;
             Rng = seed.HasValue ? new Random(seed.Value) : new Random();
             Players = new PlayerState[2];
@@ -121,6 +127,139 @@ namespace Overlink.Core
         public PlayerState GetOpponent(PlayerIndex index)
         {
             return Players[1 - (int)index];
+        }
+
+        /// <summary>
+        /// Builds a detached presentation state from a redacted network view. This is intentionally not an
+        /// authoritative match: it has no engine, no command boundary and no rules entry point. It exists so
+        /// existing board presentation code can render a guest snapshot without teaching that code a second
+        /// board layout language.
+        /// </summary>
+        public static MatchState FromPresentationView(MatchViewSnapshot view,
+            Func<string, CardDefinition> resolveDefinition)
+        {
+            if (view == null) throw new ArgumentNullException(nameof(view));
+            if (resolveDefinition == null) throw new ArgumentNullException(nameof(resolveDefinition));
+            var state = new MatchState(view.Revision.GetHashCode(), true)
+            {
+                ActivePlayer = MapSeat(view.ActivePlayer, view.Viewer),
+                CurrentPhase = view.Phase,
+                TurnNumber = view.TurnNumber,
+                Result = view.Viewer == PlayerIndex.Opponent
+                    ? view.Result == MatchResult.PlayerWin ? MatchResult.OpponentWin
+                    : view.Result == MatchResult.OpponentWin ? MatchResult.PlayerWin : view.Result
+                    : view.Result,
+                ResultReason = view.Viewer == PlayerIndex.Opponent && view.ResultReason == "YOU CONCEDED"
+                    ? "OPPONENT CONCEDED"
+                    : view.Viewer == PlayerIndex.Opponent && view.ResultReason == "OPPONENT CONCEDED"
+                        ? "YOU CONCEDED" : view.ResultReason,
+                SetupInProgress = view.SetupInProgress,
+                CoinFlipped = view.CoinFlipped,
+                FirstPlayer = MapSeat(view.FirstPlayer, view.Viewer)
+            };
+
+            for (int i = 0; i < 2; i++)
+            {
+                PlayerIndex targetSeat = (PlayerIndex)i;
+                int sourceIndex = i == 0 ? (int)view.Viewer : 1 - (int)view.Viewer;
+                PlayerState target = state.Players[i];
+                MatchViewSnapshot.PlayerView source = view.Players[sourceIndex];
+                target.CurrentNP = source.NP;
+                target.CoreDurability = source.CoreDurability;
+                target.LineupRerolls = source.LineupRerolls;
+                target.LineupConfirmed = source.LineupConfirmed;
+                AddCards(target.Hand, source.Hand, target.Index, resolveDefinition);
+                AddCards(target.LineupOffer, source.LineupOffer, target.Index, resolveDefinition);
+                AddPlaceholders(target.Deck, source.DeckCount, target.Index);
+                AddCards(target.Discard, source.Discard, target.Index, resolveDefinition);
+                foreach (MatchViewSnapshot.BoardCard board in source.Board)
+                {
+                    CardInstance card = ToCard(board.Card, target.Index, resolveDefinition);
+                    if (card == null) continue;
+                    if (board.Slot == SlotType.Protocol && board.Index == 0)
+                        target.Board.Protocol = card;
+                    else
+                    {
+                        BoardSlot slot = Slot(target.Board, board.Slot, board.Index, board.NodeIndex);
+                        if (slot != null) slot.Card = card;
+                    }
+                }
+            }
+            return state;
+        }
+
+        static PlayerIndex MapSeat(PlayerIndex source, PlayerIndex viewer)
+        {
+            return source == viewer ? PlayerIndex.Player : PlayerIndex.Opponent;
+        }
+
+        static void AddCards(List<CardInstance> target, IReadOnlyList<MatchViewSnapshot.CardView> source,
+            PlayerIndex owner, Func<string, CardDefinition> resolveDefinition)
+        {
+            if (source == null) return;
+            foreach (MatchViewSnapshot.CardView card in source)
+            {
+                CardInstance instance = ToCard(card, owner, resolveDefinition);
+                if (instance != null) target.Add(instance);
+            }
+        }
+
+        static void AddPlaceholders(List<CardInstance> target, int count, PlayerIndex owner)
+        {
+            for (int i = 0; i < Math.Max(0, count); i++)
+            {
+                var definition = new CardDefinition { Id = "presentation-hidden-" + i, Name = "Hidden card", Type = CardType.Unit, Hp = 1 };
+                target.Add(new CardInstance(definition, owner));
+            }
+        }
+
+        static CardInstance ToCard(MatchViewSnapshot.CardView source, PlayerIndex owner,
+            Func<string, CardDefinition> resolveDefinition)
+        {
+            if (source == null || source.InstanceId <= 0) return null;
+            CardDefinition definition = resolveDefinition(source.DefinitionId);
+            if (definition == null)
+            {
+                definition = new CardDefinition
+                {
+                    Id = source.DefinitionId ?? "presentation-card",
+                    Name = source.DefinitionId ?? "Card",
+                    Type = CardType.Unit,
+                    Atk = source.Attack,
+                    Hp = Math.Max(1, source.Health),
+                    Shield = Math.Max(0, source.Shield)
+                };
+            }
+            var card = new CardInstance(definition, owner, source.InstanceId)
+            {
+                CurrentAtk = source.Attack,
+                CurrentHp = source.Health,
+                CurrentShield = source.Shield,
+                State = source.State,
+                HasSummoningDelay = source.SummoningDelay,
+                CannotBeBlocked = source.CannotBeBlocked,
+                NodeAtkBonus = source.NodeAtkBonus,
+                NodeHpBonus = source.NodeHpBonus
+            };
+            return card;
+        }
+
+        static BoardSlot Slot(Board board, SlotType type, int index, int node)
+        {
+            switch (type)
+            {
+                case SlotType.CoreActive: return At(board.CoreActive, index);
+                case SlotType.CoreBench: return At(board.CoreBench, index);
+                case SlotType.NodeActive: return At(node >= 0 && node < Board.NodeCount ? board.NodeActive[node] : null, index);
+                case SlotType.NodeBench: return At(node >= 0 && node < Board.NodeCount ? board.NodeBench[node] : null, index);
+                case SlotType.Protocol: return null;
+                default: return null;
+            }
+        }
+
+        static BoardSlot At(BoardSlot[] slots, int index)
+        {
+            return slots != null && index >= 0 && index < slots.Length ? slots[index] : null;
         }
 
         public bool IsMatchOver()
@@ -893,10 +1032,17 @@ namespace Overlink.Core
             {
                 if (def != null)
                 {
-                    CardInstance instance = new CardInstance(def, player.Index);
+                    CardInstance instance = CreateCardInstance(def, player.Index);
                     player.Deck.Add(instance);
                 }
             }
+        }
+
+        internal CardInstance CreateCardInstance(CardDefinition definition, PlayerIndex owner)
+        {
+            return matchLocalCardIds
+                ? new CardInstance(definition, owner, checked(nextMatchCardId++))
+                : new CardInstance(definition, owner);
         }
 
         public void LogEvent(string message)

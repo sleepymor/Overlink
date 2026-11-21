@@ -39,6 +39,7 @@ namespace Overlink.UI
         TextMeshProUGUI profileTitle;
         Image profileCardImage;
         Outline profileCardOutline;
+        LobbyManager lobby;
 
         void Awake()
         {
@@ -68,6 +69,7 @@ namespace Overlink.UI
 
         void Start()
         {
+            lobby = EnsureOnlineLobby();
             if (PlayerProfileService.Instance != null)
                 PlayerProfileService.Instance.ProfileLoaded += OnProfileLoaded;
             if (AccountManager.Instance != null)
@@ -147,9 +149,20 @@ namespace Overlink.UI
 
         // ── Command handlers ────────────────────────────────────────────────────
 
-        void OnPlayClicked() => SceneLoader.Load(SceneIndex.Gameplay);
+        void OnPlayClicked()
+        {
+            lobby = EnsureOnlineLobby();
+            var template = transform.Find("Canvas/Title and commands/Play commands/Matchmaking command")?.GetComponent<Button>();
+            if (template != null) OnlineLobbyPopup.Show(lobby, template);
+            else Debug.LogWarning("[MainMenu] Cannot open multiplayer: menu button template is missing.");
+        }
 
         void OnVsAIClicked() => SceneLoader.Load(SceneIndex.Gameplay);
+
+        static LobbyManager EnsureOnlineLobby()
+        {
+            return LobbyManager.EnsureInstance();
+        }
 
         // The binder is the front door for collection and deck work: it hosts the collection grid and
         // the active-deck view, and from there opens the deck builder. The old standalone

@@ -1,0 +1,7 @@
+{
+    "name": "Overlink.PlayerManager.Editor",
+    "rootNamespace": "Overlink.EditorTools",
+    "references": ["Overlink.Cards", "Overlink.Core"],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": true
+}

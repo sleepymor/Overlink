@@ -10,6 +10,9 @@ using Unity.Services.Authentication;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using Unity.Networking.Transport.Relay;
+using Unity.Collections;
+using Overlink.Core;
+using System.Text;
 
 namespace Overlink.Net
 {
@@ -36,6 +39,18 @@ namespace Overlink.Net
         const string RelayProtocol = "dtls";
         const float SeatRadius = 2.5f;
         const float WatchdogSeconds = 15f;
+        const string SeatReadyMessage = "overlink.seat.ready.v1";
+        const string SeatChallengeMessage = "overlink.seat.challenge.v1";
+        const string SeatProofMessage = "overlink.seat.proof.v1";
+        const string SeatAcceptedMessage = "overlink.seat.accepted.v1";
+        const string HostChallengeMessage = "overlink.host.challenge.v1";
+        const string HostProofMessage = "overlink.host.proof.v1";
+        const string HostAcceptedMessage = "overlink.host.accepted.v1";
+        const string BattleDeckMessage = "overlink.match.deck.v1";
+        const string MatchCommandMessage = "overlink.match.command.v1";
+        const string MatchCommandResponseMessage = "overlink.match.command.response.v1";
+        const string MatchViewMessage = "overlink.match.view.v1";
+        const int MaxBattleDeckPayloadBytes = 4096;
 
         [Header("Relay")]
         [Min(2)] public int maxPlayers = 4;
@@ -48,7 +63,95 @@ namespace Overlink.Net
         public string LastJoinCode { get; private set; } = "";
         public string Status { get; private set; } = "Offline";
         public bool IsListening => mgr != null && mgr.IsListening;
+        public ulong LocalPeerId => mgr != null ? mgr.LocalClientId : ulong.MaxValue;
+        public bool IsConnected => mgr != null && mgr.IsConnectedClient;
         public bool IsHost => mgr != null && mgr.IsHost;
+        public bool HasRemotePeer => mgr != null && mgr.IsServer && mgr.ConnectedClientsIds.Count > 1;
+        public bool IsSeatAuthenticated { get; private set; }
+        public DeckData RemoteBattleDeck { get; private set; }
+        public event Action OnSeatAuthenticated;
+        public event Action<DeckData> OnRemoteBattleDeck;
+        public event Action<long, long, CommandResult> OnMatchCommandResponse;
+        public event Action<GameCommand, long> OnRemoteCommandAccepted;
+        public event Action<MatchViewSnapshot> OnGuestViewChanged;
+        public MatchViewSnapshot GuestView => guestViewReceiver?.Current;
+
+        /// <summary>Publish a redacted full view at the bound host boundary's current revision.</summary>
+        public void SendGuestView()
+        {
+            if (mgr == null || !mgr.IsServer || !IsSeatAuthenticated || commandBoundary == null || boundEngine == null)
+                throw new InvalidOperationException("The authenticated host match channel is not ready.");
+            byte[] payload = MatchViewEncoder.EncodeGuest(new MatchViewSnapshot(boundEngine.State, PlayerIndex.Opponent, commandBoundary.Revision));
+            SendSeatMessage(MatchViewMessage, AuthenticatedRemotePeer(), payload);
+        }
+
+        /// <summary>One in-flight request at a time; the caller must reconcile state before issuing another.</summary>
+        public void SendMatchCommand(long requestId, long revision, GameCommand command)
+        {
+            if (mgr == null || mgr.IsServer || !mgr.IsConnectedClient || !IsSeatAuthenticated || pendingCommandRequest != 0 ||
+                GuestView == null || GuestView.Revision < requiredGuestRevision)
+                throw new InvalidOperationException("The authenticated guest command channel is not ready.");
+            byte[] payload = MatchCommandTransport.CreateRequest(requestId, revision, command);
+            pendingCommandRequest = requestId;
+            try { SendSeatMessage(MatchCommandMessage, NetworkManager.ServerClientId, payload); }
+            catch { pendingCommandRequest = 0; throw; }
+        }
+
+        /// <summary>Unranked only: the guest shares its deck with the authenticated host.</summary>
+        public void SendBattleDeck(DeckData deck)
+        {
+            if (mgr == null || mgr.IsServer || !mgr.IsConnectedClient || !IsSeatAuthenticated || deck == null)
+                throw new InvalidOperationException("The authenticated guest deck channel is not ready.");
+            byte[] payload = Encoding.UTF8.GetBytes(DeckData.ToJson(deck));
+            if (payload.Length == 0 || payload.Length > MaxBattleDeckPayloadBytes)
+                throw new InvalidOperationException("Battle deck payload is too large.");
+            SendSeatMessage(BattleDeckMessage, NetworkManager.ServerClientId, payload);
+        }
+
+        /// <summary>
+        /// Reject ambiguous or oversized unranked deck envelopes before they reach the match.
+        /// This does not prove ownership or protect against a malicious match host.
+        /// </summary>
+        public static bool TryReadBattleDeck(byte[] payload, out DeckData deck)
+        {
+            deck = null;
+            if (payload == null || payload.Length == 0 || payload.Length > MaxBattleDeckPayloadBytes) return false;
+            try
+            {
+                string json = new UTF8Encoding(false, true).GetString(payload);
+                DeckData parsed = DeckData.FromJson(json);
+                // The wire format is generated by ToJson. Requiring the exact representation
+                // rejects duplicate fields, ignored fields and parser normalization ambiguities.
+                if (parsed == null || parsed.Version != 1 || parsed.Cards == null ||
+                    !string.Equals(json, DeckData.ToJson(parsed), StringComparison.Ordinal)) return false;
+                int total = 0;
+                foreach (var entry in parsed.Cards)
+                {
+                    if (string.IsNullOrEmpty(entry.Key) || entry.Value < 1 ||
+                        entry.Value > DeckValidator.MaxCopiesPerCard) return false;
+                    total += entry.Value;
+                    if (total > DeckValidator.MaxDeckSize) return false;
+                }
+                if (total < DeckValidator.MinDeckSize) return false;
+                deck = parsed;
+                return true;
+            }
+            catch (Exception error) when (error is ArgumentException || error is FormatException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Bind the authoritative engine once the real match has been initialized.</summary>
+        public AuthoritativeCommandBoundary BindAuthenticatedMatch(MatchEngine engine)
+        {
+            if (mgr == null || !mgr.IsServer || !IsSeatAuthenticated || seatHandshake == null)
+                throw new InvalidOperationException("No authenticated remote seat is available.");
+            var boundary = seatHandshake.CreateCommandBoundary(engine);
+            commandBoundary = boundary;
+            boundEngine = engine;
+            return boundary;
+        }
 
         public event Action<string> OnStatusChanged;
         public event Action<string> OnJoinCodeChanged;
@@ -66,6 +169,23 @@ namespace Overlink.Net
         Coroutine watchdog;
         bool ready;
         bool relayOperation;
+        int seatSessionVersion;
+        bool seatVerificationPending;
+        bool seatProofSent;
+        bool guestProofAccepted;
+        bool guestSeatAccepted;
+        bool hostProofSent;
+        bool hostProofAcknowledged;
+        bool hostProofVerified;
+        bool seatAnnouncementPending;
+        Coroutine seatAnnouncementRoutine;
+        RelaySeatHandshake seatHandshake;
+        RelayHostChallenge hostChallenge;
+        AuthoritativeCommandBoundary commandBoundary;
+        long requiredGuestRevision;
+        MatchEngine boundEngine;
+        long pendingCommandRequest;
+        MatchViewReceiver guestViewReceiver;
 
         public event Action OnNetworkConnected;
         public event Action OnNetworkDisconnected;
@@ -81,6 +201,10 @@ namespace Overlink.Net
                 return;
             }
             Instance = this;
+            // The Relay/NGO session is created in the matchmaking scene and consumed by Gameplay.
+            // Keep this owner alive across that scene transition; otherwise the network manager is
+            // destroyed exactly when the match is ready to begin.
+            DontDestroyOnLoad(gameObject);
 
             mgr = GetComponent<NetworkManager>();
             transport = GetComponent<UnityTransport>();
@@ -89,6 +213,10 @@ namespace Overlink.Net
 
             if (mgr != null && transport != null)
             {
+                // A NetworkManager authored in a scene has serialized configuration, but
+                // AddComponent<NetworkManager>() on the production session root may not.
+                if (mgr.NetworkConfig == null)
+                    mgr.NetworkConfig = new NetworkConfig();
                 if (mgr.NetworkConfig.NetworkTransport == null)
                     mgr.NetworkConfig.NetworkTransport = transport;
                 RegisterAvatarPrefab();
@@ -180,6 +308,8 @@ namespace Overlink.Net
                     return null;
                 }
 
+                RegisterSeatMessages();
+
                 LastJoinCode = code;
                 OnJoinCodeChanged?.Invoke(code);
                 SetStatus($"Hosting — share code: {code}");
@@ -240,6 +370,8 @@ namespace Overlink.Net
                     return false;
                 }
 
+                RegisterSeatMessages();
+
                 LastJoinCode = "";
                 SetStatus($"Joining {code}… (waiting for host)");
                 if (watchdog != null) StopCoroutine(watchdog);
@@ -265,6 +397,7 @@ namespace Overlink.Net
         public void LeaveGame()
         {
             if (!IsListening) return;
+            ResetSeatHandshake();
             mgr.Shutdown();
             ResetSeats();
             LastJoinCode = "";
@@ -316,15 +449,20 @@ namespace Overlink.Net
                 }
                 SetStatus("Connected!");
                 OnNetworkConnected?.Invoke();
+                if (seatAnnouncementRoutine != null) StopCoroutine(seatAnnouncementRoutine);
+                seatAnnouncementRoutine = StartCoroutine(AnnounceSeatUntilAuthenticated());
                 return;
             }
 
             SpawnAvatar(clientId);
+            if (clientId != mgr.LocalClientId) OnNetworkConnected?.Invoke();
         }
 
         void OnClientDisconnected(ulong clientId)
         {
             if (mgr == null) return;
+            if ((!mgr.IsServer && clientId == mgr.LocalClientId) ||
+                (mgr.IsServer && clientId != mgr.LocalClientId)) ResetSeatHandshake();
 
             if (!mgr.IsServer)
             {
@@ -342,6 +480,7 @@ namespace Overlink.Net
                 freeSeats.Push(seat);
                 Debug.Log($"[Net] Client {clientId} left, seat {seat} released.");
             }
+            if (clientId != mgr.LocalClientId) OnNetworkDisconnected?.Invoke();
         }
 
         void SpawnAvatar(ulong clientId)
@@ -367,6 +506,272 @@ namespace Overlink.Net
 
             clientSeats[clientId] = seat;
             Debug.Log($"[Net] Spawned avatar for client {clientId} on seat {seat}.");
+        }
+
+        void RegisterSeatMessages()
+        {
+            var messages = mgr.CustomMessagingManager;
+            messages.RegisterNamedMessageHandler(SeatReadyMessage, OnSeatReady);
+            messages.RegisterNamedMessageHandler(SeatChallengeMessage, OnSeatChallenge);
+            messages.RegisterNamedMessageHandler(SeatProofMessage, OnSeatProof);
+            messages.RegisterNamedMessageHandler(SeatAcceptedMessage, OnSeatAccepted);
+            messages.RegisterNamedMessageHandler(HostChallengeMessage, OnHostChallenge);
+            messages.RegisterNamedMessageHandler(HostProofMessage, OnHostProof);
+            messages.RegisterNamedMessageHandler(HostAcceptedMessage, OnHostAccepted);
+            messages.RegisterNamedMessageHandler(BattleDeckMessage, OnBattleDeck);
+            messages.RegisterNamedMessageHandler(MatchCommandMessage, OnMatchCommand);
+            messages.RegisterNamedMessageHandler(MatchCommandResponseMessage, OnMatchCommandResponseMessage);
+            messages.RegisterNamedMessageHandler(MatchViewMessage, OnMatchView);
+        }
+
+        void ResetSeatHandshake()
+        {
+            seatSessionVersion++;
+            IsSeatAuthenticated = false;
+            seatVerificationPending = false;
+            seatProofSent = false;
+            guestProofAccepted = false;
+            guestSeatAccepted = false;
+            hostProofSent = false;
+            hostProofAcknowledged = false;
+            hostProofVerified = false;
+            seatAnnouncementPending = false;
+            if (seatAnnouncementRoutine != null) StopCoroutine(seatAnnouncementRoutine);
+            seatAnnouncementRoutine = null;
+            seatHandshake = null;
+            hostChallenge = null;
+            RemoteBattleDeck = null;
+            commandBoundary = null;
+            boundEngine = null;
+            pendingCommandRequest = 0;
+            requiredGuestRevision = 0;
+            guestViewReceiver = null;
+        }
+
+        IEnumerator AnnounceSeatUntilAuthenticated()
+        {
+            int version = seatSessionVersion;
+            while (version == seatSessionVersion && mgr != null && mgr.IsConnectedClient && !mgr.IsServer && !IsSeatAuthenticated)
+            {
+                if (!seatAnnouncementPending) _ = AnnounceSeatAsync();
+                yield return new WaitForSecondsRealtime(3f);
+            }
+            seatAnnouncementRoutine = null;
+        }
+
+        async Task AnnounceSeatAsync()
+        {
+            int version = seatSessionVersion;
+            seatAnnouncementPending = true;
+            try
+            {
+                var lobby = LobbyManager.Instance;
+                if (lobby == null) return;
+                await lobby.PublishSeatProofAsync();
+                if (this == null || version != seatSessionVersion || mgr == null || !mgr.IsConnectedClient || mgr.IsServer) return;
+                SendSeatMessage(SeatReadyMessage, NetworkManager.ServerClientId, Array.Empty<byte>());
+            }
+            catch (Exception error)
+            {
+                if (this != null && version == seatSessionVersion) SetStatus("Could not authenticate the lobby connection: " + error.Message);
+            }
+            finally { if (this != null && version == seatSessionVersion) seatAnnouncementPending = false; }
+        }
+
+        void OnSeatReady(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || !mgr.IsServer || sender == mgr.LocalClientId || IsSeatAuthenticated || seatVerificationPending || reader.Length - reader.Position != 0) return;
+            _ = ChallengePeerAsync(sender);
+        }
+
+        async Task ChallengePeerAsync(ulong sender)
+        {
+            seatVerificationPending = true;
+            int version = seatSessionVersion;
+            try
+            {
+                var lobby = LobbyManager.Instance;
+                if (lobby == null) return;
+                LobbySeatIdentity identity = await lobby.FetchOpponentSeatIdentityAsync();
+                if (this == null || version != seatSessionVersion || mgr == null || !mgr.IsServer ||
+                    !mgr.ConnectedClients.ContainsKey(sender)) return;
+                seatHandshake = new RelaySeatHandshake(identity, mgr.LocalClientId, sender);
+                SendSeatMessage(SeatChallengeMessage, sender, seatHandshake.Challenge);
+            }
+            catch (Exception error)
+            {
+                if (this != null && version == seatSessionVersion) SetStatus("Could not verify the lobby connection: " + error.Message);
+            }
+            finally { if (this != null && version == seatSessionVersion) seatVerificationPending = false; }
+        }
+
+        void OnSeatChallenge(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || mgr.IsServer || sender != NetworkManager.ServerClientId || IsSeatAuthenticated || reader.Length - reader.Position != LobbySeatProof.ChallengeBytes) return;
+            try
+            {
+                var challenge = new byte[LobbySeatProof.ChallengeBytes];
+                reader.ReadBytesSafe(ref challenge, challenge.Length);
+                byte[] proof = LobbyManager.Instance.SignSeatChallenge(mgr.LocalClientId, challenge);
+                SendSeatMessage(SeatProofMessage, NetworkManager.ServerClientId, proof);
+                seatProofSent = true;
+            }
+            catch (Exception error) { SetStatus("Could not sign the lobby challenge: " + error.Message); }
+        }
+
+        void OnSeatProof(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || !mgr.IsServer || seatHandshake == null || reader.Length - reader.Position != 256) return;
+            var proof = new byte[256];
+            reader.ReadBytesSafe(ref proof, proof.Length);
+            if (!seatHandshake.Accept(sender, proof)) return;
+            SendSeatMessage(SeatAcceptedMessage, sender, Array.Empty<byte>());
+            guestProofAccepted = true;
+            TryCompleteAuthentication();
+        }
+
+        void OnSeatAccepted(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || mgr.IsServer || sender != NetworkManager.ServerClientId || reader.Length - reader.Position != 0 || guestSeatAccepted || !seatProofSent) return;
+            guestSeatAccepted = true;
+            TryCompleteAuthentication();
+            _ = BeginHostAuthenticationAsync();
+        }
+
+        async Task BeginHostAuthenticationAsync()
+        {
+            int version = seatSessionVersion;
+            try
+            {
+                LobbyManager lobby = LobbyManager.Instance;
+                LobbySeatIdentity identity = await lobby.FetchHostSeatIdentityAsync();
+                if (this == null || version != seatSessionVersion || mgr == null || mgr.IsServer ||
+                    !mgr.IsConnectedClient || !guestSeatAccepted) return;
+                hostChallenge = new RelayHostChallenge(identity, NetworkManager.ServerClientId);
+                SendSeatMessage(HostChallengeMessage, NetworkManager.ServerClientId, hostChallenge.Challenge);
+                hostProofSent = true;
+            }
+            catch (Exception error)
+            {
+                if (this != null && version == seatSessionVersion)
+                    SetStatus("Could not verify the host identity: " + error.Message);
+            }
+        }
+
+        void OnHostChallenge(ulong sender, FastBufferReader reader)
+        {
+            int remaining = reader.Length - reader.Position;
+            if (mgr == null || !mgr.IsServer || sender == mgr.LocalClientId ||
+                !guestProofAccepted || seatHandshake == null || !seatHandshake.IsAuthenticatedPeer(sender) ||
+                remaining != LobbySeatProof.ChallengeBytes) return;
+            var challenge = new byte[remaining];
+            reader.ReadBytesSafe(ref challenge, challenge.Length);
+            try
+            {
+                byte[] proof = LobbyManager.Instance.SignSeatChallenge(mgr.LocalClientId, challenge);
+                SendSeatMessage(HostProofMessage, sender, proof);
+            }
+            catch (Exception error) { SetStatus("Could not prove the host identity: " + error.Message); }
+        }
+
+        void OnHostProof(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || mgr.IsServer || sender != NetworkManager.ServerClientId ||
+                !hostProofSent || hostChallenge == null || reader.Length - reader.Position != 256) return;
+            var proof = new byte[256];
+            reader.ReadBytesSafe(ref proof, proof.Length);
+            if (!hostChallenge.Accept(sender, proof)) return;
+            hostProofVerified = true;
+            SendSeatMessage(HostAcceptedMessage, NetworkManager.ServerClientId, Array.Empty<byte>());
+            TryCompleteAuthentication();
+        }
+
+        void OnHostAccepted(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || !mgr.IsServer || sender == mgr.LocalClientId ||
+                !guestProofAccepted || seatHandshake == null || !seatHandshake.IsAuthenticatedPeer(sender) ||
+                reader.Length - reader.Position != 0) return;
+            hostProofAcknowledged = true;
+            TryCompleteAuthentication();
+        }
+
+        void TryCompleteAuthentication()
+        {
+            bool complete = mgr != null && (mgr.IsServer
+                ? guestProofAccepted && hostProofAcknowledged
+                : guestSeatAccepted && hostProofVerified);
+            if (!complete || IsSeatAuthenticated) return;
+            IsSeatAuthenticated = true;
+            OnSeatAuthenticated?.Invoke();
+        }
+
+        void OnBattleDeck(ulong sender, FastBufferReader reader)
+        {
+            int remaining = reader.Length - reader.Position;
+            if (mgr == null || !mgr.IsServer || !IsSeatAuthenticated || remaining <= 0 ||
+                remaining > MaxBattleDeckPayloadBytes || RemoteBattleDeck != null) return;
+            if (seatHandshake == null || !seatHandshake.IsAuthenticatedPeer(sender)) return;
+
+            byte[] payload = new byte[remaining];
+            reader.ReadBytesSafe(ref payload, payload.Length);
+            if (!TryReadBattleDeck(payload, out DeckData deck)) return;
+            RemoteBattleDeck = deck;
+            OnRemoteBattleDeck?.Invoke(deck);
+        }
+
+        ulong AuthenticatedRemotePeer()
+        {
+            foreach (ulong peer in mgr.ConnectedClientsIds)
+                if (seatHandshake != null && seatHandshake.IsAuthenticatedPeer(peer)) return peer;
+            throw new InvalidOperationException("No authenticated remote player is connected.");
+        }
+
+        void OnMatchCommand(ulong sender, FastBufferReader reader)
+        {
+            int length = reader.Length - reader.Position;
+            if (mgr == null || !mgr.IsServer || !IsSeatAuthenticated || seatHandshake == null ||
+                !seatHandshake.IsAuthenticatedPeer(sender) || commandBoundary == null ||
+                length < 18 || length > MatchCommandTransport.MaxRequestBytes) return;
+            var payload = new byte[length];
+            reader.ReadBytesSafe(ref payload, length);
+            if (!MatchCommandTransport.TryExecute(payload, sender, commandBoundary, out byte[] response, out GameCommand accepted)) return;
+            SendSeatMessage(MatchCommandResponseMessage, sender, response);
+            if (accepted != null) OnRemoteCommandAccepted?.Invoke(accepted, commandBoundary.Revision);
+            else SendGuestView(); // Rejected stale commands need the current authoritative view too.
+        }
+
+        void OnMatchCommandResponseMessage(ulong sender, FastBufferReader reader)
+        {
+            if (mgr == null || mgr.IsServer || !IsSeatAuthenticated || sender != NetworkManager.ServerClientId ||
+                pendingCommandRequest == 0 || reader.Length - reader.Position != MatchCommandTransport.ResponseBytes) return;
+            var payload = new byte[MatchCommandTransport.ResponseBytes];
+            reader.ReadBytesSafe(ref payload, payload.Length);
+            if (!MatchCommandTransport.TryReadResponse(payload, out long requestId, out long revision, out CommandResult result) ||
+                requestId != pendingCommandRequest) return;
+            pendingCommandRequest = 0;
+            requiredGuestRevision = Math.Max(requiredGuestRevision, revision);
+            OnMatchCommandResponse?.Invoke(requestId, revision, result);
+        }
+
+        void OnMatchView(ulong sender, FastBufferReader reader)
+        {
+            int length = reader.Length - reader.Position;
+            if (mgr == null || mgr.IsServer || !IsSeatAuthenticated || sender != NetworkManager.ServerClientId ||
+                length <= 0 || length > MatchViewDecoder.MaxPayloadBytes) return;
+            var payload = new byte[length];
+            reader.ReadBytesSafe(ref payload, length);
+            if (!MatchViewDecoder.TryDecode(payload, out var snapshot)) return;
+            if (guestViewReceiver == null) guestViewReceiver = new MatchViewReceiver(PlayerIndex.Opponent);
+            if (guestViewReceiver.TryApply(snapshot)) OnGuestViewChanged?.Invoke(snapshot);
+        }
+
+        void SendSeatMessage(string name, ulong recipient, byte[] bytes)
+        {
+            using (var writer = new FastBufferWriter(Math.Max(1, bytes.Length), Allocator.Temp))
+            {
+                if (bytes.Length > 0) writer.WriteBytesSafe(bytes, bytes.Length);
+                mgr.CustomMessagingManager.SendNamedMessage(name, recipient, writer, NetworkDelivery.ReliableFragmentedSequenced);
+            }
         }
 
         void ResetSeats() => ResetSeats(maxPlayers);

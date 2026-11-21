@@ -6,6 +6,7 @@ using Unity.Services.Authentication;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Overlink.Net
 {
@@ -23,7 +24,7 @@ namespace Overlink.Net
     /// <summary>
     /// Matchmaking on top of Unity Lobby + Relay.
     ///
-    /// Flow: Quick Play tries to quick-join an open lobby and otherwise creates one; Create
+    /// Flow: Quick Play keeps searching for an open matchmaking lobby; Create
     /// makes a private lobby whose code is read out to the other player. When the host is
     /// ready and the lobby is full, it allocates a Relay server and publishes the join code
     /// into the lobby's member-visible data; clients pick that up on their poll and join
@@ -36,10 +37,27 @@ namespace Overlink.Net
     {
         public static LobbyManager Instance { get; private set; }
 
+        /// <summary>
+        /// Gets the persistent production session root. NetPresenceDemo still contains the same
+        /// components as an authored fixture; duplicate scene instances yield to this one in Awake.
+        /// </summary>
+        public static LobbyManager EnsureInstance()
+        {
+            if (Instance != null) return Instance;
+
+            var root = new GameObject("Online Session");
+            DontDestroyOnLoad(root);
+            root.AddComponent<Unity.Netcode.NetworkManager>();
+            root.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            root.AddComponent<NetBootstrap>();
+            return root.AddComponent<LobbyManager>();
+        }
+
         /// <summary>Exactly two players per match, per the game design.</summary>
         public const int MaxPlayers = 2;
 
         const string KeyRelayCode = "RelayCode";
+        const string KeyReady = "Ready";
         const string KeyStatus = "Status";
         const string StatusWaiting = "Waiting";
         const string StatusInGame = "InGame";
@@ -48,27 +66,59 @@ namespace Overlink.Net
         // Relay code across to clients. Both are well inside the service's limits.
         const float HeartbeatSeconds = 12f;
         const float PollSeconds = 3f;
+        const float MatchmakingRetrySeconds = 5f;
 
         [Header("Lobby")]
         [Tooltip("Name shown in the service dashboard. The lobby code is what players use.")]
         public string lobbyName = "Overlink Match";
 
         public LobbyState State { get; private set; } = LobbyState.Idle;
+        public string Status { get; private set; } = "";
         public Lobby CurrentLobby { get; private set; }
+        public bool HasActiveLobby => CurrentLobby != null;
+        public bool IsOnlineMatch => CurrentLobby != null && State == LobbyState.InGame;
         public string LobbyCode => CurrentLobby?.LobbyCode ?? "";
         public bool IsHost { get; private set; }
+        public bool IsQuickPlay => autoStartWhenFull;
         public int MemberCount => CurrentLobby?.Players?.Count ?? 0;
+        public string OpponentPlayerId
+        {
+            get
+            {
+                if (CurrentLobby?.Players == null) return "";
+                for (int i = 0; i < CurrentLobby.Players.Count; i++)
+                {
+                    string id = CurrentLobby.Players[i]?.Id;
+                    if (!string.IsNullOrEmpty(id) && id != playerId) return id;
+                }
+                return "";
+            }
+        }
         public bool IsBusy => State == LobbyState.Searching
                            || State == LobbyState.Creating
                            || State == LobbyState.Joining
                            || State == LobbyState.Starting;
 
         /// <summary>Host-gated: the match only begins once both seats are filled.</summary>
-        public bool CanStart => IsHost && CurrentLobby != null && MemberCount >= MaxPlayers;
+        public bool LocalReady => IsPlayerReady(FindPlayer(playerId));
+        public bool OpponentReady => IsPlayerReady(FindPlayer(OpponentPlayerId));
+        public bool AllPlayersReady => CurrentLobby?.Players != null
+            && MemberCount == MaxPlayers && CurrentLobby.Players.TrueForAll(IsPlayerReady);
+        public bool CanStart => IsHost && CurrentLobby != null && MemberCount >= MaxPlayers
+            && (autoStartWhenFull || AllPlayersReady);
 
         public event Action StateChanged;
         public event Action LobbyChanged;
         public event Action<string> StatusChanged;
+
+        /// <summary>Installed by the active deck editor to confirm its draft before scene loading.</summary>
+        public static Func<Task> PrepareForGameplayAsync { get; set; }
+        public bool GameplayPreparationFailed { get; private set; }
+        readonly GameplayTransitionGate gameplayTransition = new GameplayTransitionGate();
+
+        Player FindPlayer(string id) => CurrentLobby?.Players?.Find(player => player.Id == id);
+        static bool IsPlayerReady(Player player) => player?.Data != null
+            && player.Data.TryGetValue(KeyReady, out var value) && value.Value == "1";
 
         NetBootstrap net;
         string playerId;
@@ -76,6 +126,10 @@ namespace Overlink.Net
         Coroutine pollRoutine;
         bool leaving;
         bool polling;
+        bool updatingReady;
+        bool autoStartWhenFull;
+        LobbySeatProof localSeatProof;
+        readonly SerializedMutationQueue seatProofPublications = new SerializedMutationQueue();
         int operationVersion;
 
         void Awake()
@@ -86,6 +140,8 @@ namespace Overlink.Net
                 return;
             }
             Instance = this;
+            // Lobby membership and the opponent identity must survive the NetDemo -> Gameplay load.
+            DontDestroyOnLoad(gameObject);
 
             net = FindObjectOfType<NetBootstrap>();
             if (net == null)
@@ -94,50 +150,148 @@ namespace Overlink.Net
             {
                 net.OnNetworkConnected += OnNetworkConnected;
                 net.OnNetworkDisconnected += OnNetworkDisconnected;
+                net.OnSeatAuthenticated += OnNetworkConnected;
+                net.OnStatusChanged += OnNetworkStatusChanged;
             }
         }
 
         void OnDestroy()
         {
             StopRoutines();
+            localSeatProof?.Dispose();
+            localSeatProof = null;
             if (net != null)
             {
                 net.OnNetworkConnected -= OnNetworkConnected;
                 net.OnNetworkDisconnected -= OnNetworkDisconnected;
+                net.OnSeatAuthenticated -= OnNetworkConnected;
+                net.OnStatusChanged -= OnNetworkStatusChanged;
             }
             if (Instance == this) Instance = null;
         }
 
         // --- Public actions -----------------------------------------------------
 
-        /// <summary>Join any open lobby, or host a new one if there is nothing to join.</summary>
+        /// <summary>
+        /// Publishes this account's ephemeral public key to its own Lobby player record.
+        /// This does not authenticate Relay or start gameplay; callers must perform the
+        /// challenge handshake before trusting any connection.
+        /// </summary>
+        public Task PublishSeatProofAsync()
+        {
+            if (CurrentLobby == null || string.IsNullOrEmpty(playerId)) throw new InvalidOperationException("No active lobby.");
+            string lobbyId = CurrentLobby.Id;
+            int version = operationVersion;
+            return seatProofPublications.Enqueue(() => PublishSeatProofCoreAsync(lobbyId, version));
+        }
+
+        async Task PublishSeatProofCoreAsync(string lobbyId, int version)
+        {
+            if (this == null || version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId)
+                throw new InvalidOperationException("Lobby changed before seat proof publication.");
+            if (localSeatProof != null) return;
+            LobbySeatProof candidate = null;
+            try
+            {
+                candidate = new LobbySeatProof();
+                await LobbyService.Instance.UpdatePlayerAsync(lobbyId, playerId,
+                    new UpdatePlayerOptions { Data = new Dictionary<string, PlayerDataObject>
+                    {
+                        { LobbySeatIdentity.ModulusKey, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, candidate.PublicModulus) },
+                        { LobbySeatIdentity.ExponentKey, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, candidate.PublicExponent) }
+                    }});
+                if (this == null || version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId)
+                    throw new InvalidOperationException("Lobby changed during seat proof publication.");
+                localSeatProof = candidate;
+                candidate = null;
+                Notify();
+            }
+            finally
+            {
+                candidate?.Dispose();
+            }
+        }
+
+        /// <summary>Reads the opponent key from a new service response and rechecks membership after the await.</summary>
+        public async Task<LobbySeatIdentity> FetchOpponentSeatIdentityAsync()
+        {
+            if (!IsHost || CurrentLobby == null || string.IsNullOrEmpty(OpponentPlayerId))
+                throw new InvalidOperationException("A host and opponent are required.");
+            string lobbyId = CurrentLobby.Id;
+            string opponentId = OpponentPlayerId;
+            string hostId = playerId;
+            int version = operationVersion;
+            Lobby fresh = await LobbyService.Instance.GetLobbyAsync(lobbyId);
+            if (this == null || version != operationVersion || !IsHost || CurrentLobby == null ||
+                CurrentLobby.Id != lobbyId || OpponentPlayerId != opponentId || playerId != hostId ||
+                !LobbySeatIdentity.TryRead(fresh, lobbyId, hostId, opponentId, out LobbySeatIdentity identity))
+                throw new InvalidOperationException("Lobby membership or opponent seat proof is not valid.");
+            return identity;
+        }
+
+        /// <summary>Guest reads the expected host key from fresh Lobby data, never from Relay.</summary>
+        public async Task<LobbySeatIdentity> FetchHostSeatIdentityAsync()
+        {
+            if (IsHost || CurrentLobby == null || string.IsNullOrEmpty(playerId) ||
+                string.IsNullOrEmpty(CurrentLobby.HostId))
+                throw new InvalidOperationException("A guest and host are required.");
+            string lobbyId = CurrentLobby.Id, hostId = CurrentLobby.HostId, guestId = playerId;
+            int version = operationVersion;
+            Lobby fresh = await LobbyService.Instance.GetLobbyAsync(lobbyId);
+            if (this == null || version != operationVersion || IsHost || CurrentLobby == null ||
+                CurrentLobby.Id != lobbyId || CurrentLobby.HostId != hostId || playerId != guestId ||
+                !LobbySeatIdentity.TryReadHost(fresh, lobbyId, hostId, guestId, out LobbySeatIdentity identity))
+                throw new InvalidOperationException("Lobby membership or host seat proof is not valid.");
+            return identity;
+        }
+
+        /// <summary>Signs only for the current lobby and local authenticated player.</summary>
+        public byte[] SignSeatChallenge(ulong localRelayPeer, byte[] challenge)
+        {
+            if (localSeatProof == null || CurrentLobby == null || string.IsNullOrEmpty(playerId))
+                throw new InvalidOperationException("Seat proof is not ready.");
+            return localSeatProof.Sign(CurrentLobby.Id, playerId, localRelayPeer, challenge);
+        }
+
+        /// <summary>Keep searching for an open matchmaking lobby until one is found or the search is cancelled.</summary>
         public async void QuickPlay()
         {
             if (IsBusy || CurrentLobby != null) return;
 
             int version = ++operationVersion;
+            autoStartWhenFull = true;
             SetState(LobbyState.Searching);
             try
             {
-                if (!await EnsureSignedInAsync()) return;
+                if (!await EnsureSignedInAsync(version)) return;
                 if (version != operationVersion) return;
 
                 Lobby lobby = null;
-                try
+                while (version == operationVersion && lobby == null)
                 {
-                    lobby = await LobbyService.Instance.QuickJoinLobbyAsync(
-                        new QuickJoinLobbyOptions { Player = new Player(playerId) });
-                    SetStatus("Joined a waiting match.");
-                }
-                catch (LobbyServiceException e)
-                {
-                    // No open lobby is the normal case, not an error worth surfacing loudly.
-                    Debug.Log($"[Lobby] Quick join found nothing ({e.Reason}); hosting instead.");
-                    lobby = null;
+                    try
+                    {
+                        SetStatus("Searching for an open match...");
+                        lobby = await LobbyService.Instance.QuickJoinLobbyAsync(
+                            new QuickJoinLobbyOptions { Player = new Player(playerId) });
+                        SetStatus("Joined a waiting match.");
+                    }
+                    catch (LobbyServiceException e)
+                    {
+                        if (version != operationVersion) return;
+                        if (e.Reason != LobbyExceptionReason.NoOpenLobbies) throw;
+                        Debug.Log("[Lobby] No open matchmaking lobby yet; continuing search.");
+                        SetStatus("No open match yet — continuing to search...");
+                        await Task.Delay(TimeSpan.FromSeconds(MatchmakingRetrySeconds));
+                    }
                 }
 
-                if (lobby == null) lobby = await CreatePrivateLobbyAsync(MaxPlayers, false);
-                if (version != operationVersion) return;
+                if (lobby == null) return;
+                if (version != operationVersion)
+                {
+                    await CleanupUnadoptedLobbyAsync(lobby);
+                    return;
+                }
                 AdoptLobby(lobby);
             }
             catch (Exception e)
@@ -153,12 +307,17 @@ namespace Overlink.Net
             if (IsBusy || CurrentLobby != null) return;
 
             int version = ++operationVersion;
+            autoStartWhenFull = false;
             SetState(LobbyState.Creating);
             try
             {
-                if (!await EnsureSignedInAsync()) return;
+                if (!await EnsureSignedInAsync(version)) return;
                 Lobby lobby = await CreatePrivateLobbyAsync(MaxPlayers, true);
-                if (version != operationVersion) return;
+                if (version != operationVersion)
+                {
+                    await CleanupUnadoptedLobbyAsync(lobby);
+                    return;
+                }
                 AdoptLobby(lobby);
             }
             catch (Exception e)
@@ -180,15 +339,20 @@ namespace Overlink.Net
                 return;
             }
 
+            autoStartWhenFull = false;
             SetState(LobbyState.Joining);
             int version = ++operationVersion;
             try
             {
-                if (!await EnsureSignedInAsync()) return;
+                if (!await EnsureSignedInAsync(version)) return;
 
                 Lobby lobby = await LobbyService.Instance.JoinLobbyByCodeAsync(
                     code, new JoinLobbyByCodeOptions { Player = new Player(playerId) });
-                if (version != operationVersion) return;
+                if (version != operationVersion)
+                {
+                    await CleanupUnadoptedLobbyAsync(lobby);
+                    return;
+                }
                 AdoptLobby(lobby);
             }
             catch (LobbyServiceException e)
@@ -207,6 +371,34 @@ namespace Overlink.Net
             }
         }
 
+        /// <summary>Changes this player's private-lobby ready state. Missing data means not ready.</summary>
+        public async void SetReady(bool ready)
+        {
+            if (updatingReady || CurrentLobby == null || autoStartWhenFull || State != LobbyState.InLobby) return;
+            string lobbyId = CurrentLobby.Id;
+            int version = operationVersion;
+            updatingReady = true;
+            try
+            {
+                Lobby updated = await LobbyService.Instance.UpdatePlayerAsync(lobbyId, playerId,
+                    new UpdatePlayerOptions
+                    {
+                        Data = new Dictionary<string, PlayerDataObject>
+                        {
+                            { KeyReady, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, ready ? "1" : "0") }
+                        }
+                    });
+                if (version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId) return;
+                CurrentLobby = updated;
+                Notify();
+            }
+            catch (Exception e)
+            {
+                if (version == operationVersion) SetStatus($"Could not change ready status: {e.Message}");
+            }
+            finally { updatingReady = false; }
+        }
+
         /// <summary>
         /// Host-only. Allocates Relay, starts the host, and publishes the join code to the
         /// lobby so the client can pick it up without it ever being shown to a player.
@@ -221,17 +413,23 @@ namespace Overlink.Net
             }
 
             SetState(LobbyState.Starting);
+            int version = operationVersion;
+            string lobbyId = CurrentLobby.Id;
             try
             {
-                int version = operationVersion;
                 string relayCode = await net.CreateRelayAndHostAsync(MaxPlayers);
+                if (version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId)
+                {
+                    if (net.IsListening) net.LeaveGame();
+                    return;
+                }
                 if (string.IsNullOrEmpty(relayCode))
                 {
                     SetState(LobbyState.InLobby);
                     return;
                 }
 
-                Lobby updated = await LobbyService.Instance.UpdateLobbyAsync(CurrentLobby.Id,
+                Lobby updated = await LobbyService.Instance.UpdateLobbyAsync(lobbyId,
                     new UpdateLobbyOptions
                     {
                         Data = new Dictionary<string, DataObject>
@@ -241,7 +439,7 @@ namespace Overlink.Net
                         },
                     });
 
-                if (version != operationVersion || CurrentLobby == null)
+                if (version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId)
                 {
                     if (net.IsListening) net.LeaveGame();
                     return;
@@ -251,11 +449,12 @@ namespace Overlink.Net
                 SetState(LobbyState.InGame);
                 SetStatus("Match started — waiting for the other player to connect.");
                 Notify();
+                TryEnterGameplay();
             }
             catch (Exception e)
             {
                 if (net != null && net.IsListening) net.LeaveGame();
-                FailMatchmaking(e, "Start match");
+                if (version == operationVersion) FailMatchmaking(e, "Start match");
             }
         }
 
@@ -268,6 +467,7 @@ namespace Overlink.Net
             }
 
             operationVersion++;
+            autoStartWhenFull = false;
             SetStatus("Cancelled.");
             SetState(LobbyState.Idle);
         }
@@ -320,6 +520,20 @@ namespace Overlink.Net
 
         // --- Lobby plumbing -----------------------------------------------------
 
+        async Task CleanupUnadoptedLobbyAsync(Lobby lobby)
+        {
+            if (lobby == null || string.IsNullOrEmpty(playerId)) return;
+            try
+            {
+                if (lobby.HostId == playerId) await LobbyService.Instance.DeleteLobbyAsync(lobby.Id);
+                else await LobbyService.Instance.RemovePlayerAsync(lobby.Id, playerId);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Lobby] Cancelled lobby cleanup failed: {e.Message}");
+            }
+        }
+
         async Task<Lobby> CreatePrivateLobbyAsync(int maxPlayers, bool isPrivate)
         {
             SetStatus("Creating a lobby…");
@@ -351,12 +565,27 @@ namespace Overlink.Net
 
             StartRoutines();
             Notify();
+            _ = PublishSeatProofForLobbyAsync(lobby.Id, operationVersion);
+        }
+
+        async Task PublishSeatProofForLobbyAsync(string lobbyId, int version)
+        {
+            try { await PublishSeatProofAsync(); }
+            catch (Exception error)
+            {
+                if (this != null && version == operationVersion && CurrentLobby?.Id == lobbyId)
+                    SetStatus("Could not prepare the secure lobby connection: " + error.Message + ". Leave and rejoin to retry.");
+            }
         }
 
         void ClearLobby()
         {
+            localSeatProof?.Dispose();
+            localSeatProof = null;
+            GameplayPreparationFailed = false;
             CurrentLobby = null;
             IsHost = false;
+            autoStartWhenFull = false;
             SetState(LobbyState.Idle);
             Notify();
         }
@@ -397,7 +626,7 @@ namespace Overlink.Net
 
                 // Fire-and-forget: a dropped ping only costs a member list refresh, and the
                 // poll loop is what actually drives the UI.
-                _ = PingAsync(lobbyId);
+                if (IsHost) _ = PingAsync(lobbyId);
             }
         }
 
@@ -461,6 +690,14 @@ namespace Overlink.Net
             if (CurrentLobby == null || CurrentLobby.Id != lobbyId || leaving) return;
             CurrentLobby = refreshed;
 
+            // Quick Play starts when full; private lobbies start only after both players are ready.
+            if (IsHost && State == LobbyState.InLobby && CanStart)
+            {
+                StartMatch();
+                Notify();
+                return;
+            }
+
             if (!IsHost && refreshed.Players.Count < refreshed.MaxPlayers)
             {
                 // The other player dropped out of the lobby before the match started.
@@ -486,6 +723,7 @@ namespace Overlink.Net
                         }
                         SetState(LobbyState.InGame);
                         SetStatus("Connecting to the match…");
+                        TryEnterGameplay();
                     }
                 }
             }
@@ -501,7 +739,49 @@ namespace Overlink.Net
 
         void OnNetworkConnected()
         {
-            if (State == LobbyState.InGame) SetStatus("Connected to the match.");
+            if (State == LobbyState.InGame)
+            {
+                SetStatus("Connected to the match.");
+                TryEnterGameplay();
+            }
+        }
+
+        /// <summary>
+        /// The lobby owns the transition because it is the one object that knows both halves of the
+        /// online handshake: the lobby is marked InGame and NGO has a live Relay connection. This
+        /// keeps MainMenu from loading Gameplay before an opponent ID is available and keeps the
+        /// persistent lobby/network objects alive for GameCoordinator to inspect.
+        /// </summary>
+        public void RetryGameplayTransition() => TryEnterGameplay();
+
+        async void TryEnterGameplay()
+        {
+            if (CurrentLobby == null || State != LobbyState.InGame || net == null || !net.IsConnected)
+                return;
+            if (!net.IsSeatAuthenticated) { SetStatus("Verifying the lobby connection…"); return; }
+            if (net.IsHost && !net.HasRemotePeer) return;
+            if (SceneManager.GetActiveScene().name == "Gameplay") return;
+            if (gameplayTransition.IsRunning) return;
+
+            string lobbyId = CurrentLobby.Id;
+            int version = operationVersion;
+            GameplayPreparationFailed = false;
+            SetStatus("Saving your draft before the match…");
+            try
+            {
+                await gameplayTransition.RunAsync(PrepareForGameplayAsync,
+                    () => this != null && version == operationVersion && CurrentLobby != null
+                        && CurrentLobby.Id == lobbyId && State == LobbyState.InGame && net != null
+                        && net.IsConnected && net.IsSeatAuthenticated && (!net.IsHost || net.HasRemotePeer)
+                        && SceneManager.GetActiveScene().name != "Gameplay",
+                    () => SceneManager.LoadScene("Gameplay"));
+            }
+            catch (Exception error)
+            {
+                if (this == null || version != operationVersion) return;
+                GameplayPreparationFailed = true;
+                SetStatus("Draft save failed. Your edits are still open; retry or leave the lobby. " + error.Message);
+            }
         }
 
         void OnNetworkDisconnected()
@@ -509,10 +789,23 @@ namespace Overlink.Net
             if (State == LobbyState.InGame) SetStatus("Disconnected from the match.");
         }
 
-        async Task<bool> EnsureSignedInAsync()
+        void OnNetworkStatusChanged(string message)
+        {
+            if (State == LobbyState.InGame && net != null && !net.IsSeatAuthenticated &&
+                (message.StartsWith("Could not authenticate", StringComparison.Ordinal) ||
+                 message.StartsWith("Could not verify", StringComparison.Ordinal) ||
+                 message.StartsWith("Could not sign", StringComparison.Ordinal)))
+                SetStatus(message + " Retrying…");
+        }
+
+        async Task<bool> EnsureSignedInAsync(int version)
         {
             AccountManager account = AccountManager.EnsureInstance();
-            if (!await account.EnsureSignedInAsync())
+            bool signedIn = await account.EnsureSignedInAsync();
+            // A cancelled or superseded operation must not update the current UI or
+            // create/join a lobby after the asynchronous sign-in completes.
+            if (version != operationVersion) return false;
+            if (!signedIn)
             {
                 SetStatus(account.Status);
                 SetState(LobbyState.Idle);
@@ -542,7 +835,11 @@ namespace Overlink.Net
             StateChanged?.Invoke();
         }
 
-        void SetStatus(string status) => StatusChanged?.Invoke(status);
+        void SetStatus(string status)
+        {
+            Status = status ?? "";
+            StatusChanged?.Invoke(Status);
+        }
 
         void Notify() => LobbyChanged?.Invoke();
     }

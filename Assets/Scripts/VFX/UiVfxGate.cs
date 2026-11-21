@@ -9,7 +9,7 @@ namespace Overlink.Vfx
     /// event plumbing):
     ///   • REDUCE SHAKE   — camera/panel trauma and knockback-style offsets,
     ///   • REDUCE FLASH   — additive flashes, sheens and brightness pops,
-    ///   • REDUCED MOTION — the offline pack's master switch: stills tweens, idles and sheens alike.
+    ///   • REDUCED MOTION — the pack reveal's master switch: stills tweens, idles and sheens alike.
     ///
     /// Widgets ask the gate, never the setting: <see cref="Motion"/> for anything that moves or
     /// scales, <see cref="Flash"/> for anything additive or bright, <see cref="Ambient"/> for idle

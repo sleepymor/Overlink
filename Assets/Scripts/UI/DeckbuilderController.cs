@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Overlink.Core;
+using Overlink.Net;
 using Overlink.Persistence;
 using Overlink.Vfx;
 using TMPro;
@@ -90,15 +92,15 @@ namespace Overlink.UI
         {
             // The deckable pool is the library plus the binder's authored catalog, so a card added in
             // the binder is still here when the deck is opened in this screen.
-            allCards = OfflineCollectionData.DeckPool(Faction.Fsti)
-                .Concat(OfflineCollectionData.DeckPool(Faction.Frti))
-                .Concat(OfflineCollectionData.DeckPool(Faction.Fpb))
+            allCards = CollectionData.DeckPool(Faction.Fsti)
+                .Concat(CollectionData.DeckPool(Faction.Frti))
+                .Concat(CollectionData.DeckPool(Faction.Fpb))
                 .ToList();
 
             // The binder's per-card deck and this screen's old single slot both feed the shared
             // library, so a deck built before the unification is still here. One entry point runs both
             // imports in the right order, whichever screen the player opened first.
-            OfflineCollectionData.EnsureDeckMigration();
+            CollectionData.EnsureDeckMigration();
             EnsureActiveDeck();
 
             if (!uiBuilt)
@@ -109,6 +111,75 @@ namespace Overlink.UI
             LoadDeck();
             RefreshUI();
             FocusFirstControl();
+        }
+
+        bool quitting;
+        bool persistedOnExit;
+        CanvasGroup transitionInputBlocker;
+        void OnApplicationQuit() => quitting = true;
+
+        void OnEnable() => LobbyManager.PrepareForGameplayAsync = PrepareDraftForGameplayAsync;
+
+        void OnDisable()
+        {
+            if (LobbyManager.PrepareForGameplayAsync == (Func<Task>)PrepareDraftForGameplayAsync)
+                LobbyManager.PrepareForGameplayAsync = null;
+        }
+
+        async Task PrepareDraftForGameplayAsync()
+        {
+            if (string.IsNullOrEmpty(activeDeckId) || currentDeck == null) return;
+            CloudPlayerDataService cloud = CloudPlayerDataService.Instance;
+            if (cloud == null || !cloud.IsReady)
+                throw new InvalidOperationException("Cloud progression is not ready.");
+
+            Canvas canvas = null;
+            foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+            {
+                canvas = root.GetComponentInChildren<Canvas>(false);
+                if (canvas != null) break;
+            }
+            if (canvas != null)
+            {
+                transitionInputBlocker = canvas.GetComponent<CanvasGroup>();
+                if (transitionInputBlocker == null) transitionInputBlocker = canvas.gameObject.AddComponent<CanvasGroup>();
+            }
+            bool wasInteractable = transitionInputBlocker == null || transitionInputBlocker.interactable;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+            if (transitionInputBlocker != null) transitionInputBlocker.interactable = false;
+            try
+            {
+                string name = deckNameInput != null ? deckNameInput.text.Trim() : "";
+                if (string.IsNullOrEmpty(name)) name = DeckLibrary.NameOf(activeDeckId);
+                var draft = new DeckData
+                {
+                    Version = 1,
+                    Faction = selectedFaction,
+                    Cards = currentDeck.ToDictionary(entry => entry.Key, entry => entry.Value)
+                };
+                await cloud.SaveDraftConfirmedAsync(activeDeckId, name, draft);
+                if (this == null) throw new InvalidOperationException("Deck editor closed before the draft was confirmed.");
+            }
+            finally
+            {
+                if (transitionInputBlocker != null) transitionInputBlocker.interactable = wasInteractable;
+            }
+        }
+
+        void OnDestroy()
+        {
+            if (!Application.isPlaying || quitting || persistedOnExit || !uiBuilt) return;
+            // Matchmaking may transition away while this screen has uncommitted edits.
+            // Save the draft separately; the account's last-valid battle snapshot survives it.
+            try
+            {
+                CommitDeckName();
+                PersistActiveDeck();
+            }
+            catch (Exception error)
+            {
+                Debug.LogError("[DeckbuilderController] Could not save the draft before the match: " + error.Message);
+            }
         }
 
         void BuildUI()
@@ -525,7 +596,7 @@ namespace Overlink.UI
         {
             ClearChildren(collectionContent);
 
-            var factionCards = OfflineCollectionData.DeckPool(selectedFaction)
+            var factionCards = CollectionData.DeckPool(selectedFaction)
                 .OrderBy(c => c.Cost)
                 .ThenBy(c => c.Name)
                 .ToList();
@@ -955,6 +1026,7 @@ namespace Overlink.UI
             {
                 CommitDeckName();
                 PersistActiveDeck();
+                persistedOnExit = true;
             }
             catch (Exception error)
             {

@@ -22,10 +22,10 @@ namespace Overlink.EditorTools
                 return;
             }
 
-            var bay = Object.FindObjectOfType<OfflineSignalBayController>();
+            var bay = Object.FindObjectOfType<SignalBayController>();
             if (bay == null)
             {
-                Debug.LogError("[Overlink] No OfflineSignalBayController in Gacha.unity.");
+                Debug.LogError("[Overlink] No SignalBayController in Gacha.unity.");
                 return;
             }
 

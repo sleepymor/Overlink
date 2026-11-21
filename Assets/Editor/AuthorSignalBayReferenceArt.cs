@@ -58,7 +58,7 @@ namespace Overlink.EditorTools
         public static void Apply()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") as RectTransform : null;
             if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || bay == null)
             {

@@ -18,7 +18,7 @@ namespace Overlink.EditorTools
         public static void RefineLoyaltyAccents()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             var milestone = bay != null ? bay.Find("Milestone Label")?.GetComponent<TMP_Text>() : null;
             var reward = bay != null ? bay.Find("Next Reward")?.GetComponent<TMP_Text>() : null;
@@ -38,7 +38,7 @@ namespace Overlink.EditorTools
         public static void AuthorAmbientGlow()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             var showcase = bay != null ? bay.Find("Selected Pack Showcase") : null;
             if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || showcase == null)
@@ -65,7 +65,7 @@ namespace Overlink.EditorTools
         public static void RefinePurchaseLabels()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || bay == null)
             {
@@ -87,7 +87,7 @@ namespace Overlink.EditorTools
             one.raycastTarget = ten.raycastTarget = false;
             foreach (var item in stale) item.gameObject.SetActive(false);
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("[Overlink] Purchase labels now show offline demo prices and card counts; save the scene.");
+            Debug.Log("[Overlink] Purchase labels now show Signal Bay prices and card counts; save the scene.");
         }
 
         [MenuItem("Overlink/Scenes/Author Signal Bay Pack Draft")]
@@ -99,7 +99,7 @@ namespace Overlink.EditorTools
                 Debug.LogError("Open Gacha.unity before authoring the pack draft.");
                 return;
             }
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             if (bay == null) { Debug.LogError("Signal Bay hierarchy missing."); return; }
             if (bay.Find("Editable Pack Draft") != null)
@@ -152,7 +152,7 @@ namespace Overlink.EditorTools
                 Debug.LogError("Open Gacha.unity in edit mode before detailing the pack aperture.");
                 return;
             }
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var aperture = screen != null ? screen.transform.Find("Figma Signal Bay/Editable Pack Draft/Illustration aperture") : null;
             if (aperture == null)
             {
@@ -191,7 +191,7 @@ namespace Overlink.EditorTools
                 Debug.LogError("Open Gacha.unity in edit mode before detailing the display frame.");
                 return;
             }
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             var pack = bay != null ? bay.Find("Editable Pack Draft") as RectTransform : null;
             if (pack == null) { Debug.LogError("Signal Bay pack draft missing."); return; }
@@ -248,7 +248,7 @@ namespace Overlink.EditorTools
         public static void RefineIdentity()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var account = screen != null ? screen.transform.Find("Figma Signal Bay/Account") : null;
             var text = account != null ? account.GetComponent<TMP_Text>() : null;
             if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || text == null)
@@ -275,7 +275,7 @@ namespace Overlink.EditorTools
         public static void RefinePackInformation()
         {
             var scene = SceneManager.GetActiveScene();
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var bay = screen != null ? screen.transform.Find("Figma Signal Bay") : null;
             if (Application.isPlaying || scene.path != "Assets/Scenes/Gacha.unity" || bay == null)
             {
@@ -310,12 +310,12 @@ namespace Overlink.EditorTools
             var compositionRect = (RectTransform)composition.transform;
             compositionRect.anchoredPosition = new Vector2(336, 156);
             compositionRect.sizeDelta = new Vector2(132, 28);
-            body.text = "UNITS / RELAYS / ABILITIES\nDETERMINISTIC OFFLINE PACKS";
+            body.text = "UNITS / RELAYS / ABILITIES\nSERVER-RESOLVED PACKS";
             body.fontSize = 12;
             var bodyRect = (RectTransform)body.transform;
             bodyRect.anchoredPosition = new Vector2(568, 156);
             bodyRect.sizeDelta = new Vector2(300, 44);
-            contents.text = "PACK CONTENTS  /  OFFLINE DEMO";
+            contents.text = "PACK CONTENTS  /  SERVER RESOLVED";
             contents.color = Bright;
             var contentsRect = (RectTransform)contents.transform;
             contentsRect.anchoredPosition = new Vector2(442, 92);
@@ -340,7 +340,7 @@ namespace Overlink.EditorTools
                 Debug.LogError("Open Gacha.unity in edit mode before detailing the pack draft.");
                 return;
             }
-            var screen = GameObject.Find("Offline Pack Canvas/PackScreen");
+            var screen = GameObject.Find("Signal Bay Canvas/PackScreen");
             var root = screen != null ? screen.transform.Find("Figma Signal Bay/Editable Pack Draft") : null;
             if (root == null || root.Find("Foil face") == null)
             {

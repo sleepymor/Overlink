@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
+using Unity.Services.Core.Environments;
 using UnityEngine;
 
 namespace Overlink.Net
@@ -42,6 +43,11 @@ namespace Overlink.Net
     /// </summary>
     public sealed class AccountManager : MonoBehaviour
     {
+        // Keep development validation isolated from Production. The Unity Services SDK selects the
+        // environment by name; the Dashboard id for this environment is
+        // ff807509-790a-4ab0-90aa-0b2a9aac70dc.
+        public const string ServicesEnvironmentName = "testing";
+
         public static AccountManager Instance { get; private set; }
 
         public AccountKind Kind { get; private set; } = AccountKind.SignedOut;
@@ -96,6 +102,13 @@ namespace Overlink.Net
         public static AccountManager EnsureInstance()
         {
             if (Instance != null) return Instance;
+
+            // Async authentication continuations can resume after the Editor has left Play Mode.
+            // Do not create a persistent runtime service in that state: Unity rejects
+            // DontDestroyOnLoad outside Play Mode and the continuation cannot complete a game flow
+            // once the runtime has already been torn down.
+            if (!Application.isPlaying) return null;
+
             var go = new GameObject("AccountManager");
             DontDestroyOnLoad(go);
             return go.AddComponent<AccountManager>();
@@ -110,6 +123,7 @@ namespace Overlink.Net
             }
             Instance = this;
             if (settings == null) settings = Resources.Load<GoogleAuthSettings>("GoogleAuthSettings");
+            if (Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
 
         void OnDestroy()
@@ -127,7 +141,9 @@ namespace Overlink.Net
         {
             try
             {
-                await UnityServices.InitializeAsync();
+                var options = new InitializationOptions();
+                options.SetEnvironmentName(ServicesEnvironmentName);
+                await UnityServices.InitializeAsync(options);
                 await RestoreCachedSessionAsync();
             }
             catch

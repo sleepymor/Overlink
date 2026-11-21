@@ -123,6 +123,7 @@ namespace Overlink.UI
         public void Begin(string sceneName, float activationBeat)
         {
             if (busy) return;
+            Debug.Log($"[SceneLoader] Begin '{sceneName}' at {Time.realtimeSinceStartup:F3}s");
             StartCoroutine(Run(sceneName, activationBeat));
         }
 
@@ -132,12 +133,14 @@ namespace Overlink.UI
             yield return new WaitForSecondsRealtime(activationBeat);
             yield return Fade(0f, 1f, FadeOutDuration);
             SceneManager.sceneLoaded += OnSceneLoaded;
+            Debug.Log($"[SceneLoader] LoadScene('{sceneName}') at {Time.realtimeSinceStartup:F3}s");
             SceneManager.LoadScene(sceneName);
         }
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            Debug.Log($"[SceneLoader] SceneLoaded '{scene.name}' at {Time.realtimeSinceStartup:F3}s");
             StartCoroutine(FadeIntoScene());
         }
 
@@ -146,6 +149,7 @@ namespace Overlink.UI
             // Let the new scene finish its first layout/presentation pass under the veil.
             yield return null;
             yield return Fade(1f, 0f, FadeInDuration);
+            Debug.Log($"[SceneLoader] Scene ready after fade at {Time.realtimeSinceStartup:F3}s");
             busy = false;
         }
 

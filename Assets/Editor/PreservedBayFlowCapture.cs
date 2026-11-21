@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 
 namespace Overlink.EditorTools
 {
-    /// <summary>Snapshot the offline prototype's saved preferences before its destructive capture.</summary>
+    /// <summary>Snapshot the Gacha flow's saved preferences before its destructive capture.</summary>
     [InitializeOnLoad]
     static class PreservedBayFlowCapture
     {
@@ -41,94 +41,94 @@ namespace Overlink.EditorTools
             };
         }
 
-        [MenuItem("Tools/Offline Gacha/Capture Bay Flow Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Capture Bay Flow Preserving Player Data")]
         static void Capture()
         {
-            CaptureWithBackup(OfflineGachaVerification.CaptureBayToRevealFlow);
+            CaptureWithBackup(GachaVerification.CaptureBayToRevealFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Ten Pack Pointer Flow Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Ten Pack Pointer Flow Preserving Player Data")]
         static void CaptureTenPointer()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifyTenPackPointerFlow);
+            CaptureWithBackup(GachaVerification.VerifyTenPackPointerFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Ten Flow Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Ten Flow Preserving Player Data")]
         static void CaptureEditableTenPointer()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifyEditableBayTenPointerFlow);
+            CaptureWithBackup(GachaVerification.VerifyEditableBayTenPointerFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Return Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Return Preserving Player Data")]
         static void CaptureEditableReturnPointer()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifyEditableBayReturnPointerFlow);
+            CaptureWithBackup(GachaVerification.VerifyEditableBayReturnPointerFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Single Pack Pointer Flow Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Single Pack Pointer Flow Preserving Player Data")]
         static void CaptureSinglePointer()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifySinglePackPointerFlow);
+            CaptureWithBackup(GachaVerification.VerifySinglePackPointerFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Single Flow Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Single Flow Preserving Player Data")]
         static void CaptureEditableSinglePointer()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifyEditableBaySinglePointerFlow);
+            CaptureWithBackup(GachaVerification.VerifyEditableBaySinglePointerFlow);
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Single 16 by 10 Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Single 16 by 10 Preserving Player Data")]
         static void CaptureEditableSingleSixteenByTen()
         {
             CaptureWithBackup(() =>
             {
                 SessionState.SetBool(SignalBayAspectPreview.PreviewOnPlayKey, true);
-                OfflineGachaVerification.VerifyEditableBaySinglePointerFlow();
+                GachaVerification.VerifyEditableBaySinglePointerFlow();
                 if (!EditorApplication.isPlayingOrWillChangePlaymode)
                     SessionState.SetBool(SignalBayAspectPreview.PreviewOnPlayKey, false);
             });
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Single 4 by 3 Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Single 4 by 3 Preserving Player Data")]
         static void CaptureEditableSingleFourByThree()
         {
             CaptureWithBackup(() =>
             {
                 SessionState.SetBool(SignalBayAspectPreview.PreviewFourOnPlayKey, true);
-                OfflineGachaVerification.VerifyEditableBaySinglePointerFlow();
+                GachaVerification.VerifyEditableBaySinglePointerFlow();
                 if (!EditorApplication.isPlayingOrWillChangePlaymode)
                     SessionState.SetBool(SignalBayAspectPreview.PreviewFourOnPlayKey, false);
             });
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Ten 4 by 3 Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Ten 4 by 3 Preserving Player Data")]
         static void CaptureEditableTenFourByThree()
         {
             CaptureWithBackup(() =>
             {
                 SessionState.SetBool(SignalBayAspectPreview.PreviewFourOnPlayKey, true);
-                OfflineGachaVerification.VerifyEditableBayTenPointerFlow();
+                GachaVerification.VerifyEditableBayTenPointerFlow();
                 if (!EditorApplication.isPlayingOrWillChangePlaymode)
                     SessionState.SetBool(SignalBayAspectPreview.PreviewFourOnPlayKey, false);
             });
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Editable Bay Return 16 by 10 Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Editable Bay Return 16 by 10 Preserving Player Data")]
         static void CaptureEditableReturnSixteenByTen()
         {
             CaptureWithBackup(() =>
             {
                 SessionState.SetBool(SignalBayAspectPreview.PreviewOnPlayKey, true);
-                OfflineGachaVerification.VerifyEditableBayReturnPointerFlow();
+                GachaVerification.VerifyEditableBayReturnPointerFlow();
                 if (!EditorApplication.isPlayingOrWillChangePlaymode)
                     SessionState.SetBool(SignalBayAspectPreview.PreviewOnPlayKey, false);
             });
         }
 
-        [MenuItem("Tools/Offline Gacha/Verify Single Loyalty Reveal Preserving Player Data")]
+        [MenuItem("Tools/Gacha/Verify Single Loyalty Reveal Preserving Player Data")]
         static void CaptureSingleLoyalty()
         {
-            CaptureWithBackup(OfflineGachaVerification.VerifySingleLoyaltyReveal);
+            CaptureWithBackup(GachaVerification.VerifySingleLoyaltyReveal);
         }
 
         static void CaptureWithBackup(Action start)
@@ -148,18 +148,18 @@ namespace Overlink.EditorTools
             }
             var keys = new List<string>
             {
-                OfflineCollectionData.ResolvedKey, OfflineCollectionData.RevealedKey,
-                OfflineCollectionData.FragmentsKey, OfflineCollectionData.BundleResolvedKey,
-                OfflineCollectionData.BundleRevealedKey, OfflineCollectionData.BundleLoyaltyPackKey,
-                OfflineCollectionData.SingleLoyaltyPackKey,
-                OfflineCollectionData.PurchasedPacksKey, OfflineCollectionData.LoyaltyGrantedKey,
-                OfflinePackOpeningController.ModeKey, OfflineCollectionData.SingleDrawKey,
-                OfflineCollectionData.BundleDrawKey, OfflineCollectionData.LoyaltyDrawKey
+                CollectionData.ResolvedKey, CollectionData.RevealedKey,
+                CollectionData.FragmentsKey, CollectionData.BundleResolvedKey,
+                CollectionData.BundleRevealedKey, CollectionData.BundleLoyaltyPackKey,
+                CollectionData.SingleLoyaltyPackKey,
+                CollectionData.PurchasedPacksKey, CollectionData.LoyaltyGrantedKey,
+                PackOpeningController.ModeKey, CollectionData.SingleDrawKey,
+                CollectionData.BundleDrawKey, CollectionData.LoyaltyDrawKey
             };
-            foreach (var card in OfflineCollectionData.BinderCards())
+            foreach (var card in CollectionData.BinderCards())
             {
-                keys.Add(OfflineCollectionData.OwnedKey + card.Id);
-                keys.Add(OfflineCollectionData.DeckKey + card.Id);
+                keys.Add(CollectionData.OwnedKey + card.Id);
+                keys.Add(CollectionData.DeckKey + card.Id);
             }
             var entries = new List<Entry>();
             foreach (string key in keys)
@@ -185,7 +185,7 @@ namespace Overlink.EditorTools
             return snapshot.capturePrefix + fileName;
         }
 
-        [MenuItem("Tools/Offline Gacha/Recover Preserved Bay Flow Data")]
+        [MenuItem("Tools/Gacha/Recover Preserved Bay Flow Data")]
         static void Restore()
         {
             if (!EditorPrefs.HasKey(BackupKey)) return;

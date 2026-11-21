@@ -42,6 +42,14 @@ namespace Overlink.Persistence
     /// </summary>
     public static class DeckLibrary
     {
+        /// <summary>
+        /// Account-backed runtime implementation. Left null for persistence EditMode tests and for the
+        /// legacy migration reader; protected gameplay installs it after Cloud Code state is loaded.
+        /// </summary>
+        public static ICloudProgressionBackend Backend { get; private set; }
+
+        public static void SetBackend(ICloudProgressionBackend backend) => Backend = backend;
+
         public const string IndexKey = "Overlink.Decks.Index";
         public const string ActiveKey = "Overlink.Decks.Active";
         public const string BattleKey = "Overlink.Decks.Battle";
@@ -60,6 +68,7 @@ namespace Overlink.Persistence
         /// <summary>Every saved deck, in creation order.</summary>
         public static IReadOnlyList<DeckSummary> All()
         {
+            if (Backend != null) return Backend.AllDecks();
             List<string> ids = ReadIndex();
             var summaries = new List<DeckSummary>(ids.Count);
             string active = ActiveId;
@@ -77,6 +86,7 @@ namespace Overlink.Persistence
         {
             get
             {
+                if (Backend != null) return Backend.ActiveDeckId ?? string.Empty;
                 List<string> ids = ReadIndex();
                 string active = PlayerPrefs.GetString(ActiveKey, string.Empty);
                 if (!string.IsNullOrEmpty(active) && ids.Contains(active)) return active;
@@ -92,12 +102,21 @@ namespace Overlink.Persistence
         {
             get
             {
+                if (Backend != null) return Backend.BattleDeckId ?? string.Empty;
                 string id = PlayerPrefs.GetString(BattleKey, string.Empty);
                 return !string.IsNullOrEmpty(id) && ReadIndex().Contains(id) ? id : string.Empty;
             }
         }
 
         public static bool IsBattle(string id) => !string.IsNullOrEmpty(id) && id == BattleId;
+
+        /// <summary>Loads the selected battle snapshot from the account backend, when available.</summary>
+        public static DeckData LoadBattleDeck()
+        {
+            if (Backend != null) return Backend.LoadBattleDeck();
+            string id = BattleId;
+            return id.Length == 0 ? null : Load(id);
+        }
 
         public static DeckSummary Active
         {
@@ -113,12 +132,14 @@ namespace Overlink.Persistence
         public static string NameOf(string id)
         {
             if (string.IsNullOrEmpty(id)) return string.Empty;
+            if (Backend != null) return Backend.NameOf(id);
             return PlayerPrefs.GetString(NameKeyPrefix + id, id);
         }
 
         public static DeckData Load(string id)
         {
             if (string.IsNullOrEmpty(id)) return new DeckData();
+            if (Backend != null) return Backend.LoadDeck(id) ?? new DeckData();
             string json = PlayerPrefs.GetString(DataKeyPrefix + id, string.Empty);
             return DeckData.FromJson(json) ?? new DeckData();
         }
@@ -138,6 +159,7 @@ namespace Overlink.Persistence
         public static int CopiesInActive(string cardId)
         {
             if (string.IsNullOrEmpty(cardId)) return 0;
+            if (Backend != null) return Backend.CopiesInActive(cardId);
             string id = ActiveId;
             if (id.Length == 0) return 0;
             DeckData data = Load(id);
@@ -149,6 +171,7 @@ namespace Overlink.Persistence
         /// <summary>Creates an empty deck and makes it active. A blank name becomes "Deck N".</summary>
         public static string Create(string name, Faction faction)
         {
+            if (Backend != null) return Backend.CreateDeck(name, faction);
             int sequence = PlayerPrefs.GetInt(SequenceKey, 0) + 1;
             PlayerPrefs.SetInt(SequenceKey, sequence);
 
@@ -169,6 +192,11 @@ namespace Overlink.Persistence
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentException("Deck id is required.", nameof(id));
             if (data == null) throw new ArgumentNullException(nameof(data));
+            if (Backend != null)
+            {
+                Backend.SaveDeck(id, name, data);
+                return;
+            }
 
             List<string> ids = ReadIndex();
             if (!ids.Contains(id))
@@ -188,7 +216,9 @@ namespace Overlink.Persistence
 
         public static void SetActive(string id)
         {
-            if (string.IsNullOrEmpty(id) || !ReadIndex().Contains(id)) return;
+            if (string.IsNullOrEmpty(id)) return;
+            if (Backend != null) { Backend.SetActiveDeck(id); return; }
+            if (!ReadIndex().Contains(id)) return;
             PlayerPrefs.SetString(ActiveKey, id);
             PlayerPrefs.Save();
         }
@@ -196,7 +226,9 @@ namespace Overlink.Persistence
         /// <summary>Sets the deck used in battle. Ignored for unknown ids.</summary>
         public static void SetBattle(string id)
         {
-            if (string.IsNullOrEmpty(id) || !ReadIndex().Contains(id)) return;
+            if (string.IsNullOrEmpty(id)) return;
+            if (Backend != null) { Backend.SetBattleDeck(id); return; }
+            if (!ReadIndex().Contains(id)) return;
             PlayerPrefs.SetString(BattleKey, id);
             PlayerPrefs.Save();
         }
@@ -204,6 +236,7 @@ namespace Overlink.Persistence
         public static void Delete(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            if (Backend != null) { Backend.DeleteDeck(id); return; }
             List<string> ids = ReadIndex();
             if (!ids.Remove(id)) return;
 
@@ -220,6 +253,7 @@ namespace Overlink.Persistence
         /// <summary>Wipes every deck and the migration flags, but keeps legacy keys untouched.</summary>
         public static void DeleteAll()
         {
+            if (Backend != null) { Backend.DeleteAllDecks(); return; }
             List<string> ids = ReadIndex();
             for (int i = 0; i < ids.Count; i++)
             {
@@ -240,6 +274,13 @@ namespace Overlink.Persistence
         public static bool SetActiveCopies(string cardId, int copies)
         {
             if (string.IsNullOrEmpty(cardId)) return false;
+
+            if (Backend != null)
+            {
+                // The cloud gateway is the final client-side cache gate. Cloud Code repeats this check
+                // before accepting the mutation, so a modified client cannot mint deck copies.
+                return Backend.SetActiveCopies(cardId, copies);
+            }
 
             string id = ActiveId;
             if (id.Length == 0)

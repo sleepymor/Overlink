@@ -225,7 +225,7 @@ namespace Overlink.Core
                 return;
             }
 
-            var summoned = new CardInstance(definition, controller);
+            var summoned = state.CreateCardInstance(definition, controller);
             slot.Card = summoned;
             state.LogEvent($"{prefix}: summons {definition.Name} into {slot.Type}");
         }

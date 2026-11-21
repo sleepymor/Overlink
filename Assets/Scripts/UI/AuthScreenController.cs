@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Overlink.Core;
 using Overlink.Net;
 using TMPro;
 using UnityEngine;
@@ -60,6 +61,11 @@ namespace Overlink.UI
         [SerializeField] Button saveIdentityButton;
         [SerializeField] Button signOutButton;
 
+        [Header("Starter faction")]
+        [Tooltip("Optional authored panel. When absent, the controller creates a small setup picker at runtime.")]
+        [SerializeField] GameObject factionStep;
+        [SerializeField] TextMeshProUGUI factionError;
+
         [Header("Rules")]
         [Tooltip("Players must confirm at least this age to continue. Enforced server-side too once Cloud Code exists.")]
         [SerializeField, Min(0)] int minimumAge = 13;
@@ -67,6 +73,9 @@ namespace Overlink.UI
         bool registerMode;
         bool busy;
         AuthFlowController flow;
+        Faction selectedStarterFaction = Faction.Fsti;
+        Button[] starterFactionButtons;
+        Button versionActionButton;
 
         void Awake()
         {
@@ -76,6 +85,9 @@ namespace Overlink.UI
             AccountManager.EnsureInstance();
             AuthFlowController.EnsureInstance();
             PlayerProfileService.EnsureInstance();
+            CloudPlayerDataService.EnsureInstance();
+
+            EnsureStarterFactionUi();
 
             if (!IsWired())
             {
@@ -105,6 +117,7 @@ namespace Overlink.UI
             if (AccountManager.Instance != null) AccountManager.Instance.StatusChanged += OnAccountStatus;
 
             WireButtons();
+            CreateVersionAction();
             ApplyProviderAvailability();
             ApplyState(flow != null ? flow.CurrentState : AuthState.Initializing);
             SetBusy(false);
@@ -149,7 +162,9 @@ namespace Overlink.UI
         {
             bool loading = state == AuthState.Initializing
                            || state == AuthState.CheckingCachedSession
-                           || state == AuthState.LoadingProfile;
+                           || state == AuthState.LoadingProfile
+                           || state == AuthState.VersionCheckFailed
+                           || state == AuthState.UpdateRequired;
 
             SetPanel(loadingPanel, loading);
             SetPanel(signInPanel, state == AuthState.SignedOut || state == AuthState.Error);
@@ -168,7 +183,40 @@ namespace Overlink.UI
                 signInError.gameObject.SetActive(true);
             }
 
+            if (versionActionButton != null)
+            {
+                bool retry = state == AuthState.VersionCheckFailed;
+                bool update = state == AuthState.UpdateRequired && !string.IsNullOrEmpty(flow?.UpdateUrl);
+                versionActionButton.gameObject.SetActive(retry || update);
+                var label = versionActionButton.GetComponentInChildren<TMP_Text>(true);
+                if (label != null) label.text = retry ? "RETRY" : "UPDATE";
+            }
+
             if (state == AuthState.NeedsProfileSetup) EnterSetupFlow();
+        }
+
+        void CreateVersionAction()
+        {
+            if (loadingPanel == null || submitButton == null) return;
+            versionActionButton = Instantiate(submitButton, loadingPanel.transform);
+            versionActionButton.name = "Version Action";
+            versionActionButton.onClick = new Button.ButtonClickedEvent();
+            versionActionButton.onClick.AddListener(() =>
+            {
+                if (flow == null) return;
+                if (flow.CurrentState == AuthState.VersionCheckFailed)
+                    _ = flow.StartAuthenticationFlowAsync();
+                else if (flow.CurrentState == AuthState.UpdateRequired && !string.IsNullOrEmpty(flow.UpdateUrl))
+                    Application.OpenURL(flow.UpdateUrl);
+            });
+            var rect = versionActionButton.transform as RectTransform;
+            if (rect != null)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.35f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = Vector2.zero;
+            }
+            versionActionButton.gameObject.SetActive(false);
         }
 
         void SetPanel(GameObject panel, bool active)
@@ -266,6 +314,15 @@ namespace Overlink.UI
             PlayerProfile draft = PlayerProfileService.Instance?.BeginSetup();
             bool ageDone = draft != null && draft.ageConfirmed;
 
+            CloudPlayerDataService cloud = CloudPlayerDataService.Instance;
+            if (cloud != null && cloud.IsReady && cloud.State != null && !cloud.State.starterGranted)
+            {
+                SetPanel(ageStep, false);
+                SetPanel(identityStep, false);
+                ShowStarterFactionPicker();
+                return;
+            }
+
             // Carrying the saved identity back into the form. This was cosmetic while the only way in
             // here was a player who quit mid-setup having typed nothing, and it stopped being cosmetic
             // the moment an address became part of IsComplete(): a profile from before that rule is now
@@ -281,6 +338,7 @@ namespace Overlink.UI
 
             SetPanel(ageStep, !ageDone);
             SetPanel(identityStep, ageDone);
+            SetPanel(factionStep, false);
             RefreshIdentityPreview();
         }
 
@@ -306,6 +364,7 @@ namespace Overlink.UI
 
             SetPanel(ageStep, false);
             SetPanel(identityStep, true);
+            SetPanel(factionStep, false);
             RefreshIdentityPreview();
         }
 
@@ -373,8 +432,131 @@ namespace Overlink.UI
             AuthResult result = await PlayerProfileService.Instance.CommitSetupAsync(username, tag, email);
             SetBusy(false);
 
-            if (result.Success) flow?.OnProfileSetupComplete();
-            else ShowError(identityError, result.UserMessage);
+            if (!result.Success)
+            {
+                SetBusy(false);
+                ShowError(identityError, result.UserMessage);
+                return;
+            }
+
+            // Profile identity and starter grant are separate authoritative records. Do not route to the
+            // protected menu until the player has selected a faction and the Cloud Code grant succeeded.
+            SetBusy(false);
+            ShowStarterFactionPicker();
+        }
+
+        void EnsureStarterFactionUi()
+        {
+            if (factionStep == null)
+            {
+                factionStep = new GameObject("Starter Faction Step", typeof(RectTransform));
+                factionStep.transform.SetParent(setupPanel.transform, false);
+                RectTransform rect = factionStep.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(.08f, .18f);
+                rect.anchorMax = new Vector2(.92f, .82f);
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+
+                GameObject titleObject = new GameObject("Title", typeof(RectTransform));
+                titleObject.transform.SetParent(factionStep.transform, false);
+                TextMeshProUGUI title = titleObject.AddComponent<TextMeshProUGUI>();
+                title.text = "CHOOSE YOUR STARTING FACTION";
+                title.alignment = TextAlignmentOptions.Center;
+                title.fontSize = 22;
+                Stretch(title.rectTransform, new Vector2(0, .72f), new Vector2(1, 1));
+
+                GameObject rowObject = new GameObject("Faction Buttons", typeof(RectTransform));
+                rowObject.transform.SetParent(factionStep.transform, false);
+                RectTransform row = rowObject.GetComponent<RectTransform>();
+                Stretch(row, new Vector2(0, .24f), new Vector2(1, .68f));
+
+                factionError = new GameObject("Error", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
+                factionError.transform.SetParent(factionStep.transform, false);
+                factionError.alignment = TextAlignmentOptions.Center;
+                factionError.color = new Color(1f, .35f, .35f);
+                Stretch(factionError.rectTransform, new Vector2(0, 0), new Vector2(1, .2f));
+
+                starterFactionButtons = new Button[3];
+                Faction[] factions = { Faction.Fsti, Faction.Frti, Faction.Fpb };
+                for (int i = 0; i < factions.Length; i++)
+                {
+                    GameObject buttonObject = new GameObject(factions[i].ToString(), typeof(RectTransform), typeof(Image), typeof(Button));
+                    buttonObject.transform.SetParent(row, false);
+                    RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+                    buttonRect.anchorMin = new Vector2(i / 3f, 0);
+                    buttonRect.anchorMax = new Vector2((i + 1) / 3f, 1);
+                    buttonRect.offsetMin = new Vector2(6, 0);
+                    buttonRect.offsetMax = new Vector2(-6, 0);
+
+                    TextMeshProUGUI label = new GameObject("Label", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
+                    label.transform.SetParent(buttonObject.transform, false);
+                    label.text = factions[i].ToString().ToUpperInvariant();
+                    label.alignment = TextAlignmentOptions.Center;
+                    Stretch(label.rectTransform, Vector2.zero, Vector2.one);
+
+                    int captured = i;
+                    Button button = buttonObject.GetComponent<Button>();
+                    button.onClick.AddListener(() => OnStarterFactionClicked(factions[captured]));
+                    starterFactionButtons[i] = button;
+                }
+            }
+
+            factionStep.SetActive(false);
+            UpdateStarterFactionButtons();
+        }
+
+        static void Stretch(RectTransform rect, Vector2 min, Vector2 max)
+        {
+            rect.anchorMin = min;
+            rect.anchorMax = max;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+        }
+
+        void ShowStarterFactionPicker()
+        {
+            SetPanel(identityStep, false);
+            SetPanel(factionStep, true);
+            ClearError(factionError);
+            UpdateStarterFactionButtons();
+        }
+
+        async void OnStarterFactionClicked(Faction faction)
+        {
+            if (busy) return;
+            selectedStarterFaction = faction;
+            UpdateStarterFactionButtons();
+            SetBusy(true);
+            ClearError(factionError);
+            try
+            {
+                CloudPlayerDataService cloud = CloudPlayerDataService.Instance ?? CloudPlayerDataService.EnsureInstance();
+                await cloud.EnsureStarterAsync(selectedStarterFaction);
+                SetPanel(factionStep, false);
+                flow?.OnProfileSetupComplete();
+            }
+            catch (Exception e)
+            {
+                ShowError(factionError, "Starter collection could not be granted. Check your connection and retry.");
+                Debug.LogException(e);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
+        void UpdateStarterFactionButtons()
+        {
+            if (starterFactionButtons == null) return;
+            Faction[] factions = { Faction.Fsti, Faction.Frti, Faction.Fpb };
+            for (int i = 0; i < starterFactionButtons.Length; i++)
+            {
+                if (starterFactionButtons[i] == null) continue;
+                Image image = starterFactionButtons[i].GetComponent<Image>();
+                if (image != null)
+                    image.color = factions[i] == selectedStarterFaction
+                        ? new Color(.16f, .48f, .7f)
+                        : new Color(.16f, .22f, .29f);
+            }
         }
 
         /// <summary>Leaves setup and drops the session, so the player can sign in as somebody else.</summary>

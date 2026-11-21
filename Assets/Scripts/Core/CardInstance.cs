@@ -39,13 +39,25 @@ namespace Overlink.Core
         private static int nextInstanceId = 1;
 
         public CardInstance(CardDefinition definition, PlayerIndex owner)
+            : this(definition, owner, AllocateGlobalId(definition))
+        {
+        }
+
+        static int AllocateGlobalId(CardDefinition definition)
+        {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            return nextInstanceId++;
+        }
+
+        internal CardInstance(CardDefinition definition, PlayerIndex owner, int instanceId)
         {
             if (definition == null)
             {
                 throw new ArgumentNullException(nameof(definition));
             }
 
-            InstanceId = nextInstanceId++;
+            if (instanceId <= 0) throw new ArgumentOutOfRangeException(nameof(instanceId));
+            InstanceId = instanceId;
             DefinitionId = definition.Id;
             Definition = definition;
             Owner = owner;

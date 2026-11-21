@@ -17,7 +17,7 @@ namespace Overlink.UI
         const string PostFxKey = "Overlink.Settings.PostFX";
         const string ReduceShakeKey = "Overlink.Settings.ReduceShake";
         const string ReduceFlashKey = "Overlink.Settings.ReduceFlash";
-        // Shared with the offline pack reveal screen, which reads this preference in its Awake; the
+        // Shared with the pack reveal screen, which reads this preference in its Awake; the
         // toggle moved here from that screen so all motion options live in one place.
         const string ReducedMotionKey = "Overlink.OfflinePack.ReducedMotion";
 

@@ -5,6 +5,7 @@
     "Overlink.Core",
     "Overlink.Cards",
     "Overlink.Persistence",
+    "Overlink.Net",
     "Overlink.Vfx",
     "Unity.TextMeshPro",
     "UnityEngine.UI"

@@ -141,12 +141,12 @@ namespace Overlink.EditorTools
             string[] forbidden =
             {
                 "SettingsController.cs:CreateVisualToggle",
-                "OfflineSignalBayController.cs:AddComponent<Button>"
+                "SignalBayController.cs:AddComponent<Button>"
             };
             string[] files =
             {
                 "Assets/Scripts/UI/SettingsController.cs",
-                "Assets/Scripts/UI/OfflineSignalBayController.cs"
+                "Assets/Scripts/UI/SignalBayController.cs"
             };
             for (int i = 0; i < files.Length; i++)
             {

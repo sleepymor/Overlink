@@ -63,7 +63,9 @@ jobs:
           # `buildPath` is NOT a valid input for game-ci/unity-builder@v4
           # (it was silently ignored, which caused the v0.18.1 failure).
           buildsPath: build
-          versioning: Tag
+          # PlayerSettings.bundleVersion is also checked by the Cloud Code compatibility policy.
+          # Do not replace it with an unrelated branch name or release tag during CI builds.
+          versioning: None
 
       - name: Resolve content root
         id: root

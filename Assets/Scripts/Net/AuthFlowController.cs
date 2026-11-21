@@ -28,6 +28,12 @@ namespace Overlink.Net
 
         /// <summary>An unrecoverable step failed. <see cref="AuthFlowController.Message"/> explains.</summary>
         Error,
+
+        /// <summary>Compatibility check failed; a retry is required before continuing.</summary>
+        VersionCheckFailed,
+
+        /// <summary>The installed client is below the server's minimum supported version.</summary>
+        UpdateRequired,
     }
 
     /// <summary>
@@ -53,6 +59,8 @@ namespace Overlink.Net
 
         /// <summary>Player-facing text for the current state, used for the Error state and logging.</summary>
         public string Message { get; private set; } = "";
+        public string UpdateUrl { get; private set; } = "";
+        bool versionVerified;
 
         public event Action<AuthState> StateChanged;
 
@@ -75,13 +83,6 @@ namespace Overlink.Net
             "CardPresentation",
             "CardCollectionPreview",
             "CardFrameMatrixPreview",
-            // Gacha hosts the deterministic offline pack-opening prototype. Keep it directly testable
-            // from the Editor until its future account-backed economy service is wired.
-            "Gacha",
-            // RevealGacha is the pack-opening reveal, split into its own scene; same prototype rule.
-            "RevealGacha",
-            // Collection hosts the offline binder prototype that shares Gacha's deterministic data.
-            "Collection",
         };
 
         static bool IsCardPreviewScene(string sceneName)
@@ -156,6 +157,7 @@ namespace Overlink.Net
         /// </summary>
         public async Task StartAuthenticationFlowAsync()
         {
+            if (!Application.isPlaying) return;
             if (isProcessing) return;
             isProcessing = true;
 
@@ -164,6 +166,7 @@ namespace Overlink.Net
                 ChangeState(AuthState.Initializing, "Initializing…");
 
                 await AccountManager.Instance.EnsureInitializedAsync();
+                if (!Application.isPlaying) return;
 
                 ChangeState(AuthState.CheckingCachedSession, "Checking for a saved session…");
 
@@ -181,6 +184,7 @@ namespace Overlink.Net
             }
             catch (Exception e)
             {
+                if (!Application.isPlaying) return;
                 Debug.LogError($"[AuthFlow] Failed to start authentication flow: {e}");
                 ChangeState(AuthState.Error, AuthResult.FromException(e).UserMessage);
                 ShowAuthScene();
@@ -197,6 +201,7 @@ namespace Overlink.Net
         /// </summary>
         public async void OnPlayerSignedIn()
         {
+            if (!Application.isPlaying) return;
             if (isProcessing) return;
             isProcessing = true;
 
@@ -206,6 +211,7 @@ namespace Overlink.Net
             }
             catch (Exception e)
             {
+                if (!Application.isPlaying) return;
                 Debug.LogError($"[AuthFlow] Error after sign-in: {e}");
                 ChangeState(AuthState.Error, AuthResult.FromException(e).UserMessage);
             }
@@ -218,6 +224,11 @@ namespace Overlink.Net
         /// <summary>Called by the Auth UI once the profile has been saved.</summary>
         public void OnProfileSetupComplete()
         {
+            if (!versionVerified)
+            {
+                _ = StartAuthenticationFlowAsync();
+                return;
+            }
             Debug.Log("[AuthFlow] Profile setup complete, loading main menu.");
             ChangeState(AuthState.Ready, "");
             LoadMainMenu();
@@ -226,6 +237,8 @@ namespace Overlink.Net
         /// <summary>Called by the Auth UI when the player abandons setup and signs out again.</summary>
         public void OnPlayerSignedOut()
         {
+            versionVerified = false;
+            UpdateUrl = "";
             PlayerProfileService.Instance.ClearProfile();
             ChangeState(AuthState.SignedOut, "");
             ShowAuthScene();
@@ -267,12 +280,39 @@ namespace Overlink.Net
         /// </summary>
         async Task HandleAuthenticatedPlayerAsync()
         {
+            if (!Application.isPlaying) return;
+            versionVerified = false;
+            ChangeState(AuthState.Initializing, "Checking game version…");
+            ShowAuthScene();
+            ClientVersionResponse version;
+            try
+            {
+                var cloud = CloudPlayerDataService.Instance ?? CloudPlayerDataService.EnsureInstance();
+                version = await cloud.CheckClientVersionAsync(Application.version);
+                if (version == null || string.IsNullOrWhiteSpace(version.minimumVersion))
+                    throw new InvalidOperationException("Version service returned an invalid response.");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[AuthFlow] Version check failed: {e}");
+                ChangeState(AuthState.VersionCheckFailed, "Couldn't check the game version. Check your connection and try again.");
+                return;
+            }
+            if (!Application.isPlaying) return;
+            UpdateUrl = version.updateUrl ?? "";
+            if (!version.supported)
+            {
+                ChangeState(AuthState.UpdateRequired, $"Please update Overlink to v{version.minimumVersion} or newer to continue.");
+                return;
+            }
+            versionVerified = true;
             ChangeState(AuthState.LoadingProfile, "Loading your profile…");
 
             PlayerProfile profile = null;
             try
             {
                 profile = await PlayerProfileService.Instance.LoadProfileAsync();
+                if (!Application.isPlaying) return;
             }
             catch (Exception e)
             {
@@ -289,6 +329,18 @@ namespace Overlink.Net
             }
             else
             {
+                CloudPlayerState progression = await EnsureCloudProgressionAsync();
+                if (!Application.isPlaying) return;
+                if (progression == null || !progression.starterGranted)
+                {
+                    // A profile can be complete while the one-time starter grant is still pending
+                    // (for example if the app closed between the two server writes). Keep the player
+                    // in setup until a faction choice has been accepted by Cloud Code.
+                    Debug.Log("[AuthFlow] Starter faction is not set, showing setup.");
+                    ChangeState(AuthState.NeedsProfileSetup, "");
+                    ShowAuthScene();
+                    return;
+                }
                 Debug.Log("[AuthFlow] Profile complete, loading main menu.");
                 AccountManager account = AccountManager.Instance ?? AccountManager.EnsureInstance();
                 account.ApplyIdentity(profile.username, profile.tag);
@@ -297,10 +349,21 @@ namespace Overlink.Net
             }
         }
 
+        async Task<CloudPlayerState> EnsureCloudProgressionAsync()
+        {
+            CloudPlayerDataService service = CloudPlayerDataService.Instance
+                ?? CloudPlayerDataService.EnsureInstance();
+            return await service.LoadAsync();
+        }
+
         void ChangeState(AuthState newState, string message)
         {
             Message = message ?? "";
-            if (CurrentState == newState) return;
+            if (CurrentState == newState)
+            {
+                StateChanged?.Invoke(newState);
+                return;
+            }
 
             Debug.Log($"[AuthFlow] State: {CurrentState} → {newState}{(string.IsNullOrEmpty(Message) ? "" : $" ({Message})")}");
             CurrentState = newState;

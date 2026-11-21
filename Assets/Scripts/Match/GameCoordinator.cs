@@ -1,9 +1,12 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Overlink.Cards;
 using Overlink.Core;
 using Overlink.Persistence;
+using Overlink.Net;
 using UnityEngine;
 
 namespace Overlink.Match
@@ -52,13 +55,28 @@ namespace Overlink.Match
 
         private MatchState matchState;
         private MatchEngine matchEngine;
+        private AuthoritativeCommandBoundary authoritativeBoundary;
         private SimpleAI aiOpponent;
         private bool matchStarted;
         private bool aiBusy;
         private bool aiBlocksDeclared;
         private bool initializing;
+        private bool matchReportSubmitted;
+        private string matchId;
+        private bool onlineMatch;
+        [Tooltip("Online opponent player id. Leave empty for AI matches; the server only settles PvP after both players report.")]
+        [SerializeField] private string onlineOpponentPlayerId;
         private BattlefieldPresenter presenter;
         private BattlefieldHud battlefieldHud;
+        private NetBootstrap network;
+        private MatchViewSnapshot guestView;
+        private MatchState guestPresentationState;
+        private long remoteRequestId;
+        private bool presentationOnlyEngine;
+
+        bool IsOnlineGuest => onlineMatch && network != null && !network.IsHost;
+        bool HasMatchCommandContext => matchState != null && (matchEngine != null || IsOnlineGuest);
+        bool IsGuestPresentation => IsOnlineGuest && presentationOnlyEngine;
 
         [Header("Phase flow")]
         [Tooltip("Upkeep, Draw, End and Cleanup advance automatically. Main and Combat remain player-controlled.")]
@@ -80,6 +98,25 @@ namespace Overlink.Match
             }
             WireHand();
             WireHud();
+            WireNetwork();
+            if (network != null)
+            {
+                network.OnMatchCommandResponse -= OnRemoteCommandResponse;
+                network.OnMatchCommandResponse += OnRemoteCommandResponse;
+            }
+        }
+
+        void WireNetwork()
+        {
+            if (network != null) return;
+            network = NetBootstrap.Instance;
+            if (network == null) return;
+            network.OnRemoteCommandAccepted -= OnRemoteCommandAccepted;
+            network.OnRemoteCommandAccepted += OnRemoteCommandAccepted;
+            network.OnGuestViewChanged -= OnGuestViewChanged;
+            network.OnGuestViewChanged += OnGuestViewChanged;
+            network.OnMatchCommandResponse -= OnRemoteCommandResponse;
+            network.OnMatchCommandResponse += OnRemoteCommandResponse;
         }
 
         /// <summary>
@@ -184,6 +221,12 @@ namespace Overlink.Match
                 handController.CardPlayed -= OnCardPlayedAnimated;
                 handController.CardNominated -= OnCardNominated;
             }
+            if (network != null)
+            {
+                network.OnRemoteCommandAccepted -= OnRemoteCommandAccepted;
+                network.OnGuestViewChanged -= OnGuestViewChanged;
+                network.OnMatchCommandResponse -= OnRemoteCommandResponse;
+            }
         }
 
         void Start()
@@ -191,25 +234,174 @@ namespace Overlink.Match
             StartCoroutine(InitializeMatch());
         }
 
+        /// <summary>All match mutations pass through this gate. Online guests never mutate a private copy.</summary>
+        CommandResult ExecuteMatchCommand(GameCommand command)
+        {
+            if (command == null) return CommandResult.InvalidCommand;
+            if (!onlineMatch) return matchEngine.ExecuteCommand(command);
+            NetBootstrap net = NetBootstrap.Instance;
+            if (net == null || !net.IsSeatAuthenticated)
+            {
+                ShowNotice("The secure match connection is not ready.");
+                return CommandResult.InvalidCommand;
+            }
+            if (!net.IsHost)
+            {
+                try
+                {
+                    net.SendMatchCommand(++remoteRequestId, net.GuestView != null ? net.GuestView.Revision : 0, command);
+                    return CommandResult.Success;
+                }
+                catch (InvalidOperationException)
+                {
+                    ShowNotice("Waiting for the match server.");
+                    return CommandResult.InvalidCommand;
+                }
+            }
+            if (matchEngine == null) return CommandResult.InvalidCommand;
+            if (authoritativeBoundary == null) return CommandResult.InvalidCommand;
+            CommandResult result = authoritativeBoundary.Execute(net.LocalPeerId, authoritativeBoundary.Revision, command);
+            if (result == CommandResult.Success) PublishAuthoritativeGuestView();
+            return result;
+        }
+
+        void OnRemoteCommandAccepted(GameCommand command, long revision)
+        {
+            if (!onlineMatch || network == null || !network.IsHost || matchState == null) return;
+            PublishAuthoritativeGuestView();
+        }
+
+        void OnRemoteCommandResponse(long requestId, long revision, CommandResult result)
+        {
+            if (!onlineMatch || network == null || network.IsHost) return;
+            if (result == CommandResult.Success)
+            {
+                ShowNotice($"MATCH COMMAND ACCEPTED · REV {revision}");
+            }
+            else
+            {
+                if (matchState != null && matchState.SetupInProgress) ShowLineupOffer();
+                ShowNotice($"MATCH COMMAND REFUSED ({result})");
+            }
+        }
+
+        void PublishAuthoritativeGuestView()
+        {
+            if (network == null || !network.IsHost || !network.IsSeatAuthenticated || matchState == null) return;
+            try { network.SendGuestView(); }
+            catch (InvalidOperationException) { }
+        }
+
+        void OnGuestViewChanged(MatchViewSnapshot snapshot)
+        {
+            if (snapshot == null || network == null || network.IsHost) return;
+            onlineMatch = true;
+            guestView = snapshot;
+            guestPresentationState = MatchState.FromPresentationView(snapshot, ResolvePresentationDefinition);
+            matchState = guestPresentationState;
+            presentationOnlyEngine = true;
+            matchEngine = new MatchEngine(guestPresentationState,
+                MvpCardLibrary.IsRegistered ? MvpCardLibrary.All() : new List<CardDefinition>());
+            matchStarted = true;
+            matchBooted = true;
+            initializing = false;
+            RenderGuestPresentation();
+            if (snapshot.SetupInProgress) ShowLineupOffer();
+            else
+            {
+                if (presenter != null) presenter.SetLineupPreview(null);
+                if (battlefieldHud != null) battlefieldHud.SetSetupBar(false, null, false, null);
+            }
+            ApplyGuestSnapshotToHud(snapshot);
+        }
+
+        CardDefinition ResolvePresentationDefinition(string id)
+        {
+            if (!MvpCardLibrary.IsRegistered) return null;
+            IReadOnlyList<CardDefinition> cards;
+            try { cards = MvpCardLibrary.All(); }
+            catch (InvalidOperationException) { return null; }
+            return cards.FirstOrDefault(card => card != null && card.Id == id);
+        }
+
+        void RenderGuestPresentation()
+        {
+            if (guestPresentationState == null) return;
+            if (presenter != null) presenter.Repaint(guestPresentationState);
+            if (handController == null) return;
+            PlayerState own = guestPresentationState.GetPlayer(PlayerIndex.Player);
+            IReadOnlyList<CardInstance> visible = own.LineupOffer.Count > 0
+                ? own.LineupOffer
+                : own.Hand;
+            var hand = new List<CardData>(visible.Count);
+            foreach (CardInstance card in visible) hand.Add(DataFor(card));
+            handController.SetHand(hand);
+        }
+
+        void ApplyGuestSnapshotToHud(MatchViewSnapshot snapshot)
+        {
+            if (battlefieldHud == null || snapshot.Players == null || snapshot.Players.Count != 2) return;
+            for (int i = 0; i < snapshot.Players.Count; i++)
+            {
+                MatchViewSnapshot.PlayerView player = snapshot.Players[i];
+                // HUD Player is the local side, while snapshot indices retain host-side meaning.
+                PlayerIndex seat = (PlayerIndex)i == snapshot.Viewer ? PlayerIndex.Player : PlayerIndex.Opponent;
+                battlefieldHud.SetStatus(seat,
+                    $"<b>CORE {player.CoreDurability}</b>\n" +
+                    $"<b>NP {player.NP}</b>   HAND {player.HandCount} · DECK {player.DeckCount}");
+                battlefieldHud.SetStatusMeters(seat, player.CoreDurability, PlayerState.StartingCoreDurability,
+                    player.NP, PlayerState.MaxNP);
+            }
+            battlefieldHud.SetNotice($"MATCH SYNCED · REV {snapshot.Revision}");
+        }
+
+        /// <summary>Guest presentation data only; it is never used to execute a command.</summary>
+        public MatchViewSnapshot GetGuestView() => guestView;
+
         /// <summary>
-        /// The saved battle deck expanded to card definitions, or null when none is set or it is not a legal
-        /// deck (a draft cannot go into battle, so the starter deck is used instead).
+        /// The saved battle deck expanded to card definitions, or null when none is set or it is invalid.
         /// </summary>
         static List<CardDefinition> BattleDeckFromLibrary(List<CardDefinition> pool)
         {
             string id = DeckLibrary.BattleId;
             if (id.Length == 0) return null;
 
-            DeckData data = DeckLibrary.Load(id);
+            DeckData data = DeckLibrary.LoadBattleDeck();
+            if (!BattleDeckSnapshot.TryCreate(data, cardId => pool.Find(c => c != null && c.Id == cardId),
+                    out var snapshot)) return null;
             var deck = new List<CardDefinition>();
-            foreach (var entry in data.Cards)
+            foreach (var entry in snapshot.ToDeckData().Cards)
             {
                 CardDefinition card = pool.Find(c => c != null && c.Id == entry.Key);
                 if (card == null) return null;
                 for (int i = 0; i < entry.Value; i++) deck.Add(card);
             }
 
-            return DeckValidator.Validate(deck).HasErrors ? null : deck;
+            return deck;
+        }
+
+        static List<CardDefinition> DeckDataToDefinitions(DeckData data, List<CardDefinition> pool)
+        {
+            if (!BattleDeckSnapshot.TryCreate(data, id => pool.Find(card => card != null && card.Id == id), out var snapshot)) return null;
+            var deck = new List<CardDefinition>();
+            foreach (KeyValuePair<string, int> entry in snapshot.ToDeckData().Cards)
+            {
+                CardDefinition definition = pool.Find(card => card != null && card.Id == entry.Key);
+                for (int i = 0; i < entry.Value; i++) deck.Add(definition);
+            }
+            return deck;
+        }
+
+        IEnumerator WaitForOnlineDeckExchange(NetBootstrap net, DeckData localDeck)
+        {
+            try { net.SendBattleDeck(localDeck); }
+            catch (Exception error)
+            {
+                Debug.LogError("[GameCoordinator] Could not submit the battle deck: " + error.Message);
+                yield break;
+            }
+            while (net.IsConnected && net.IsSeatAuthenticated && net.RemoteBattleDeck == null)
+                yield return null;
         }
 
         IEnumerator InitializeMatch()
@@ -221,9 +413,121 @@ namespace Overlink.Match
             yield return new WaitForSeconds(0.5f);
 
             List<CardDefinition> pool = new List<CardDefinition>(MvpCardLibrary.All());
-            List<CardDefinition> playerDeck = BattleDeckFromLibrary(pool)
-                ?? MatchDeckBuilder.BuildStarterDeck(pool, Faction.Fsti);
-            List<CardDefinition> opponentDeck = MatchDeckBuilder.BuildStarterDeck(pool, Faction.Frti);
+            bool signedIn = AccountManager.Instance != null && AccountManager.Instance.IsSignedIn;
+            CloudPlayerDataService cloud = CloudPlayerDataService.Instance;
+            if (signedIn && (cloud == null || !cloud.IsReady))
+            {
+                Debug.LogError("[GameCoordinator] Cloud progression is not ready; refusing to start an authoritative match.");
+                initializing = false;
+                yield break;
+            }
+
+            if (string.IsNullOrEmpty(onlineOpponentPlayerId) && LobbyManager.Instance != null)
+                onlineOpponentPlayerId = LobbyManager.Instance.OpponentPlayerId;
+            onlineMatch = !string.IsNullOrEmpty(onlineOpponentPlayerId) || LobbyManager.Instance?.IsOnlineMatch == true;
+
+            List<CardDefinition> playerDeck = onlineMatch ? null : BattleDeckFromLibrary(pool);
+            if (playerDeck == null && signedIn && !onlineMatch)
+            {
+                Debug.LogError("[GameCoordinator] No legal owned battle deck is selected; refusing to start the match.");
+                initializing = false;
+                yield break;
+            }
+            if (playerDeck == null && !onlineMatch)
+                playerDeck = MatchDeckBuilder.BuildStarterDeck(pool, Faction.Fsti);
+            matchId = Guid.NewGuid().ToString("N");
+            matchReportSubmitted = false;
+            NetBootstrap netBootstrap = NetBootstrap.Instance;
+            List<CardDefinition> opponentDeck = null;
+            if (onlineMatch)
+            {
+                if (netBootstrap == null)
+                {
+                    ShowNotice("The secure PvP session is not available.");
+                    initializing = false;
+                    yield break;
+                }
+
+                while (netBootstrap.IsConnected && !netBootstrap.IsSeatAuthenticated)
+                {
+                    ShowNotice("Authenticating both PvP seats...");
+                    yield return null;
+                }
+
+                if (!netBootstrap.IsConnected || !netBootstrap.IsSeatAuthenticated)
+                {
+                    ShowNotice("PvP authentication did not complete.");
+                    initializing = false;
+                    yield break;
+                }
+
+                if (cloud == null || !cloud.IsReady)
+                {
+                    ShowNotice("Cloud progression is not ready; cannot load your battle deck.");
+                    initializing = false;
+                    yield break;
+                }
+                ShowNotice("Loading your selected battle deck...");
+                Task<DeckData> deckTask = cloud.GetOwnBattleDeckAsync();
+                while (!deckTask.IsCompleted) yield return null;
+                if (deckTask.IsFaulted || deckTask.IsCanceled)
+                {
+                    Debug.LogError("[GameCoordinator] Cloud battle deck load failed: " + deckTask.Exception);
+                    ShowNotice("Could not load your battle deck. Select a legal deck and try again.");
+                    initializing = false;
+                    yield break;
+                }
+                List<CardDefinition> localDeck = DeckDataToDefinitions(deckTask.Result, pool);
+                if (localDeck == null)
+                {
+                    ShowNotice("Your selected battle deck is invalid. Return to the deck builder.");
+                    initializing = false;
+                    yield break;
+                }
+
+                if (!netBootstrap.IsHost)
+                {
+                    bool sent = false;
+                    try { netBootstrap.SendBattleDeck(deckTask.Result); sent = true; }
+                    catch (Exception error)
+                    {
+                        Debug.LogError("[GameCoordinator] Could not submit battle deck: " + error.Message);
+                    }
+                    if (!sent)
+                    {
+                        ShowNotice("Could not send your battle deck to the host.");
+                        initializing = false;
+                        yield break;
+                    }
+                    ShowNotice("Waiting for the host to start the authoritative match...");
+                    initializing = false;
+                    if (netBootstrap.GuestView != null) OnGuestViewChanged(netBootstrap.GuestView);
+                    while (netBootstrap.IsConnected && netBootstrap.IsSeatAuthenticated && guestView == null)
+                        yield return null;
+                    yield break;
+                }
+                playerDeck = localDeck;
+                ShowNotice("Waiting for the opponent's battle deck...");
+                float deckDeadline = Time.unscaledTime + 60f;
+                while (netBootstrap.IsConnected && netBootstrap.IsSeatAuthenticated &&
+                    netBootstrap.RemoteBattleDeck == null && Time.unscaledTime < deckDeadline)
+                    yield return null;
+                if (!netBootstrap.IsSeatAuthenticated || netBootstrap.RemoteBattleDeck == null)
+                {
+                    ShowNotice("Opponent's battle deck did not arrive. Both players should select a legal deck and retry.");
+                    initializing = false;
+                    yield break;
+                }
+                opponentDeck = DeckDataToDefinitions(netBootstrap.RemoteBattleDeck, pool);
+            }
+
+            if (!onlineMatch) opponentDeck = MatchDeckBuilder.BuildStarterDeck(pool, Faction.Frti);
+            if (opponentDeck == null)
+            {
+                Debug.LogError("[GameCoordinator] The remote battle deck failed local shape validation.");
+                initializing = false;
+                yield break;
+            }
 
             // Surface pool problems in the console instead of failing silently at play time.
             ValidationResult poolValidation = CardValidator.ValidatePool(pool);
@@ -254,8 +558,25 @@ namespace Overlink.Match
 
             // Pass the pool so EffectType.Summon can resolve a ReferenceId to a real definition.
             matchEngine = new MatchEngine(matchState, pool);
+            if (onlineMatch && netBootstrap.IsHost)
+            {
+                try { authoritativeBoundary = netBootstrap.BindAuthenticatedMatch(matchEngine); }
+                catch (Exception error)
+                {
+                    Debug.LogError("[GameCoordinator] Could not bind the authoritative online match: " + error.Message);
+                }
+                if (authoritativeBoundary == null)
+                {
+                    ShowNotice("Could not start the online match connection.");
+                    initializing = false;
+                    yield break;
+                }
+            }
 
-            if (enableAI)
+            // An online lobby supplies the opponent identity and owns the remote seat. Never let the
+            // local AI also drive that seat, even though Gameplay.unity defaults to AI for the offline
+            // route.
+            if (enableAI && !onlineMatch)
             {
                 aiOpponent = new SimpleAI(matchEngine, matchState, PlayerIndex.Opponent, aiSeed);
                 Debug.Log("[GameCoordinator] AI opponent created");
@@ -267,16 +588,16 @@ namespace Overlink.Match
             // open a match without a first player; taking it here keeps the die out of the closing step.
             matchState.FlipCoin();
 
-            // The opponent fields straight away - it has no screen to choose on - and only the player's seat
-            // waits. With the AI switched off, its seat is filled mechanically too, or setup would never close.
+            // Offline opponents have no lineup screen. Online guests choose their own lineup.
             if (aiOpponent != null)
             {
                 aiOpponent.ChooseLineup();
             }
-            else
+            else if (!onlineMatch)
             {
                 FieldOfferMechanically(PlayerIndex.Opponent);
             }
+            if (onlineMatch) PublishAuthoritativeGuestView();
 
             initializing = false;
             yield return WaitForPlayerLineup();
@@ -624,7 +945,7 @@ namespace Overlink.Match
         /// </summary>
         public void RerollLineup()
         {
-            if (matchState == null || matchEngine == null || !matchState.SetupInProgress
+            if (!HasMatchCommandContext || !matchState.SetupInProgress
                 || matchState.Players[0].LineupConfirmed)
             {
                 return;
@@ -632,7 +953,7 @@ namespace Overlink.Match
 
             PlayerState player = matchState.Players[0];
             int cost = matchState.LineupRerollCost(PlayerIndex.Player);
-            CommandResult result = matchEngine.ExecuteCommand(new RerollLineupCommand(PlayerIndex.Player));
+            CommandResult result = ExecuteMatchCommand(new RerollLineupCommand(PlayerIndex.Player));
             if (result == CommandResult.InsufficientNP)
             {
                 ShowNotice($"A reroll costs {cost} NP and you have {player.CurrentNP}.");
@@ -657,13 +978,13 @@ namespace Overlink.Match
         /// </summary>
         public void SubmitLineup()
         {
-            if (matchState == null || matchEngine == null || !matchState.SetupInProgress
+            if (!HasMatchCommandContext || !matchState.SetupInProgress
                 || matchState.Players[0].LineupConfirmed)
             {
                 return;
             }
 
-            CommandResult result = matchEngine.ExecuteCommand(new ConfirmLineupCommand(
+            CommandResult result = ExecuteMatchCommand(new ConfirmLineupCommand(
                 PlayerIndex.Player, (int[])lineupNomination.Clone()));
             if (result != CommandResult.Success)
             {
@@ -708,6 +1029,11 @@ namespace Overlink.Match
 
         void Update()
         {
+            // NetBootstrap may finish its own Awake after this coordinator because the coordinator has a
+            // negative execution order. Keep the event bridge idempotent so a late-created singleton and a
+            // domain-reload recovery both reconnect without duplicating handlers.
+            WireNetwork();
+
             // A script recompile while the game is running reloads the domain: Awake/Start are not
             // called again and every non-serialized field above is wiped, so the match would stay
             // bricked with a null state forever. The serialized boot flag survives, which lets us
@@ -732,6 +1058,7 @@ namespace Overlink.Match
             // is the only thing the player should be able to act on or read at that point.
             if (matchState.IsMatchOver())
             {
+                ReportMatchResultIfNeeded();
                 if (battlefieldHud != null)
                 {
                     battlefieldHud.HideRail();
@@ -783,6 +1110,37 @@ namespace Overlink.Match
             if (Input.GetKeyDown(concedeKey)) ConcedeMatch();
         }
 
+        void ReportMatchResultIfNeeded()
+        {
+            if (matchReportSubmitted || matchState == null || !matchState.IsMatchOver()) return;
+            // Relay-hosted PvP is a prototype and must not affect progression or ratings.
+            if (onlineMatch) { matchReportSubmitted = true; return; }
+            CloudPlayerDataService cloud = CloudPlayerDataService.Instance;
+            if (cloud == null || !cloud.IsReady) return;
+
+            matchReportSubmitted = true;
+            string result = matchState.Result == MatchResult.PlayerWin ? "win"
+                : matchState.Result == MatchResult.OpponentWin ? "loss" : "draw";
+            bool versusAi = enableAI && string.IsNullOrEmpty(onlineOpponentPlayerId);
+            _ = SubmitMatchResultAsync(cloud, result, versusAi, onlineOpponentPlayerId);
+        }
+
+        async Task SubmitMatchResultAsync(CloudPlayerDataService cloud, string result, bool versusAi,
+            string opponentPlayerId)
+        {
+            try
+            {
+                await cloud.ReportMatchAsync(matchId, result, versusAi, opponentPlayerId);
+            }
+            catch (Exception e)
+            {
+                // Do not retry automatically: the server rejects duplicate reports and a later match should
+                // not inherit this match's id. The server can still be reported from a dedicated result flow.
+                Debug.LogException(e);
+                matchReportSubmitted = false;
+            }
+        }
+
         /// <summary>
         /// Ends the player's turn. The body of the E key, and what the rail's END TURN button presses; both
         /// guards are inside rather than at the call sites because the button path does not pass through
@@ -790,13 +1148,13 @@ namespace Overlink.Match
         /// </summary>
         void EndPlayerTurn()
         {
-            if (!matchStarted || matchState == null || matchEngine == null
+            if (!matchStarted || !HasMatchCommandContext
                 || matchState.ActivePlayer != PlayerIndex.Player || matchState.IsMatchOver())
             {
                 return;
             }
 
-            matchEngine.ExecuteCommand(new EndTurnCommand(PlayerIndex.Player));
+            ExecuteMatchCommand(new EndTurnCommand(PlayerIndex.Player));
             SyncHand();
             LogMatchState();
         }
@@ -809,12 +1167,12 @@ namespace Overlink.Match
         /// </summary>
         void ConcedeMatch()
         {
-            if (!matchStarted || matchState == null || matchEngine == null || matchState.IsMatchOver())
+            if (!matchStarted || !HasMatchCommandContext || matchState.IsMatchOver())
             {
                 return;
             }
 
-            CommandResult conceded = matchEngine.ExecuteCommand(new ConcedeCommand(PlayerIndex.Player));
+            CommandResult conceded = ExecuteMatchCommand(new ConcedeCommand(PlayerIndex.Player));
             if (conceded == CommandResult.Success)
             {
                 SyncHand();
@@ -872,7 +1230,7 @@ namespace Overlink.Match
                 && matchState.CurrentPhase != TurnPhase.Main
                 && matchState.CurrentPhase != TurnPhase.Combat)
             {
-                CommandResult result = matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
+                CommandResult result = ExecuteMatchCommand(new PassPhaseCommand(PlayerIndex.Player));
                 if (result != CommandResult.Success)
                 {
                     break;
@@ -883,7 +1241,7 @@ namespace Overlink.Match
         /// <summary>Callback for the in-game End Phase button.</summary>
         public void EndPlayerPhase()
         {
-            if (!matchStarted || matchState == null || matchEngine == null
+            if (!matchStarted || !HasMatchCommandContext
                 || matchState.ActivePlayer != PlayerIndex.Player || matchState.IsMatchOver())
             {
                 return;
@@ -891,7 +1249,7 @@ namespace Overlink.Match
 
             if (matchState.CurrentPhase == TurnPhase.Main || matchState.CurrentPhase == TurnPhase.Combat)
             {
-                matchEngine.ExecuteCommand(new PassPhaseCommand(PlayerIndex.Player));
+                ExecuteMatchCommand(new PassPhaseCommand(PlayerIndex.Player));
                 SyncHand();
                 LogMatchState();
                 AdvanceAutomaticPhases();
@@ -1119,6 +1477,9 @@ namespace Overlink.Match
 
             if (dataByInstance.TryGetValue(card.InstanceId, out CardData existing))
             {
+                // Guest snapshots rebuild CardInstance objects while retaining their stable IDs.
+                // Keep the cached view adapter pointed at the latest authoritative projection.
+                if (IsGuestPresentation) existing.AttachSource(card.Definition, card);
                 return existing;
             }
 
@@ -1165,7 +1526,7 @@ namespace Overlink.Match
         /// </summary>
         public bool TryPlayFromUISlot(CardData cardData, BoardSlot chosenSlot)
         {
-            if (matchState == null || matchEngine == null || cardData == null)
+            if (!HasMatchCommandContext || cardData == null)
             {
                 // Never fail silently here: this guard is invisible in the console otherwise, which
                 // turns every rejected drag into an unexplained "[Hand] rejected" message.
@@ -1263,7 +1624,7 @@ namespace Overlink.Match
             var command = new PlayCardCommand(
                 PlayerIndex.Player, card.InstanceId, targetSlotType, targetSlotIndex, targetNodeIndex);
 
-            CommandResult result = matchEngine.ExecuteCommand(command);
+            CommandResult result = ExecuteMatchCommand(command);
             if (result != CommandResult.Success)
             {
                 return Reject($"play of {card.Definition.Name} was rejected by the engine ({result}).");
@@ -1288,7 +1649,7 @@ namespace Overlink.Match
         /// </summary>
         public void TryPlayerAttack(int nodeIndex)
         {
-            if (matchState == null || matchEngine == null || matchState.IsMatchOver())
+            if (!HasMatchCommandContext || matchState.IsMatchOver())
             {
                 return;
             }
@@ -1344,7 +1705,7 @@ namespace Overlink.Match
             int defenderInstanceId = target != null ? target.InstanceId : -1;
 
             var command = new DeclareAttackCommand(PlayerIndex.Player, slot.Card.InstanceId, defenderInstanceId);
-            CommandResult result = matchEngine.ExecuteCommand(command);
+            CommandResult result = ExecuteMatchCommand(command);
 
             if (result == CommandResult.Success)
             {
@@ -1411,7 +1772,7 @@ namespace Overlink.Match
                     : $"{card.Definition.Name} cannot activate its skill right now.");
             }
 
-            CommandResult result = matchEngine.ExecuteCommand(
+            CommandResult result = ExecuteMatchCommand(
                 new ActivateAbilityCommand(PlayerIndex.Player, card.InstanceId));
             if (result != CommandResult.Success)
             {
@@ -1444,7 +1805,7 @@ namespace Overlink.Match
         /// </summary>
         public bool TryPlayerRetreatWith(CardInstance active, CardInstance bench)
         {
-            if (matchState == null || matchEngine == null)
+            if (!HasMatchCommandContext)
             {
                 return false;
             }
@@ -1461,7 +1822,7 @@ namespace Overlink.Match
                     : $"{active.Definition.Name} cannot retreat for {bench.Definition.Name} right now.");
             }
 
-            CommandResult result = matchEngine.ExecuteCommand(
+            CommandResult result = ExecuteMatchCommand(
                 new RetreatCommand(PlayerIndex.Player, active.InstanceId, bench.InstanceId));
             if (result != CommandResult.Success)
             {
@@ -1494,7 +1855,7 @@ namespace Overlink.Match
         /// </summary>
         public bool TryPlayerAttackWith(CardInstance attacker, CardInstance target)
         {
-            if (matchState == null || matchEngine == null)
+            if (!HasMatchCommandContext)
             {
                 return false;
             }
@@ -1517,7 +1878,7 @@ namespace Overlink.Match
             var command = new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId,
                 target != null ? target.InstanceId : -1);
 
-            CommandResult result = matchEngine.ExecuteCommand(command);
+            CommandResult result = ExecuteMatchCommand(command);
             if (result != CommandResult.Success)
             {
                 return Reject(AttackFailure(attacker, target, result));
@@ -1611,7 +1972,7 @@ namespace Overlink.Match
         /// <summary>Commits a block through the engine. See <see cref="TryPlayerAttackWith"/> for the shape.</summary>
         public bool TryPlayerBlockWith(CardInstance blocker, CardInstance attacker)
         {
-            if (matchState == null || matchEngine == null || blocker == null || attacker == null)
+            if (!HasMatchCommandContext || blocker == null || attacker == null)
             {
                 return false;
             }
@@ -1626,7 +1987,7 @@ namespace Overlink.Match
                 return Reject($"{blocker.Definition.Name} cannot answer that attack from where it stands.");
             }
 
-            CommandResult result = matchEngine.ExecuteCommand(
+            CommandResult result = ExecuteMatchCommand(
                 new DeclareBlockCommand(PlayerIndex.Player, blocker.InstanceId, attacker.InstanceId));
 
             if (result != CommandResult.Success)

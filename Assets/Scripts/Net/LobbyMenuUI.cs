@@ -52,7 +52,7 @@ namespace Overlink.Net
             if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
             if (lobbyCodeInput != null) lobbyCodeInput.onValueChanged.AddListener(_ => Refresh());
             if (cancelButton != null) cancelButton.onClick.AddListener(lobby.CancelSearch);
-            if (startButton != null) startButton.onClick.AddListener(lobby.StartMatch);
+            if (startButton != null) startButton.onClick.AddListener(() => lobby.SetReady(!lobby.LocalReady));
             if (leaveButton != null) leaveButton.onClick.AddListener(lobby.LeaveLobby);
 
             lobby.StateChanged += Refresh;
@@ -97,7 +97,7 @@ namespace Overlink.Net
             bool matched = lobby.State == LobbyState.InGame || (net != null && net.IsListening);
 
             SetActive(lobbyCodeText, inLobby);
-            SetActive(startButton, lobby.IsHost);
+            SetActive(startButton, inLobby && !lobby.IsQuickPlay);
             SetActive(roleText, inLobby);
 
             if (playerCountText != null)
@@ -114,8 +114,12 @@ namespace Overlink.Net
             SetInteractable(joinButton, idle && !string.IsNullOrEmpty(lobbyCodeInput?.text));
             SetInteractable(cancelButton, !idle && !inLobby);
             SetInteractable(leaveButton, inLobby && !lobby.IsBusy);
-            // Host-gated and only once both seats are filled.
-            SetInteractable(startButton, lobby.CanStart && lobby.State == LobbyState.InLobby);
+            SetInteractable(startButton, inLobby && lobby.State == LobbyState.InLobby);
+            if (startButton != null)
+            {
+                var label = startButton.GetComponentInChildren<TMP_Text>(true);
+                if (label != null) label.text = lobby.LocalReady ? "UNREADY" : "READY";
+            }
             if (lobbyCodeInput != null) lobbyCodeInput.interactable = idle && !matched;
 
             if (lobbyCodeText != null && inLobby)
