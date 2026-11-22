@@ -38,7 +38,13 @@ namespace Overlink.Net
         const string AvatarResourceName = "NetAvatar";
         const string RelayProtocol = "dtls";
         const float SeatRadius = 2.5f;
-        const float WatchdogSeconds = 15f;
+        // Relay/lobby verification can legitimately take longer while Unity Services is
+        // recovering from a rate limit. This is only a diagnostic warning, but 15 seconds
+        // made a normal two-client connection look like it had timed out.
+        const float WatchdogSeconds = 60f;
+        const float SeatAnnouncementSeconds = 10f;
+        const float SeatVerificationInitialRetrySeconds = 5f;
+        const float SeatVerificationMaxRetrySeconds = 60f;
         const string SeatReadyMessage = "overlink.seat.ready.v1";
         const string SeatChallengeMessage = "overlink.seat.challenge.v1";
         const string SeatProofMessage = "overlink.seat.proof.v1";
@@ -177,6 +183,10 @@ namespace Overlink.Net
         bool hostProofSent;
         bool hostProofAcknowledged;
         bool hostProofVerified;
+        float nextSeatAnnouncementAt;
+        float nextSeatVerificationAt;
+        int seatAnnouncementFailures;
+        int seatVerificationFailures;
         bool seatAnnouncementPending;
         Coroutine seatAnnouncementRoutine;
         RelaySeatHandshake seatHandshake;
@@ -535,6 +545,10 @@ namespace Overlink.Net
             hostProofSent = false;
             hostProofAcknowledged = false;
             hostProofVerified = false;
+            nextSeatAnnouncementAt = 0f;
+            nextSeatVerificationAt = 0f;
+            seatAnnouncementFailures = 0;
+            seatVerificationFailures = 0;
             seatAnnouncementPending = false;
             if (seatAnnouncementRoutine != null) StopCoroutine(seatAnnouncementRoutine);
             seatAnnouncementRoutine = null;
@@ -553,8 +567,9 @@ namespace Overlink.Net
             int version = seatSessionVersion;
             while (version == seatSessionVersion && mgr != null && mgr.IsConnectedClient && !mgr.IsServer && !IsSeatAuthenticated)
             {
-                if (!seatAnnouncementPending) _ = AnnounceSeatAsync();
-                yield return new WaitForSecondsRealtime(3f);
+                if (!seatAnnouncementPending && Time.realtimeSinceStartup >= nextSeatAnnouncementAt)
+                    _ = AnnounceSeatAsync();
+                yield return new WaitForSecondsRealtime(1f);
             }
             seatAnnouncementRoutine = null;
         }
@@ -569,18 +584,29 @@ namespace Overlink.Net
                 if (lobby == null) return;
                 await lobby.PublishSeatProofAsync();
                 if (this == null || version != seatSessionVersion || mgr == null || !mgr.IsConnectedClient || mgr.IsServer) return;
+                seatAnnouncementFailures = 0;
+                nextSeatAnnouncementAt = Time.realtimeSinceStartup + SeatAnnouncementSeconds;
                 SendSeatMessage(SeatReadyMessage, NetworkManager.ServerClientId, Array.Empty<byte>());
             }
             catch (Exception error)
             {
-                if (this != null && version == seatSessionVersion) SetStatus("Could not authenticate the lobby connection: " + error.Message);
+                if (this != null && version == seatSessionVersion)
+                {
+                    seatAnnouncementFailures++;
+                    nextSeatAnnouncementAt = Time.realtimeSinceStartup + RetryDelay(seatAnnouncementFailures);
+                    SetStatus(IsRateLimited(error)
+                        ? "Lobby verification is rate limited — retrying shortly…"
+                        : "Could not authenticate the lobby connection: " + error.Message);
+                }
             }
             finally { if (this != null && version == seatSessionVersion) seatAnnouncementPending = false; }
         }
 
         void OnSeatReady(ulong sender, FastBufferReader reader)
         {
-            if (mgr == null || !mgr.IsServer || sender == mgr.LocalClientId || IsSeatAuthenticated || seatVerificationPending || reader.Length - reader.Position != 0) return;
+            if (mgr == null || !mgr.IsServer || sender == mgr.LocalClientId || IsSeatAuthenticated ||
+                seatVerificationPending || Time.realtimeSinceStartup < nextSeatVerificationAt ||
+                reader.Length - reader.Position != 0) return;
             _ = ChallengePeerAsync(sender);
         }
 
@@ -595,14 +621,38 @@ namespace Overlink.Net
                 LobbySeatIdentity identity = await lobby.FetchOpponentSeatIdentityAsync();
                 if (this == null || version != seatSessionVersion || mgr == null || !mgr.IsServer ||
                     !mgr.ConnectedClients.ContainsKey(sender)) return;
+                seatVerificationFailures = 0;
+                nextSeatVerificationAt = 0f;
                 seatHandshake = new RelaySeatHandshake(identity, mgr.LocalClientId, sender);
                 SendSeatMessage(SeatChallengeMessage, sender, seatHandshake.Challenge);
             }
             catch (Exception error)
             {
-                if (this != null && version == seatSessionVersion) SetStatus("Could not verify the lobby connection: " + error.Message);
+                if (this != null && version == seatSessionVersion)
+                {
+                    seatVerificationFailures++;
+                    nextSeatVerificationAt = Time.realtimeSinceStartup + RetryDelay(seatVerificationFailures);
+                    SetStatus(IsRateLimited(error)
+                        ? "Lobby verification is rate limited — retrying shortly…"
+                        : "Could not verify the lobby connection: " + error.Message);
+                }
             }
             finally { if (this != null && version == seatSessionVersion) seatVerificationPending = false; }
+        }
+
+        static float RetryDelay(int failures)
+        {
+            int exponent = Mathf.Clamp(failures - 1, 0, 4);
+            return Mathf.Min(SeatVerificationMaxRetrySeconds,
+                SeatVerificationInitialRetrySeconds * Mathf.Pow(2f, exponent));
+        }
+
+        static bool IsRateLimited(Exception error)
+        {
+            string message = error?.Message ?? string.Empty;
+            return message.IndexOf("request_rate_limited", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   message.IndexOf("rate limit", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   message.IndexOf("rate limited", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         void OnSeatChallenge(ulong sender, FastBufferReader reader)
@@ -641,20 +691,30 @@ namespace Overlink.Net
         async Task BeginHostAuthenticationAsync()
         {
             int version = seatSessionVersion;
-            try
+            int failures = 0;
+            while (version == seatSessionVersion && mgr != null && !mgr.IsServer &&
+                   mgr.IsConnectedClient && guestSeatAccepted && !hostProofSent)
             {
-                LobbyManager lobby = LobbyManager.Instance;
-                LobbySeatIdentity identity = await lobby.FetchHostSeatIdentityAsync();
-                if (this == null || version != seatSessionVersion || mgr == null || mgr.IsServer ||
-                    !mgr.IsConnectedClient || !guestSeatAccepted) return;
-                hostChallenge = new RelayHostChallenge(identity, NetworkManager.ServerClientId);
-                SendSeatMessage(HostChallengeMessage, NetworkManager.ServerClientId, hostChallenge.Challenge);
-                hostProofSent = true;
-            }
-            catch (Exception error)
-            {
-                if (this != null && version == seatSessionVersion)
-                    SetStatus("Could not verify the host identity: " + error.Message);
+                try
+                {
+                    LobbyManager lobby = LobbyManager.Instance;
+                    LobbySeatIdentity identity = await lobby.FetchHostSeatIdentityAsync();
+                    if (this == null || version != seatSessionVersion || mgr == null || mgr.IsServer ||
+                        !mgr.IsConnectedClient || !guestSeatAccepted) return;
+                    hostChallenge = new RelayHostChallenge(identity, NetworkManager.ServerClientId);
+                    SendSeatMessage(HostChallengeMessage, NetworkManager.ServerClientId, hostChallenge.Challenge);
+                    hostProofSent = true;
+                    return;
+                }
+                catch (Exception error)
+                {
+                    if (this == null || version != seatSessionVersion) return;
+                    failures++;
+                    SetStatus(IsRateLimited(error)
+                        ? "Lobby verification is rate limited — retrying shortly…"
+                        : "Waiting for fresh lobby data — retrying shortly…");
+                    await Task.Delay(TimeSpan.FromSeconds(RetryDelay(failures)));
+                }
             }
         }
 

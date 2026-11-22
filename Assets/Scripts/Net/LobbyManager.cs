@@ -62,11 +62,13 @@ namespace Overlink.Net
         const string StatusWaiting = "Waiting";
         const string StatusInGame = "InGame";
 
-        // Lobby heartbeats keep the lobby alive; polling is what carries the host's
-        // Relay code across to clients. Both are well inside the service's limits.
+        // Lobby heartbeats keep the lobby alive; polling carries the host's Relay
+        // code and seat-proof data across to clients.
         const float HeartbeatSeconds = 12f;
-        const float PollSeconds = 3f;
+        // Seat verification shares this snapshot instead of making additional reads.
+        const float PollSeconds = 5f;
         const float MatchmakingRetrySeconds = 5f;
+        const float LobbySnapshotMaxAgeSeconds = 10f;
 
         [Header("Lobby")]
         [Tooltip("Name shown in the service dashboard. The lobby code is what players use.")]
@@ -128,6 +130,7 @@ namespace Overlink.Net
         bool polling;
         bool updatingReady;
         bool autoStartWhenFull;
+        float lobbySnapshotAt;
         LobbySeatProof localSeatProof;
         readonly SerializedMutationQueue seatProofPublications = new SerializedMutationQueue();
         int operationVersion;
@@ -212,37 +215,31 @@ namespace Overlink.Net
             }
         }
 
-        /// <summary>Reads the opponent key from a new service response and rechecks membership after the await.</summary>
-        public async Task<LobbySeatIdentity> FetchOpponentSeatIdentityAsync()
+        /// <summary>Reads the opponent key from recent service data, never from Relay.</summary>
+        public Task<LobbySeatIdentity> FetchOpponentSeatIdentityAsync()
         {
             if (!IsHost || CurrentLobby == null || string.IsNullOrEmpty(OpponentPlayerId))
                 throw new InvalidOperationException("A host and opponent are required.");
-            string lobbyId = CurrentLobby.Id;
-            string opponentId = OpponentPlayerId;
-            string hostId = playerId;
-            int version = operationVersion;
-            Lobby fresh = await LobbyService.Instance.GetLobbyAsync(lobbyId);
-            if (this == null || version != operationVersion || !IsHost || CurrentLobby == null ||
-                CurrentLobby.Id != lobbyId || OpponentPlayerId != opponentId || playerId != hostId ||
-                !LobbySeatIdentity.TryRead(fresh, lobbyId, hostId, opponentId, out LobbySeatIdentity identity))
+            // The poll already refreshes these keys. Extra reads for each Relay announcement
+            // compete with that poll and can keep the service rate limited indefinitely.
+            if (!HasFreshLobbySnapshot() ||
+                !LobbySeatIdentity.TryRead(CurrentLobby, CurrentLobby.Id, playerId, OpponentPlayerId,
+                    out LobbySeatIdentity identity))
                 throw new InvalidOperationException("Lobby membership or opponent seat proof is not valid.");
-            return identity;
+            return Task.FromResult(identity);
         }
 
-        /// <summary>Guest reads the expected host key from fresh Lobby data, never from Relay.</summary>
-        public async Task<LobbySeatIdentity> FetchHostSeatIdentityAsync()
+        /// <summary>Guest reads the expected host key from recent service data, never from Relay.</summary>
+        public Task<LobbySeatIdentity> FetchHostSeatIdentityAsync()
         {
             if (IsHost || CurrentLobby == null || string.IsNullOrEmpty(playerId) ||
                 string.IsNullOrEmpty(CurrentLobby.HostId))
                 throw new InvalidOperationException("A guest and host are required.");
-            string lobbyId = CurrentLobby.Id, hostId = CurrentLobby.HostId, guestId = playerId;
-            int version = operationVersion;
-            Lobby fresh = await LobbyService.Instance.GetLobbyAsync(lobbyId);
-            if (this == null || version != operationVersion || IsHost || CurrentLobby == null ||
-                CurrentLobby.Id != lobbyId || CurrentLobby.HostId != hostId || playerId != guestId ||
-                !LobbySeatIdentity.TryReadHost(fresh, lobbyId, hostId, guestId, out LobbySeatIdentity identity))
+            if (!HasFreshLobbySnapshot() ||
+                !LobbySeatIdentity.TryReadHost(CurrentLobby, CurrentLobby.Id, CurrentLobby.HostId, playerId,
+                    out LobbySeatIdentity identity))
                 throw new InvalidOperationException("Lobby membership or host seat proof is not valid.");
-            return identity;
+            return Task.FromResult(identity);
         }
 
         /// <summary>Signs only for the current lobby and local authenticated player.</summary>
@@ -389,7 +386,7 @@ namespace Overlink.Net
                         }
                     });
                 if (version != operationVersion || CurrentLobby == null || CurrentLobby.Id != lobbyId) return;
-                CurrentLobby = updated;
+                SetLobbySnapshot(updated);
                 Notify();
             }
             catch (Exception e)
@@ -445,7 +442,7 @@ namespace Overlink.Net
                     return;
                 }
 
-                CurrentLobby = updated;
+                SetLobbySnapshot(updated);
                 SetState(LobbyState.InGame);
                 SetStatus("Match started — waiting for the other player to connect.");
                 Notify();
@@ -555,7 +552,7 @@ namespace Overlink.Net
 
         void AdoptLobby(Lobby lobby)
         {
-            CurrentLobby = lobby;
+            SetLobbySnapshot(lobby);
             IsHost = lobby.HostId == playerId;
 
             SetState(LobbyState.InLobby);
@@ -584,6 +581,7 @@ namespace Overlink.Net
             localSeatProof = null;
             GameplayPreparationFailed = false;
             CurrentLobby = null;
+            lobbySnapshotAt = 0f;
             IsHost = false;
             autoStartWhenFull = false;
             SetState(LobbyState.Idle);
@@ -688,7 +686,7 @@ namespace Overlink.Net
 
             // The player may have left or switched lobbies while the request was in flight.
             if (CurrentLobby == null || CurrentLobby.Id != lobbyId || leaving) return;
-            CurrentLobby = refreshed;
+            SetLobbySnapshot(refreshed);
 
             // Quick Play starts when full; private lobbies start only after both players are ready.
             if (IsHost && State == LobbyState.InLobby && CanStart)
@@ -735,6 +733,18 @@ namespace Overlink.Net
         {
             if (lobby?.Data == null || !lobby.Data.TryGetValue(key, out var data)) return "";
             return data.Value ?? "";
+        }
+
+        bool HasFreshLobbySnapshot()
+        {
+            return CurrentLobby != null &&
+                   Time.realtimeSinceStartup - lobbySnapshotAt <= LobbySnapshotMaxAgeSeconds;
+        }
+
+        void SetLobbySnapshot(Lobby lobby)
+        {
+            CurrentLobby = lobby;
+            lobbySnapshotAt = Time.realtimeSinceStartup;
         }
 
         void OnNetworkConnected()
