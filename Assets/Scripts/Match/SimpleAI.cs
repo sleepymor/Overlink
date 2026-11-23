@@ -318,13 +318,11 @@ namespace Overlink.Match
                     return;
                 }
 
-                List<CardInstance> enemyUnits = opponent.Board.GetActiveUnits(opponent.Index)
-                    .Where(u => u != null && u.IsAlive())
-                    .ToList();
+                List<CardInstance> enemyUnits = CombatLegality.AttackTargets(state, player, actor);
 
                 // An open enemy Core outranks everything: it is the win condition, and no ability the AI
                 // could press instead of hitting it moves the match forward.
-                if (enemyUnits.Count == 0)
+                if (enemyUnits.Count == 0 && CombatLegality.CanAttackCore(state, player, actor))
                 {
                     if (engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId))
                         != CommandResult.Success)
@@ -339,7 +337,8 @@ namespace Overlink.Match
                 CardInstance favourable = enemyUnits.FirstOrDefault(t => WouldKillAndSurvive(actor, t));
                 if (favourable != null)
                 {
-                    engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId, favourable.InstanceId));
+                    if (engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId, favourable.InstanceId))
+                        != CommandResult.Success) return;
                     Debug.Log($"[AI] {actor.Definition.Name} attacks {favourable.Definition.Name}");
                     continue;
                 }
@@ -359,6 +358,7 @@ namespace Overlink.Match
                     continue;
                 }
 
+                if (enemyUnits.Count == 0) return;
                 CardInstance target = enemyUnits[random.Next(enemyUnits.Count)];
                 if (engine.ExecuteCommand(new DeclareAttackCommand(player, actor.InstanceId, target.InstanceId))
                     != CommandResult.Success)
@@ -388,6 +388,8 @@ namespace Overlink.Match
         /// </summary>
         private bool WouldKillAndSurvive(CardInstance attacker, CardInstance defender)
         {
+            if (!defender.HasKeyword(Keyword.Counter))
+                return attacker.CurrentAtk >= EffectiveHp(defender, attacker);
             bool attackerStrikesFirst = engine.StrikesFirst(attacker) && !engine.StrikesFirst(defender);
             bool defenderStrikesFirst = engine.StrikesFirst(defender) && !engine.StrikesFirst(attacker);
 

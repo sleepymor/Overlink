@@ -490,7 +490,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "NETWORK STABLE  \u2022  v2026.11.9"
+  m_text: "NETWORK STABLE  \u2022  v2026.11.10"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 3a7f1e2d4c5b6a998877665544332211, type: 2}
   m_sharedMaterial: {fileID: 0}

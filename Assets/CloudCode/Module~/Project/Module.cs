@@ -32,7 +32,7 @@ public sealed class ProgressionModule
     private const string ProtectedBattleDeckKey = "overlink_battle_deck_v1";
     // Update this server-side policy when a release becomes mandatory. Deploy the module
     // before raising the minimum.
-    private const string MinimumClientVersion = "2026.11.9";
+    private const string MinimumClientVersion = "2026.11.10";
     private const string UpdateUrl = "https://github.com/sleepymor/Overlink/releases/latest";
     private const int CurrentSchema = 3;
     private const int PackSize = 5;

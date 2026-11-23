@@ -243,16 +243,23 @@ namespace Overlink.Core
             // Resolve the declared target (if any) up front so a pre-declared block can be validated
             // against it: only Core Actives block a Core attack, and a unit attack is only blocked by an
             // Active in the same battlefield as the target (GDD 2.1.6 Step 2).
-            // CR-01: Only Active slots are legal attack targets; benched cards cannot be attacked.
             CardInstance target = null;
             if (command.DefenderInstanceId > 0)
             {
-                target = FindActiveCardInstance(opponent.Board, command.DefenderInstanceId);
-                if (target == null || !target.IsAlive())
+                target = FindCardInstance(opponent.Board, command.DefenderInstanceId);
+                if (target == null || !target.IsAlive() || !CombatLegality.SameBattlefieldGroup(
+                    player.Board.FindSlot(attacker), opponent.Board.FindSlot(target)))
                 {
                     return CommandResult.InvalidTarget;
                 }
             }
+            else if (player.Board.FindSlot(attacker).Type != SlotType.CoreActive)
+            {
+                return CommandResult.InvalidTarget;
+            }
+
+            if (!player.CanAfford(MatchState.AttackNP)) return CommandResult.InsufficientNP;
+            player.SpendNP(MatchState.AttackNP);
 
             CardInstance blocker = ConsumePendingBlocker(attacker, target);
 
@@ -571,7 +578,8 @@ namespace Overlink.Core
             // "retreat" between two Actives would move a unit across the board while pretending to rest it.
             BoardSlot incomingSlot = player.Board.FindSlot(incoming);
             BoardSlot outgoingSlot = player.Board.FindSlot(outgoing);
-            if (incomingSlot == null || outgoingSlot == null || !incomingSlot.IsBench())
+            if (incomingSlot == null || outgoingSlot == null || !incomingSlot.IsBench()
+                || !CombatLegality.SameBattlefieldGroup(outgoingSlot, incomingSlot))
             {
                 return CommandResult.InvalidTarget;
             }
@@ -820,7 +828,11 @@ namespace Overlink.Core
             State.LogEvent(BattleEvent.Attacked(defender, attacker),
                 $"{attacker.Definition.Name} attacks {defender.Definition.Name}");
 
-            if (attackerHasFirstStrike && !defenderHasFirstStrike)
+            if (!defender.HasKeyword(Keyword.Counter))
+            {
+                DealCombatDamage(attacker, defender);
+            }
+            else if (attackerHasFirstStrike && !defenderHasFirstStrike)
             {
                 DealCombatDamage(attacker, defender);
                 if (defender.IsAlive())
@@ -944,7 +956,7 @@ namespace Overlink.Core
                 return false;
             }
 
-            return sa.Type == sb.Type && sa.NodeIndex == sb.NodeIndex;
+            return CombatLegality.SameBattlefieldGroup(sa, sb);
         }
 
         /// <summary>

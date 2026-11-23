@@ -170,13 +170,22 @@ namespace Overlink.UI
         {
             if (lobby == null || status == null) return;
             if (lobby.GameplayPreparationFailed) { status.text = lobby.Status; return; }
-            if (lobby.IsQuickPlay && hadSearch && lobby.State != LobbyState.Idle)
+            if (lobby.IsQuickPlay && hadSearch && lobby.State == LobbyState.Searching)
             {
                 var elapsed = TimeSpan.FromSeconds(Mathf.Max(0, Time.realtimeSinceStartup - searchStarted));
-                status.text = $"SEARCHING  {elapsed.Minutes:00}:{elapsed.Seconds:00}\n{lobby.Status}";
+                status.text = $"SEARCHING FOR OPPONENTS  {elapsed.Minutes:00}:{elapsed.Seconds:00}\n{lobby.Status}";
             }
             else if (lobby.CurrentLobby != null)
-                status.text = $"LOBBY {lobby.LobbyCode}   •   {lobby.MemberCount}/{LobbyManager.MaxPlayers}\nYOU: {(lobby.LocalReady ? "READY" : "NOT READY")}   •   OPPONENT: {(lobby.OpponentReady ? "READY" : "NOT READY")}";
+            {
+                string phase = lobby.State == LobbyState.Starting
+                    ? "STARTING MATCH"
+                    : lobby.State == LobbyState.InGame
+                        ? "MATCH FOUND / CONNECTING"
+                        : lobby.IsQuickPlay
+                            ? "MATCH FOUND / HANDSHAKE"
+                            : "LOBBY / READY CHECK";
+                status.text = $"{phase}   •   {lobby.MemberCount}/{LobbyManager.MaxPlayers}\n{lobby.Status}";
+            }
             else status.text = string.IsNullOrEmpty(lobby.Status) ? "CHOOSE A MODE" : lobby.Status;
         }
 

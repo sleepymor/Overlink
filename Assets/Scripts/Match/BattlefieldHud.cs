@@ -323,6 +323,7 @@ namespace Overlink.Match
         [SerializeField] TextMeshProUGUI noticeText;
         [SerializeField] RectTransform result;
         [SerializeField] TextMeshProUGUI resultText;
+        [SerializeField] Button returnToMenuButton;
 
         public event Action EndPhaseRequested;
 
@@ -339,6 +340,9 @@ namespace Overlink.Match
         /// the rest. A button that fires this does not know or care who answers it.
         /// </summary>
         public event Action<RailKey> RailPressed;
+
+        /// <summary>Raised only by the post-match result control.</summary>
+        public event Action ReturnToMenuRequested;
 
         // Serialized rather than plain private: the bind half of Build writes these references from the
         // objects the scene ships, and a reference that is not serialized cannot be filled in from disk -
@@ -481,6 +485,7 @@ namespace Overlink.Match
                     && npMeterPlayer != null && npMeterOpponent != null
                     && nodeList != null && nodeRows != null && nodeRows.Length == Board.NodeCount
                     && notice != null && noticeText != null && result != null && resultText != null
+                    && returnToMenuButton != null
                     && bannerTagLeft != null && bannerTagRight != null && inspectionDetails != null;
             }
         }
@@ -537,6 +542,7 @@ namespace Overlink.Match
             errors += ValidateSerialized("noticeText", noticeText);
             errors += ValidateSerialized("result", result);
             errors += ValidateSerialized("resultText", resultText);
+            errors += ValidateSerialized("returnToMenuButton", returnToMenuButton);
             if (nodeRows == null || nodeRows.Length != Board.NodeCount)
             {
                 Debug.LogError("[BattlefieldHud] Serialized nodeRows must contain one row per board node.", this);
@@ -554,6 +560,7 @@ namespace Overlink.Match
             }
 
             canvas = GetComponent<Canvas>();
+            EnsureResultInputCanvas();
             // The log and node readouts sit directly over moving board art. Outline the glyphs, not the
             // panel, so they stay distinguishable without adding a rectangular backdrop.
             AddReadabilityOutline(header);
@@ -569,8 +576,32 @@ namespace Overlink.Match
             opponentBodyBase = opponentBody.color;
             playerBodyBase = playerBody.color;
             HideRail();
+            BindReturnToMenuButton();
             result.gameObject.SetActive(false);
             return true;
+        }
+
+        void EnsureResultInputCanvas()
+        {
+            if (result == null) return;
+
+            Canvas resultCanvas = result.GetComponent<Canvas>();
+            if (resultCanvas == null) resultCanvas = result.gameObject.AddComponent<Canvas>();
+            resultCanvas.overrideSorting = true;
+            resultCanvas.sortingOrder = 12;
+
+            if (result.GetComponent<GraphicRaycaster>() == null)
+            {
+                result.gameObject.AddComponent<GraphicRaycaster>();
+            }
+        }
+
+        void BindReturnToMenuButton()
+        {
+            if (returnToMenuButton == null) return;
+            returnToMenuButton.onClick.RemoveAllListeners();
+            returnToMenuButton.onClick.AddListener(() => ReturnToMenuRequested?.Invoke());
+            returnToMenuButton.gameObject.SetActive(false);
         }
 
         static void AddReadabilityOutline(TextMeshProUGUI text)
@@ -662,6 +693,7 @@ namespace Overlink.Match
             EnsurePanel();
             EnsureReader();
             EnsureStatus();
+            BindReturnToMenuButton();
 
             // The rail used to be built only under Application.isPlaying, which kept the editor quiet and also
             // kept it unmeasurable: a rail label too long for its 162x36 slab walks out from under the button and
@@ -758,10 +790,10 @@ namespace Overlink.Match
             // is the coarse version of clicking a unit and then a socket - it is here because 1-5 are here, not
             // because it is a better way to fight.
             Color swing = new Color(0.46f, 0.19f, 0.22f, 0.95f);
-            EnsureRail(RailKey.SwingCore, "SwingCoreButton", RailBand.Left, 0,
-                swing, 17f, "SWING CORE", () => RailPressed?.Invoke(RailKey.SwingCore));
-            EnsureRail(RailKey.SwingNode1, "SwingNode1Button", RailBand.Left, 1,
-                swing, 17f, "SWING NODE 1", () => RailPressed?.Invoke(RailKey.SwingNode1));
+            EnsureRail(RailKey.SwingCore, "AttackButton", RailBand.Left, 0,
+                swing, 17f, "ATTACK - 1 NP", () => RailPressed?.Invoke(RailKey.SwingCore));
+            EnsureRail(RailKey.SwingNode1, "RetreatButton", RailBand.Left, 1,
+                swing, 17f, "RETREAT - 1 NP", () => RailPressed?.Invoke(RailKey.SwingNode1));
             EnsureRail(RailKey.SwingNode2, "SwingNode2Button", RailBand.Left, 2,
                 swing, 17f, "SWING NODE 2", () => RailPressed?.Invoke(RailKey.SwingNode2));
             EnsureRail(RailKey.SwingNode3, "SwingNode3Button", RailBand.Left, 3,
@@ -1145,6 +1177,9 @@ namespace Overlink.Match
                 resultText.color = resultColor;
             }
 
+            returnToMenuButton = EnsureResultButton(result);
+            EnsureResultInputCanvas();
+
             // Visibility is code's, not the scene's: an overlay that a player has not won yet has to be off,
             // whatever the file said. This is the one SetActive in the status layer that a rebuild is
             // responsible for, and it is why an authored Result object left switched on in the scene does not
@@ -1392,6 +1427,68 @@ namespace Overlink.Match
             }
         }
 
+        Button EnsureResultButton(RectTransform parent)
+        {
+            Transform existing = parent.Find("ReturnToMenuButton");
+            bool created = existing == null;
+            GameObject buttonObject = created
+                ? new GameObject("ReturnToMenuButton", typeof(RectTransform), typeof(Image), typeof(Button))
+                : existing.gameObject;
+            if (created) buttonObject.transform.SetParent(parent, false);
+
+            RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+            if (created)
+            {
+                buttonRect.anchorMin = new Vector2(0.5f, 0f);
+                buttonRect.anchorMax = new Vector2(0.5f, 0f);
+                buttonRect.pivot = new Vector2(0.5f, 0f);
+                buttonRect.sizeDelta = new Vector2(520f, 80f);
+                buttonRect.anchoredPosition = new Vector2(0f, 24f);
+            }
+
+            Image image = buttonObject.GetComponent<Image>();
+            // Bright cyan/blue accent so the button reads as an exit control against the dark tactical
+            // background: distinct from the node plates and the result slab, not lost in them.
+            image.color = new Color(0.16f, 0.55f, 0.78f, 0.98f);
+            image.raycastTarget = true;
+            Button button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = image;
+            // ColorBlock gives the button an unmistakable pressed/highlighted state so players know
+            // it is interactive and not just a slab.
+            var colors = button.colors;
+            colors.normalColor = new Color(0.16f, 0.55f, 0.78f, 0.98f);
+            colors.highlightedColor = new Color(0.26f, 0.70f, 0.95f, 1f);
+            colors.pressedColor = new Color(0.08f, 0.35f, 0.55f, 1f);
+            colors.selectedColor = new Color(0.26f, 0.70f, 0.95f, 1f);
+            colors.disabledColor = new Color(0.16f, 0.32f, 0.40f, 0.45f);
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0.1f;
+            button.colors = colors;
+
+            TextMeshProUGUI label = EnsureText("Label", buttonRect, 24f, FontStyles.Bold,
+                Color.white, TextAlignmentOptions.Center, out RectTransform labelRect, out bool labelCreated);
+            if (labelCreated)
+            {
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+                label.text = "RETURN TO MENU";
+            }
+            label.raycastTarget = false;
+            return button;
+        }
+
+        /// <summary>
+        /// Makes a turn handoff read as an event rather than a quiet label update. The bumper is
+        /// view-only: it never pauses the match or blocks the board, and it uses the same unscaled
+        /// pulse path as the existing HUD feedback so it remains visible during transition work.
+        /// </summary>
+        public void PlayTurnChangeBumper()
+        {
+            if (!Application.isPlaying || banner == null) return;
+            bannerMotion = StartPulse(bannerMotion, banner, 1.12f, 0.48f);
+        }
+
         /// <summary>
         /// The cyan stage and actor tags that flank the banner title - PRE-COMBAT and YOUR ACTION in the
         /// reference art. The title keeps the phase sentence; the tags are the two short truths a glancing
@@ -1549,6 +1646,11 @@ namespace Overlink.Match
             bool show = !string.IsNullOrEmpty(text);
             bool changed = resultText.text != (text ?? string.Empty);
             result.gameObject.SetActive(show);
+            if (returnToMenuButton != null)
+            {
+                returnToMenuButton.gameObject.SetActive(show);
+                returnToMenuButton.interactable = show;
+            }
             if (!show)
             {
                 resultText.text = string.Empty;
@@ -1560,6 +1662,10 @@ namespace Overlink.Match
             if (changed && Application.isPlaying)
             {
                 resultMotion = StartPulse(resultMotion, result, 1.08f, 0.30f);
+                if (returnToMenuButton != null && EventSystem.current != null)
+                {
+                    EventSystem.current.SetSelectedGameObject(returnToMenuButton.gameObject);
+                }
             }
         }
 
@@ -2196,6 +2302,18 @@ namespace Overlink.Match
         /// <summary>True while the reader is standing down so the world-space card can be read.</summary>
         public bool ReaderShowsCard { get; private set; }
 
+        bool targetingPreview;
+
+        /// <summary>Keep the selected card visible at the edge without obscuring target sockets.</summary>
+        public void SetTargetingPreview(bool active)
+        {
+            if (targetingPreview == active) return;
+            targetingPreview = active;
+            if (readerCard != null) readerCard.gameObject.SetActive(!active);
+            if (inspectionDetails != null && inspectionDetails.transform.parent != null)
+                inspectionDetails.transform.parent.gameObject.SetActive(!active && ReaderShowsCard);
+        }
+
         [SerializeField] TextMeshProUGUI inspectionDetails;
 
         /// <summary>Companion text for the 3D preview, including the full unabridged ability.</summary>
@@ -2237,7 +2355,7 @@ namespace Overlink.Match
                 }
             }
             if (inspectionDetails == null) return;
-            inspectionDetails.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(title));
+            inspectionDetails.transform.parent.gameObject.SetActive(!targetingPreview && !string.IsNullOrEmpty(title));
             inspectionDetails.text = string.IsNullOrEmpty(title) ? string.Empty : "<b>" + title + "</b>\n\n" + details;
         }
 
@@ -2346,6 +2464,11 @@ namespace Overlink.Match
             }
 
             screenCenter = mid;
+            if (targetingPreview)
+            {
+                screenHeightPixels = Mathf.Min(screenHeightPixels * 0.55f, Screen.height * 0.34f);
+                screenCenter = new Vector2(Screen.width * 0.12f, Screen.height * 0.5f);
+            }
             return true;
         }
 
@@ -2379,6 +2502,7 @@ namespace Overlink.Match
         /// <summary>Takes the details panel off screen. Safe when it was never shown.</summary>
         public void HideReader()
         {
+            SetTargetingPreview(false);
             ReaderShowsCard = false;
 
             if (reader != null)

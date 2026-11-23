@@ -5,10 +5,10 @@ namespace Overlink.Core
 {
     public sealed class PlayerState
     {
-        public const int StartingNP = 3;
+        public const int StartingNP = 20;
 
-        /// <summary>GDD 2.1.1: the NP cap is 10 + the number of controlled Nodes; 10 is the base.</summary>
-        public const int MaxNP = 10;
+        /// <summary>NP starts with a 30 cap; controlling three Nodes raises the cap to 40.</summary>
+        public const int MaxNP = 30;
 
         /// <summary>Starting and maximum Core durability for each player.</summary>
         public const int StartingCoreDurability = 20;
@@ -54,10 +54,14 @@ namespace Overlink.Core
 
         private readonly Random shuffleRng;
 
-        /// <summary>GDD 2.1.1: NP can never exceed 10 + the number of Nodes you control.</summary>
+        /// <summary>
+        /// NP cap is 30 with zero Nodes, rises by one for the first two controlled Nodes,
+        /// then reaches the 40 cap at three or more controlled Nodes.
+        /// </summary>
         public static int NpCap(int controlledNodes)
         {
-            return MaxNP + controlledNodes;
+            int nodes = Math.Max(0, controlledNodes);
+            return nodes >= 3 ? MaxNP + 10 : MaxNP + nodes;
         }
 
         public bool CanAfford(int cost)
@@ -85,7 +89,7 @@ namespace Overlink.Core
             }
         }
 
-        /// <summary>Effect-driven NP gain, clamped to the base 10 cap when the caller has no Node context.</summary>
+        /// <summary>Effect-driven NP gain, clamped to the base 30 cap when the caller has no Node context.</summary>
         public void GainNP(int amount)
         {
             GainNP(amount, MaxNP);

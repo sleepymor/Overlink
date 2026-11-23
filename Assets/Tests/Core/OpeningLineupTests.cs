@@ -421,13 +421,14 @@ namespace Overlink.Core.Tests
         [Test]
         public void RerollLineup_IsPricedOutOfReachByTheOpeningNPRatherThanByACounter()
         {
-            // 3 NP at setup: one reroll at 2 leaves 1, and the next is 3. So the cap on rerolls is the same NP
+            // A deliberately reduced 3 NP pool: one reroll at 2 leaves 1, and the next is 3. So the cap on rerolls is the same NP
             // the rest of the game spends, which is the point of escalating the price instead of counting tries.
             var state = new MatchState(61);
             state.InitializeSetup(DeckOf(cheapUnits(12)), DeckOf(cheapUnits(12)));
             var engine = new MatchEngine(state);
 
             PlayerState player = state.GetPlayer(PlayerIndex.Player);
+            player.CurrentNP = 3;
             Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(new RerollLineupCommand(PlayerIndex.Player)));
             Assert.AreEqual(1, player.CurrentNP);
 
@@ -476,12 +477,12 @@ namespace Overlink.Core.Tests
             Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
                 new ConfirmLineupCommand(PlayerIndex.Opponent, Ids(state.GetPlayer(PlayerIndex.Opponent).LineupOffer.ToList()))));
 
-            // Winner: 3 starting NP, then an Upkeep that gains the 3 base and NOTHING for the Nodes, because a full
+            // Winner: 20 starting NP, then an Upkeep that gains the 4 base and NOTHING for the Nodes, because a full
             // lineup fields every Node Active for both seats and a contested Node pays neither. Loser: 3 + the
             // going-second bonus, and no Upkeep yet, because it is not their turn. So the opening is as poor in NP
             // as a match that began with an empty board, which is the intended shape - see
             // OpeningLineup_FieldsEveryNodeSoNeitherSideControlsAnyOfThem.
-            Assert.AreEqual(PlayerState.StartingNP + 3, state.GetPlayer(first).CurrentNP,
+            Assert.AreEqual(PlayerState.StartingNP + MatchState.BaseNPIncome, state.GetPlayer(first).CurrentNP,
                 $"{first} opened first, on the base income alone");
             Assert.AreEqual(PlayerState.StartingNP + MatchState.SecondPlayerNPBonus,
                 state.GetOpponent(first).CurrentNP, $"{state.GetOpponent(first)} opened second");

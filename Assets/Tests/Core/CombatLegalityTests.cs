@@ -105,7 +105,38 @@ namespace Overlink.Core.Tests
         // ---- What an attacker may hit -------------------------------------------------
 
         [Test]
-        public void AttackTargets_ListsEveryLivingEnemyActive_AndLeadsWithTheMirror()
+        public void Attack_CostsOneNpOnlyAfterTargetValidation()
+        {
+            MatchState state = OurCombat();
+            CardInstance attacker = CoreUnit(state, PlayerIndex.Player, "attacker", 3, 5);
+            CardInstance wrong = NodeUnit(state, PlayerIndex.Opponent, 0, "wrong", 2, 5);
+            CardInstance target = BenchUnit(state, PlayerIndex.Opponent, 0, "target", 2, 5);
+            PlayerState player = state.GetPlayer(PlayerIndex.Player);
+            player.CurrentNP = 1;
+            var engine = new MatchEngine(state);
+            Assert.AreEqual(CommandResult.InvalidTarget, engine.ExecuteCommand(
+                new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId, wrong.InstanceId)));
+            Assert.AreEqual(1, player.CurrentNP);
+            Assert.AreEqual(CommandResult.Success, engine.ExecuteCommand(
+                new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId, target.InstanceId)));
+            Assert.AreEqual(0, player.CurrentNP);
+        }
+
+        [Test]
+        public void Attack_InsufficientNpDoesNotExhaustAttacker()
+        {
+            MatchState state = OurCombat();
+            CardInstance attacker = CoreUnit(state, PlayerIndex.Player, "attacker", 3, 5);
+            CardInstance target = CoreUnit(state, PlayerIndex.Opponent, "target", 2, 5);
+            state.GetPlayer(PlayerIndex.Player).CurrentNP = 0;
+            Assert.IsFalse(CombatLegality.CanAttack(state, PlayerIndex.Player, attacker));
+            Assert.AreEqual(CommandResult.InsufficientNP, new MatchEngine(state).ExecuteCommand(
+                new DeclareAttackCommand(PlayerIndex.Player, attacker.InstanceId, target.InstanceId)));
+            Assert.IsTrue(attacker.CanAct());
+        }
+
+        [Test]
+        public void AttackTargets_ListsLivingCardsInTheSameBattlefield()
         {
             MatchState state = OurCombat();
             CardInstance me = CoreUnit(state, PlayerIndex.Player, "attacker", 3, 5);
@@ -118,11 +149,9 @@ namespace Overlink.Core.Tests
             List<CardInstance> targets = CombatLegality.AttackTargets(state, PlayerIndex.Player, me);
 
             CollectionAssert.Contains(targets, mirror);
-            CollectionAssert.Contains(targets, onNode);
+            CollectionAssert.DoesNotContain(targets, onNode);
             CollectionAssert.DoesNotContain(targets, dead, "A destroyed card cannot be hit.");
-            CollectionAssert.DoesNotContain(targets, benched,
-                "A Bench card is in no battlefield, so the click layer must never light it - even though the " +
-                "engine's FindCardInstance would resolve it.");
+            CollectionAssert.Contains(targets, benched);
             Assert.AreEqual(mirror, targets[0],
                 "The enemy in our own battlefield leads, because it is the one that can block us.");
         }
@@ -140,7 +169,7 @@ namespace Overlink.Core.Tests
             List<CardInstance> targets = CombatLegality.AttackTargets(state, PlayerIndex.Player, me);
 
             Assert.AreEqual(enemyNode2, targets[0], "Node 3's mirror is Node 3, not the Core.");
-            CollectionAssert.Contains(targets, enemyCore, "Any battlefield may be attacked from any other.");
+            CollectionAssert.DoesNotContain(targets, enemyCore);
         }
 
         [Test]
@@ -150,7 +179,7 @@ namespace Overlink.Core.Tests
             // legitimate thing to knock out of it. The query has to agree with the engine even where the GDD
             // is silent, or the socket stays dark for a move the player actually has.
             MatchState state = OurCombat();
-            CardInstance me = CoreUnit(state, PlayerIndex.Player, "attacker", 3, 5);
+            CardInstance me = NodeUnit(state, PlayerIndex.Player, 0, "attacker", 3, 5);
             CardInstance relay = NodeUnit(state, PlayerIndex.Opponent, 0, "relay", 0, 0);
             relay.Definition.Type = CardType.Relay;
 
@@ -180,7 +209,7 @@ namespace Overlink.Core.Tests
             string[] offered = CombatLegality.AttackTargets(probe, PlayerIndex.Player, probeAttacker)
                 .Select(t => t.Definition.Name).ToArray();
 
-            Assert.AreEqual(3, offered.Length, "The probe board should offer all three enemy Actives.");
+            Assert.AreEqual(1, offered.Length, "Only the Core battlefield is reachable.");
 
             foreach (string name in offered)
             {

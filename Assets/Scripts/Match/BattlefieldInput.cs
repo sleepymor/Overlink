@@ -69,11 +69,13 @@ namespace Overlink.Match
         {
             None,
             Attack,
+            Retreat,
             Block,
         }
 
         PickMode mode;
         CardInstance selected;
+        CardInstance inspected;
         readonly List<CardInstance> targets = new List<CardInstance>();
 
         // Two-click deploy: the player taps a card in the hand, which sets this, then taps a socket to
@@ -171,6 +173,24 @@ namespace Overlink.Match
         {
             switch (key)
             {
+                case BattlefieldHud.RailKey.SwingCore:
+                    if (inspected != null && coordinator.CanPlayerAttackWith(inspected))
+                    {
+                        Pick(inspected, coordinator.TargetsForPlayerAttack(inspected), PickMode.Attack);
+                        coordinator.ShowNotice("Choose an enemy target or the opposing Core (1 NP).");
+                    }
+                    break;
+                case BattlefieldHud.RailKey.SwingNode1:
+                    if (inspected != null)
+                    {
+                        var choices = coordinator.RetreatChoicesForPlayer(inspected);
+                        if (choices.Count > 0)
+                        {
+                            Pick(inspected, choices, PickMode.Retreat);
+                            coordinator.ShowNotice("Choose an allied Bench unit to retreat (1 NP).");
+                        }
+                    }
+                    break;
                 case BattlefieldHud.RailKey.DoneBlocking:
                     DoneBlocking();
                     break;
@@ -180,9 +200,9 @@ namespace Overlink.Match
                 // a mark left pointing at a card that no longer can act is the thing DropStaleSelection exists
                 // to sweep up one frame later.
                 case BattlefieldHud.RailKey.Activate:
-                    if (selected != null && coordinator.CanPlayerActivateWith(selected))
+                    if (inspected != null && coordinator.CanPlayerActivateWith(inspected))
                     {
-                        CardInstance activator = selected;
+                        CardInstance activator = inspected;
                         ClearSelection();
                         coordinator.TryPlayerActivateWith(activator);
                     }
@@ -232,6 +252,7 @@ namespace Overlink.Match
                 // the same reasoning that keeps an off-table misclick from closing it in Click().
                 ClearSelection();
                 ClearBrowse();
+                inspected = null;
                 presenter.ClearDetails();
             }
             else if (Input.GetKeyDown(doneBlockingKey))
@@ -241,6 +262,15 @@ namespace Overlink.Match
 
             BrowsePile();
             PublishDialogueRail();
+
+            if (Input.GetMouseButtonDown(0) && (mode == PickMode.Attack || mode == PickMode.Retreat)
+                && presenter.IsPointerOverInspect(Input.mousePosition))
+            {
+                ClearSelection();
+                presenter.ClearDetails();
+                inspected = null;
+                return;
+            }
 
             if (Input.GetMouseButtonDown(0) && !IsHandBusy()
                 && !presenter.IsPointerOverInspect(Input.mousePosition))
@@ -278,8 +308,14 @@ namespace Overlink.Match
                 return;
             }
 
+            bool inspecting = inspected != null && mode == PickMode.None;
+            bool canAttack = inspecting && coordinator.CanPlayerAttackWith(inspected)
+                && (coordinator.TargetsForPlayerAttack(inspected).Count > 0 || coordinator.CanPlayerAttackCore(inspected));
+            bool canRetreat = inspecting && coordinator.RetreatChoicesForPlayer(inspected).Count > 0;
+            hud.SetRail(BattlefieldHud.RailKey.SwingCore, canAttack, true, "ATTACK - 1 NP");
+            hud.SetRail(BattlefieldHud.RailKey.SwingNode1, canRetreat, true, "RETREAT - 1 NP");
             hud.SetRail(BattlefieldHud.RailKey.Activate,
-                selected != null && coordinator.CanPlayerActivateWith(selected));
+                inspecting && coordinator.CanPlayerActivateWith(inspected));
 
             // One card in a pile has nowhere to step to, so the pair leaves rather than sitting dimmed.
             bool browsing = browsed != null && browsed.Length > 1;
@@ -307,8 +343,8 @@ namespace Overlink.Match
                 return;
             }
 
-            bool stillValid = mode == PickMode.Attack
-                ? coordinator.CanPlayerAttackWith(selected)
+            bool stillValid = mode == PickMode.Attack ? coordinator.CanPlayerAttackWith(selected)
+                : mode == PickMode.Retreat ? coordinator.RetreatChoicesForPlayer(selected).Count > 0
                 : coordinator.PlayerBlockWindowOpen && coordinator.CanPlayerBlockWith(selected);
 
             if (!stillValid)
@@ -378,6 +414,7 @@ namespace Overlink.Match
                 // alone: a player who missed the board by a pixel has not decided to give up their blocks.
                 ClearSelection();
                 ClearBrowse();
+                inspected = null;
                 presenter.ClearDetails();
                 return;
             }
@@ -433,9 +470,22 @@ namespace Overlink.Match
                 return;
             }
 
+            if (selected != null && mode == PickMode.Retreat && hit.Card != null && targets.Contains(hit.Card))
+            {
+                CardInstance outgoing = selected;
+                ClearSelection();
+                inspected = null;
+                coordinator.TryPlayerRetreatWith(outgoing, hit.Card);
+                presenter.ClearDetails();
+                return;
+            }
+
+            if (mode != PickMode.None) ClearSelection();
+
             // 3. Picking a unit up.
             if (TrySelect(hit))
             {
+                inspected = null;
                 presenter.ShowCard(hit.Card, coordinator.GetMatchState(), hit.Describe());
                 return;
             }
@@ -471,14 +521,6 @@ namespace Overlink.Match
                 return true;
             }
 
-            if (coordinator.CanPlayerAttackWith(hit.Card))
-            {
-                Pick(hit.Card, coordinator.TargetsForPlayerAttack(hit.Card), PickMode.Attack,
-                    coordinator.RetreatChoicesForPlayer(hit.Card));
-                coordinator.ShowNotice(AttackPickNotice(name, hit.Card));
-                return true;
-            }
-
             return false;
         }
 
@@ -491,6 +533,7 @@ namespace Overlink.Match
         {
             selected = card;
             mode = forMode;
+            if (hud != null) hud.SetTargetingPreview(forMode == PickMode.Attack || forMode == PickMode.Retreat);
             targets.Clear();
             if (list != null)
             {
@@ -507,7 +550,11 @@ namespace Overlink.Match
 
             if (forMode == PickMode.Attack)
             {
-                presenter.ShowAttack(card, targets, true, retreats);
+                presenter.ShowAttack(card, targets, coordinator.CanPlayerAttackCore(card), retreats);
+            }
+            else if (forMode == PickMode.Retreat)
+            {
+                presenter.ShowAttack(card, new List<CardInstance>(), false, targets);
             }
             else
             {
@@ -550,20 +597,12 @@ namespace Overlink.Match
         {
             CardInstance attacker = selected;
 
-            // A second click on the selected card chooses its printed Activate skill directly from the card.
-            // A different target keeps the normal attack flow, so the interaction remains point-and-click:
-            // click the unit, then either click the same unit for Skill or an enemy for Attack.
-            if (hit.Card == attacker && coordinator.CanPlayerActivateWith(attacker))
+            if (hit.Kind == BoardHitKind.OpponentCore && coordinator.CanPlayerAttackCore(attacker))
             {
                 ClearSelection();
-                coordinator.TryPlayerActivateWith(attacker);
-                return true;
-            }
-
-            if (hit.Kind == BoardHitKind.OpponentCore)
-            {
-                ClearSelection();
+                inspected = null;
                 coordinator.TryPlayerAttackWith(attacker, null);
+                presenter.ClearDetails();
                 return true;
             }
 
@@ -587,7 +626,9 @@ namespace Overlink.Match
 
             CardInstance target = hit.Card;
             ClearSelection();
+            inspected = null;
             coordinator.TryPlayerAttackWith(attacker, target);
+            presenter.ClearDetails();
             return true;
         }
 
@@ -626,6 +667,7 @@ namespace Overlink.Match
         /// </summary>
         void Inspect(BoardHit hit)
         {
+            inspected = (hit.Kind == BoardHitKind.Socket || hit.Kind == BoardHitKind.Protocol) ? hit.Card : null;
             switch (hit.Kind)
             {
                 case BoardHitKind.DeckPile:
@@ -799,6 +841,7 @@ namespace Overlink.Match
         {
             selected = null;
             mode = PickMode.None;
+            if (hud != null) hud.SetTargetingPreview(false);
             targets.Clear();
             retreats.Clear();
             if (presenter != null)

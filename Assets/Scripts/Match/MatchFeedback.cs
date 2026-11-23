@@ -134,6 +134,13 @@ namespace Overlink.Match
             AddFlash(0.38f);
         }
 
+        /// <summary>Small but unmistakable handoff cue for the start of the next player's turn.</summary>
+        public void PlayTurnChange()
+        {
+            AddTrauma(0.12f);
+            AddFlash(0.12f);
+        }
+
         /// <summary>Short, non-interactive board-space ring; it never changes a card or its slot.</summary>
         public void PlaySlotBurst(Transform slot, Vector2 size, Color color, float duration = 0.35f)
         {

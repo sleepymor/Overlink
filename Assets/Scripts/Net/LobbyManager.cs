@@ -268,17 +268,17 @@ namespace Overlink.Net
                 {
                     try
                     {
-                        SetStatus("Searching for an open match...");
+                        SetStatus("SEARCHING FOR AN OPEN MATCH — QUEUE ACTIVE");
                         lobby = await LobbyService.Instance.QuickJoinLobbyAsync(
                             new QuickJoinLobbyOptions { Player = new Player(playerId) });
-                        SetStatus("Joined a waiting match.");
+                        SetStatus("MATCH FOUND — WAITING FOR HANDSHAKE");
                     }
                     catch (LobbyServiceException e)
                     {
                         if (version != operationVersion) return;
                         if (e.Reason != LobbyExceptionReason.NoOpenLobbies) throw;
                         Debug.Log("[Lobby] No open matchmaking lobby yet; continuing search.");
-                        SetStatus("No open match yet — continuing to search...");
+                        SetStatus("STILL SEARCHING — QUEUE ACTIVE; KEEPING THIS WINDOW OPEN");
                         await Task.Delay(TimeSpan.FromSeconds(MatchmakingRetrySeconds));
                     }
                 }
@@ -410,6 +410,9 @@ namespace Overlink.Net
             }
 
             SetState(LobbyState.Starting);
+            SetStatus(autoStartWhenFull
+                ? "MATCH FOUND — STARTING MATCH"
+                : "STARTING MATCH — BOTH PLAYERS READY");
             int version = operationVersion;
             string lobbyId = CurrentLobby.Id;
             try
@@ -444,7 +447,7 @@ namespace Overlink.Net
 
                 SetLobbySnapshot(updated);
                 SetState(LobbyState.InGame);
-                SetStatus("Match started — waiting for the other player to connect.");
+                SetStatus("MATCH STARTED — CONNECTING BOTH PLAYERS");
                 Notify();
                 TryEnterGameplay();
             }
@@ -556,9 +559,13 @@ namespace Overlink.Net
             IsHost = lobby.HostId == playerId;
 
             SetState(LobbyState.InLobby);
-            SetStatus(IsHost
-                ? $"Lobby created — share code: {LobbyCode}"
-                : $"Joined lobby {LobbyCode}. Waiting for the host to start.");
+            SetStatus(IsQuickPlay
+                ? (IsHost
+                    ? "MATCH FOUND — WAITING FOR OPPONENT HANDSHAKE"
+                    : "MATCH FOUND — WAITING FOR HOST HANDSHAKE")
+                : (IsHost
+                    ? $"Lobby created — share code: {LobbyCode}"
+                    : $"Joined lobby {LobbyCode}. Waiting for both players to ready."));
 
             StartRoutines();
             Notify();
@@ -709,7 +716,7 @@ namespace Overlink.Net
                 bool started = GetData(refreshed, KeyStatus) == StatusInGame;
                 if (started && !string.IsNullOrEmpty(relayCode) && net != null && !net.IsListening)
                 {
-                    SetStatus("Match found — connecting…");
+                    SetStatus("MATCH FOUND — CONNECTING TO MATCH");
                     if (await net.JoinRelayAsync(relayCode))
                     {
                         // NET-01: Revalidate lobby state after the async join. If the player left while
@@ -720,7 +727,7 @@ namespace Overlink.Net
                             return;
                         }
                         SetState(LobbyState.InGame);
-                        SetStatus("Connecting to the match…");
+                        SetStatus("MATCH FOUND — VERIFYING HANDSHAKE");
                         TryEnterGameplay();
                     }
                 }

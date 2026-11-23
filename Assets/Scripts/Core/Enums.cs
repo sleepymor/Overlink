@@ -39,7 +39,8 @@ namespace Overlink.Core
         SummoningDelay,
         Persistent,
         Exhaust,
-        Repair
+        Repair,
+        Counter
     }
 
     public enum EffectType

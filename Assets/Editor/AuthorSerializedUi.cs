@@ -291,7 +291,7 @@ namespace Overlink.EditorTools
             CreateLine(parent, "Signal accent", new Vector2(.07f, .082f), new Vector2(.105f, .082f), Accent);
             CreateText(parent, "Signal detail", "A VERIFIED LINK IS REQUIRED TO ENTER OVERLINK.", 10f, Dim,
                 new Vector2(.12f, .068f), new Vector2(.48f, .095f), TextAlignmentOptions.MidlineLeft);
-            CreateText(parent, "Version", "OVERLINK / AUTH  •  v2026.11.9", 10f, Dim,
+            CreateText(parent, "Version", "OVERLINK / AUTH  •  v2026.11.10", 10f, Dim,
                 new Vector2(.72f, .065f), new Vector2(.94f, .095f), TextAlignmentOptions.MidlineRight);
         }
 

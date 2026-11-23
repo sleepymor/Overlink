@@ -39,7 +39,8 @@ namespace Overlink.Core
                 return false;
             }
 
-            if (state.ActivePlayer != who || state.CurrentPhase != TurnPhase.Combat)
+            if (state.ActivePlayer != who || state.CurrentPhase != TurnPhase.Combat
+                || !state.GetPlayer(who).CanAfford(MatchState.AttackNP))
             {
                 return false;
             }
@@ -56,25 +57,7 @@ namespace Overlink.Core
         }
 
         /// <summary>
-        /// Every enemy card <paramref name="attacker"/> may legally hit: all living enemy cards in an Active
-        /// slot, in any of the five battlefields.
-        /// <para>
-        /// An attacker is never restricted to its own battlefield - only a <em>blocker</em> is (GDD 2.1.6
-        /// Step 2) - which is why the enemy in the attacker's own battlefield sorts to the front rather than
-        /// being the only candidate. That one can actually be interposed against the attack, so a player who
-        /// ignores targeting order and clicks the first lit socket gets the answer the keyboard path always
-        /// gave.
-        /// </para>
-        /// <para>
-        /// Benched enemies are absent even though <c>MatchEngine.FindCardInstance</c> resolves a Bench card as
-        /// a target: <see cref="Board.GetActiveUnits"/> is the combat set, and offering a move the GDD does not
-        /// contain would make the UI a lie. The engine-side permissiveness is a known hole, flagged and left
-        /// alone; this is the boundary that keeps it invisible to the player.
-        /// </para>
-        /// <para>
-        /// Relays in Active slots are included, matching the engine, which filters the <em>attacker</em>'s type
-        /// and not the target's. A Relay is a legitimate thing to knock out of a Node.
-        /// </para>
+        /// Living enemy Active and Bench cards in the attacker's Core or matching Node battlefield.
         /// </summary>
         public static List<CardInstance> AttackTargets(MatchState state, PlayerIndex who, CardInstance attacker)
         {
@@ -86,37 +69,31 @@ namespace Overlink.Core
 
             PlayerState opponent = state.GetOpponent(who);
             BoardSlot mine = state.GetPlayer(who).Board.FindSlot(attacker);
-            SlotType myType = mine.Type;
-            int myNode = mine.NodeIndex;
-
-            foreach (CardInstance candidate in opponent.Board.GetActiveUnits(opponent.Index))
+            foreach (BoardSlot slot in opponent.Board.CoreActive)
             {
-                if (candidate != null && candidate.IsAlive())
-                {
-                    targets.Add(candidate);
-                }
+                Add(slot);
             }
-
-            targets.Sort((a, b) => Relevance(a).CompareTo(Relevance(b)));
+            foreach (BoardSlot slot in opponent.Board.CoreBench) Add(slot);
+            foreach (var node in opponent.Board.NodeActive)
+                foreach (BoardSlot slot in node) Add(slot);
+            foreach (var node in opponent.Board.NodeBench)
+                foreach (BoardSlot slot in node) Add(slot);
             return targets;
 
-            int Relevance(CardInstance candidate)
+            void Add(BoardSlot slot)
             {
-                BoardSlot slot = opponent.Board.FindSlot(candidate);
-                bool sameBattlefield = slot != null && slot.Type == myType && slot.NodeIndex == myNode;
-                return sameBattlefield ? 0 : 1;
+                if (SameBattlefieldGroup(mine, slot) && slot.Card != null && slot.Card.IsAlive())
+                    targets.Add(slot.Card);
             }
         }
 
         /// <summary>
-        /// True when the direct Core strike is worth offering. The engine accepts a Core attack whether or not
-        /// the opponent has blockers - an unblocked attack is a legal <em>choice</em>, not a fallback, and only
-        /// a pending Core Active can intercept it - so this governs whether the option is presented, not
-        /// whether it works.
+        /// A Core Active can strike the opposing Core, whether or not a blocker is present.
         /// </summary>
         public static bool CanAttackCore(MatchState state, PlayerIndex who, CardInstance attacker)
         {
-            return CanAttack(state, who, attacker);
+            return CanAttack(state, who, attacker)
+                && state.GetPlayer(who).Board.FindSlot(attacker).Type == SlotType.CoreActive;
         }
 
         /// <summary>
@@ -305,7 +282,8 @@ namespace Overlink.Core
 
             BoardSlot outSlot = mine.Board.FindSlot(active);
             BoardSlot inSlot = mine.Board.FindSlot(bench);
-            if (outSlot == null || inSlot == null || !outSlot.IsActive() || !inSlot.IsBench())
+            if (outSlot == null || inSlot == null || !outSlot.IsActive() || !inSlot.IsBench()
+                || !SameBattlefieldGroup(outSlot, inSlot))
             {
                 return false;
             }
@@ -323,9 +301,7 @@ namespace Overlink.Core
         }
 
         /// <summary>
-        /// The Bench units <paramref name="active"/> could be traded for, across the whole side rather than
-        /// one battlefield: retreating a Node's Active into the Core Bench is legal and surrenders that Node,
-        /// which is a real strategic cost the player is allowed to pay knowingly.
+        /// The Bench units <paramref name="active"/> could be traded for in the same battlefield.
         /// </summary>
         public static List<CardInstance> RetreatChoices(MatchState state, PlayerIndex who, CardInstance active)
         {
@@ -365,6 +341,16 @@ namespace Overlink.Core
         /// True when two slots are the same battlefield: both Core Actives, or Actives of the same Node.
         /// Bench slots never qualify, because a benched card is not in a battlefield at all.
         /// </summary>
+        public static bool SameBattlefieldGroup(BoardSlot a, BoardSlot b)
+        {
+            if (a == null || b == null) return false;
+            bool aCore = a.Type == SlotType.CoreActive || a.Type == SlotType.CoreBench;
+            bool bCore = b.Type == SlotType.CoreActive || b.Type == SlotType.CoreBench;
+            bool aNode = a.Type == SlotType.NodeActive || a.Type == SlotType.NodeBench;
+            bool bNode = b.Type == SlotType.NodeActive || b.Type == SlotType.NodeBench;
+            return (aCore && bCore) || (aNode && bNode && a.NodeIndex == b.NodeIndex);
+        }
+
         public static bool SharesBattlefield(BoardSlot a, BoardSlot b)
         {
             if (a == null || b == null)

@@ -1104,7 +1104,7 @@ namespace Overlink.Match.Tests
 
             // The worst case per box, from the formatters that write it. The banner has exactly two strings it
             // can hold; TURN 99 and CLEANUP are the longest turn number and phase name a match realistically
-            // reaches. The chip's figures are real ceilings rather than guesses: NP caps at 10 plus four nodes,
+            // reaches. The chip's figures are real ceilings rather than guesses: NP caps at 40 once three Nodes are controlled,
             // the Core starts at 3, a deck is 30 cards, and a hand of ten is a ruined match but not an
             // impossible one. The log's four entries are the four SetLog can show at once, each long enough to
             // wrap, which is the tallest the panel can legitimately get.

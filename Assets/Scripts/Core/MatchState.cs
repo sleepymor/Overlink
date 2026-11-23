@@ -30,6 +30,10 @@ namespace Overlink.Core
 
         /// <summary>NP price of a Combat-phase retreat, paid by the unit's controller.</summary>
         public const int RetreatNP = 1;
+        public const int AttackNP = 1;
+
+        /// <summary>Base NP awarded at the start of an active player's turn, before Node income.</summary>
+        public const int BaseNPIncome = 4;
 
         /// <summary>
         /// Extra NP for the player who loses the coin flip. The compensation for going second in a game where
@@ -728,8 +732,8 @@ namespace Overlink.Core
         }
 
         /// <summary>
-        /// GDD 2.1.2 Phase 1 Upkeep: ready the acting player's units (clearing Summoning Delay), gain NP
-        /// (+3 base, +1 per controlled Node) up to the 10 + Nodes cap, then check Node Domination.
+        /// Phase 1 Upkeep: ready the acting player's units (clearing Summoning Delay), gain NP
+        /// (+4 base, +1 per controlled Node) up to the 30-to-40 Node-based cap, then check Node Domination.
         /// </summary>
         private void OnUpkeepPhase()
         {
@@ -743,8 +747,8 @@ namespace Overlink.Core
 
             int controlledNodes = CountControlledNodes(ActivePlayer);
             int cap = PlayerState.NpCap(controlledNodes);
-            player.GainNP(3 + controlledNodes, cap);
-            LogEvent($"{ActivePlayer} gains {3 + controlledNodes} NP (3 base + {controlledNodes} Nodes), now {player.CurrentNP}/{cap}");
+            player.GainNP(BaseNPIncome + controlledNodes, cap);
+            LogEvent($"{ActivePlayer} gains {BaseNPIncome + controlledNodes} NP ({BaseNPIncome} base + {controlledNodes} Nodes), now {player.CurrentNP}/{cap}");
 
             CheckNodeDomination();
         }

@@ -456,6 +456,8 @@ namespace Overlink.Match
         readonly SlotGlow glow = new SlotGlow();
         int[] nodeOwnerSeen;
         int turnSeen = -1;
+        PlayerIndex activePlayerSeen;
+        bool activePlayerWasSeen;
         static readonly Color DeployGlow = new Color(0.25f, 0.95f, 1f);
         static readonly Color AttackGlow = new Color(1f, 0.6f, 0.2f);
         static readonly Color CoreScanGlow = new Color(0.25f, 0.62f, 1f);
@@ -3368,12 +3370,23 @@ namespace Overlink.Match
                     state.ActivePlayer == PlayerIndex.Player ? "YOUR ACTION" : "THEIR ACTION");
             }
 
-            if (turnSeen >= 0 && state.TurnNumber != turnSeen)
+            bool turnChanged = turnSeen >= 0 &&
+                (state.TurnNumber != turnSeen ||
+                 (activePlayerWasSeen && state.ActivePlayer != activePlayerSeen));
+            if (turnChanged)
             {
                 GlowScan(playerCorePlate);
                 GlowScan(opponentCorePlate);
+                bool yourTurn = state.ActivePlayer == PlayerIndex.Player;
+                ShowNotice(yourTurn
+                    ? $"TURN {state.TurnNumber}  //  YOUR TURN"
+                    : $"TURN {state.TurnNumber}  //  OPPONENT TURN");
+                hud?.PlayTurnChangeBumper();
+                MatchFeedback.Instance?.PlayTurnChange();
             }
             turnSeen = state.TurnNumber;
+            activePlayerSeen = state.ActivePlayer;
+            activePlayerWasSeen = true;
 
             PaintCore(state, engine, PlayerIndex.Opponent, opponentCoreActive, opponentCoreBench,
                 opponentProtocol, opponentCorePlate);

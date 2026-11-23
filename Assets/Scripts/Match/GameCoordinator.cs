@@ -7,6 +7,7 @@ using Overlink.Cards;
 using Overlink.Core;
 using Overlink.Persistence;
 using Overlink.Net;
+using Overlink.UI;
 using UnityEngine;
 
 namespace Overlink.Match
@@ -162,6 +163,8 @@ namespace Overlink.Match
                 battlefieldHud.ConfirmLineupRequested += SubmitLineup;
                 battlefieldHud.RailPressed -= OnRailPressed;
                 battlefieldHud.RailPressed += OnRailPressed;
+                battlefieldHud.ReturnToMenuRequested -= ReturnToMenu;
+                battlefieldHud.ReturnToMenuRequested += ReturnToMenu;
             }
         }
 
@@ -1097,12 +1100,6 @@ namespace Overlink.Match
             if (Input.GetKeyDown(passPhaseKey)) EndPlayerPhase();
             if (Input.GetKeyDown(endTurnKey)) EndPlayerTurn();
 
-            if (Input.GetKeyDown(attackCoreKey)) TryPlayerAttack(-1);
-            if (Input.GetKeyDown(attackNode1Key)) TryPlayerAttack(0);
-            if (Input.GetKeyDown(attackNode2Key)) TryPlayerAttack(1);
-            if (Input.GetKeyDown(attackNode3Key)) TryPlayerAttack(2);
-            if (Input.GetKeyDown(attackNode4Key)) TryPlayerAttack(3);
-
             if (Input.GetKeyDown(logStateKey)) LogMatchState();
 
             // Concession (GDD 2.1.8) is legal on either player's turn, so unlike the two above it is not gated
@@ -1123,6 +1120,28 @@ namespace Overlink.Match
                 : matchState.Result == MatchResult.OpponentWin ? "loss" : "draw";
             bool versusAi = enableAI && string.IsNullOrEmpty(onlineOpponentPlayerId);
             _ = SubmitMatchResultAsync(cloud, result, versusAi, onlineOpponentPlayerId);
+        }
+
+        /// <summary>
+        /// Leaves any persistent Relay/Lobby session before returning to the menu. LobbyManager clears its
+        /// local session and shuts down Relay synchronously before its service cleanup awaits, so the scene
+        /// transition can start immediately without carrying a live match into the next menu screen.
+        /// </summary>
+        public void ReturnToMenu()
+        {
+            if (matchState == null || !matchState.IsMatchOver()) return;
+
+            LobbyManager lobby = LobbyManager.Instance;
+            if (lobby != null && lobby.HasActiveLobby)
+            {
+                lobby.LeaveLobby();
+            }
+            else if (network != null && network.IsListening)
+            {
+                network.LeaveGame();
+            }
+
+            SceneLoader.LoadMainMenu();
         }
 
         async Task SubmitMatchResultAsync(CloudPlayerDataService cloud, string result, bool versusAi,
@@ -1190,21 +1209,6 @@ namespace Overlink.Match
         {
             switch (key)
             {
-                case BattlefieldHud.RailKey.SwingCore:
-                    TryPlayerAttack(-1);
-                    break;
-                case BattlefieldHud.RailKey.SwingNode1:
-                    TryPlayerAttack(0);
-                    break;
-                case BattlefieldHud.RailKey.SwingNode2:
-                    TryPlayerAttack(1);
-                    break;
-                case BattlefieldHud.RailKey.SwingNode3:
-                    TryPlayerAttack(2);
-                    break;
-                case BattlefieldHud.RailKey.SwingNode4:
-                    TryPlayerAttack(3);
-                    break;
                 case BattlefieldHud.RailKey.EndTurn:
                     EndPlayerTurn();
                     break;
@@ -1283,20 +1287,18 @@ namespace Overlink.Match
                 && (matchState.CurrentPhase == TurnPhase.Main
                     || matchState.CurrentPhase == TurnPhase.Combat));
             battlefieldHud.SetRail(BattlefieldHud.RailKey.DoneBlocking, PlayerBlockWindowOpen);
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.EndTurn, mine);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.EndTurn, false);
 
             // STATE and CONCEDE outlive the turn: reading the match is always legal, and conceding is legal on
             // either player's turn (GDD 2.1.8) - the one rule the key handler never gated either.
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.State, true);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.State, false);
             battlefieldHud.SetRail(BattlefieldHud.RailKey.Concede, true);
 
             // The swings are the number keys, and they are only ever fireable in Combat. Five verbs dimmed for
             // the rest of the turn would advertise a choice that refuses, so the strip leaves instead.
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingCore, combat, CanSwingBattlefield(-1));
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode1, combat, CanSwingBattlefield(0));
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode2, combat, CanSwingBattlefield(1));
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode3, combat, CanSwingBattlefield(2));
-            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode4, combat, CanSwingBattlefield(3));
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode2, false);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode3, false);
+            battlefieldHud.SetRail(BattlefieldHud.RailKey.SwingNode4, false);
         }
 
         /// <summary>

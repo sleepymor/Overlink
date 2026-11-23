@@ -71,7 +71,7 @@ namespace Overlink.Core.Tests
         }
 
         [Test]
-        public void PlayerState_GainNP_CapsAtTenPlusNodes()
+        public void PlayerState_GainNP_CapsAtThirtyPlusNodes()
         {
             var player = new PlayerState(PlayerIndex.Player);
             player.CurrentNP = 9;
@@ -85,7 +85,10 @@ namespace Overlink.Core.Tests
         public void PlayerState_NpCap_ScalesWithControlledNodes()
         {
             Assert.AreEqual(PlayerState.MaxNP, PlayerState.NpCap(0));
-            Assert.AreEqual(PlayerState.MaxNP + 3, PlayerState.NpCap(3));
+            Assert.AreEqual(PlayerState.MaxNP + 1, PlayerState.NpCap(1));
+            Assert.AreEqual(PlayerState.MaxNP + 2, PlayerState.NpCap(2));
+            Assert.AreEqual(40, PlayerState.NpCap(3));
+            Assert.AreEqual(40, PlayerState.NpCap(4));
         }
 
         [Test]
