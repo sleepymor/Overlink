@@ -66,6 +66,15 @@ namespace Overlink.UI
         [SerializeField] GameObject factionStep;
         [SerializeField] TextMeshProUGUI factionError;
 
+        [Header("Email code")]
+        [SerializeField] GameObject emailCodeStep;
+        [SerializeField] TextMeshProUGUI emailCodeStatus;
+        [SerializeField] TMP_InputField emailCodeInput;
+        [SerializeField] TextMeshProUGUI emailCodeError;
+        [SerializeField] Button emailCodeSendButton;
+        [SerializeField] Button emailCodeVerifyButton;
+        [SerializeField] Button emailCodeSignOutButton;
+
         [Header("Rules")]
         [Tooltip("Players must confirm at least this age to continue. Enforced server-side too once Cloud Code exists.")]
         [SerializeField, Min(0)] int minimumAge = 13;
@@ -169,6 +178,8 @@ namespace Overlink.UI
             SetPanel(loadingPanel, loading);
             SetPanel(signInPanel, state == AuthState.SignedOut || state == AuthState.Error);
             SetPanel(setupPanel, state == AuthState.NeedsProfileSetup);
+            SetPanel(emailCodeStep, state == AuthState.NeedsEmailCode);
+            if (state == AuthState.NeedsEmailCode) EnterEmailCodeStep();
 
             if (loading && loadingText != null)
             {
@@ -442,6 +453,8 @@ namespace Overlink.UI
             // Profile identity and starter grant are separate authoritative records. Do not route to the
             // protected menu until the player has selected a faction and the Cloud Code grant succeeded.
             SetBusy(false);
+            string savedEmail = PlayerProfileService.Instance.CurrentProfile?.email ?? email;
+            if (flow != null && await flow.OnEmailAddressSavedAsync(savedEmail)) return;
             ShowStarterFactionPicker();
         }
 
@@ -567,6 +580,122 @@ namespace Overlink.UI
                 flow?.OnPlayerSignedOut();
         }
 
+        // ---------------------------------------------------------------- email code
+
+        // Nothing is sent on entry. Each code uses one of the account's 5 sends per hour, so the step
+        // waits for the player to press Send.
+        void EnterEmailCodeStep()
+        {
+            ClearError(emailCodeError);
+            if (emailCodeInput != null) emailCodeInput.text = "";
+            if (emailCodeStatus != null)
+                emailCodeStatus.text = "Press SEND to receive a 6-digit code at " + MaskEmail(CurrentProfileEmail()) + ".";
+        }
+
+        public void OnEmailCodeSendClicked() => _ = SendEmailCodeAsync();
+
+        async Task SendEmailCodeAsync()
+        {
+            if (busy) return;
+            string email = CurrentProfileEmail();
+            if (string.IsNullOrEmpty(email))
+            {
+                ShowError(emailCodeError, "Add an email address to your profile first.");
+                return;
+            }
+
+            SetBusy(true);
+            ClearError(emailCodeError);
+            try
+            {
+                CloudPlayerDataService cloud = CloudPlayerDataService.Instance ?? CloudPlayerDataService.EnsureInstance();
+                await cloud.RequestEmailCodeAsync(email);
+                if (emailCodeStatus != null)
+                    emailCodeStatus.text = "We sent a 6-digit code to " + MaskEmail(email) + ".";
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Auth] Email code request failed: {e.Message}");
+                ShowError(emailCodeError, EmailCodeMessage(e));
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
+        public async void OnEmailCodeVerifyClicked()
+        {
+            if (busy) return;
+            string email = CurrentProfileEmail();
+            string code = emailCodeInput != null ? emailCodeInput.text.Trim() : "";
+            if (code.Length != 6 || !IsDigits(code))
+            {
+                ShowError(emailCodeError, "Enter the 6-digit code from your email.");
+                return;
+            }
+
+            SetBusy(true);
+            ClearError(emailCodeError);
+            try
+            {
+                CloudPlayerDataService cloud = CloudPlayerDataService.Instance ?? CloudPlayerDataService.EnsureInstance();
+                await cloud.VerifyEmailCodeAsync(email, code);
+                SetBusy(false);
+                flow?.OnEmailVerified();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Auth] Email code verification failed: {e.Message}");
+                ShowError(emailCodeError, EmailCodeMessage(e));
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
+        public void OnEmailCodeSignOutClicked() => OnSignOutClicked();
+
+        static string CurrentProfileEmail() => PlayerProfileService.Instance?.CurrentProfile?.email ?? "";
+
+        static string MaskEmail(string email)
+        {
+            int at = email.IndexOf('@');
+            if (at <= 1) return email;
+            return email.Substring(0, 2) + "***" + email.Substring(at);
+        }
+
+        static bool IsDigits(string value)
+        {
+            foreach (char c in value)
+            {
+                if (c < '0' || c > '9') return false;
+            }
+            return value.Length > 0;
+        }
+
+        // Only the code-step messages the module writes on purpose are shown as written. Anything else is
+        // a transport or service fault, and gets the generic line so no SDK wording reaches the player.
+        static readonly string[] EmailCodeMessagePrefixes =
+        {
+            "That code",
+            "Too many",
+            "Enter a valid email",
+            "Add an email",
+            "Email delivery",
+        };
+
+        static string EmailCodeMessage(Exception e)
+        {
+            string raw = e?.Message ?? "";
+            foreach (string prefix in EmailCodeMessagePrefixes)
+            {
+                if (raw.StartsWith(prefix, StringComparison.Ordinal)) return raw;
+            }
+            return "Could not complete that step. Check your connection and try again.";
+        }
+
         public void OnForgotPasswordClicked()
         {
             ShowError(signInError, "Password resets are not available yet. Create a new account instead.");
@@ -609,7 +738,11 @@ namespace Overlink.UI
             SetInteractable(randomTagButton, !value);
             SetInteractable(saveIdentityButton, !value);
             SetInteractable(signOutButton, !value);
+            SetInteractable(emailCodeSendButton, !value);
+            SetInteractable(emailCodeVerifyButton, !value);
+            SetInteractable(emailCodeSignOutButton, !value);
 
+            if (emailCodeInput != null) emailCodeInput.interactable = !value;
             if (usernameInput != null) usernameInput.interactable = !value;
             if (passwordInput != null) passwordInput.interactable = !value;
             if (confirmPasswordInput != null) confirmPasswordInput.interactable = !value;
@@ -634,6 +767,10 @@ namespace Overlink.UI
             onClick(saveIdentityButton, OnSaveIdentityClicked);
             onClick(signOutButton, OnSignOutClicked);
             onClick(forgotPasswordButton, OnForgotPasswordClicked);
+            onClick(emailCodeSendButton, OnEmailCodeSendClicked);
+            onClick(emailCodeVerifyButton, OnEmailCodeVerifyClicked);
+            onClick(emailCodeSignOutButton, OnEmailCodeSignOutClicked);
+            onSubmit(emailCodeInput, OnEmailCodeVerifyClicked);
 
             onSubmit(passwordInput, OnSubmitClicked);
             onSubmit(confirmPasswordInput, OnSubmitClicked);

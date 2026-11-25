@@ -60,6 +60,7 @@ namespace Overlink.UI
                 case AuthState.VersionCheckFailed:
                 case AuthState.UpdateRequired:
                 case AuthState.NeedsProfileSetup:
+                case AuthState.NeedsEmailCode:
                     Debug.Log($"[ProtectedSceneGuard] '{scene.name}' requires sign-in; returning to Auth ({flow.CurrentState}).");
                     SceneManager.LoadScene(SceneIndex.Auth);
                     break;

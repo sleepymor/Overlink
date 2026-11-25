@@ -39,7 +39,6 @@ namespace Overlink.EditorTools
         {
             AuthorScene(AuthPath, AuthorAuth);
             AuthorScene(MainMenuPath, AuthorMainMenu);
-            AuthorScene(SettingsPath, AuthorSettings);
             AuthorScene(GachaPath, AuthorSignalBayChoices);
 
             AssetDatabase.SaveAssets();
@@ -225,6 +224,18 @@ namespace Overlink.EditorTools
             Button save = CreateAuthButton(identity.transform, "Save Button", "SAVE IDENTITY  //  CONTINUE", .09f, .095f, .82f, .07f, Accent);
             Button signOut = CreateAuthButton(identity.transform, "Switch Account Button", "USE A DIFFERENT ACCOUNT", .09f, .025f, .82f, .05f, Control);
 
+            GameObject emailCode = CreatePanel(card.transform, "Email Code Step");
+            CreateText(emailCode.transform, "Title", "VERIFY YOUR EMAIL", 28f, Bright, new Vector2(.09f, .80f), new Vector2(.91f, .89f), TextAlignmentOptions.MidlineLeft);
+            CreateText(emailCode.transform, "Body", "ENTER THE 6-DIGIT CODE SENT TO YOUR EMAIL. IT EXPIRES IN 10 MINUTES.", 11f, Dim, new Vector2(.09f, .72f), new Vector2(.91f, .79f), TextAlignmentOptions.MidlineLeft);
+            TextMeshProUGUI emailCodeStatus = CreateText(emailCode.transform, "Status", string.Empty, 12f, Accent, new Vector2(.09f, .64f), new Vector2(.91f, .70f), TextAlignmentOptions.MidlineLeft);
+            TMP_InputField emailCodeInput = CreateInput(emailCode.transform, "Code Input", "6-DIGIT CODE", .54f);
+            TextMeshProUGUI emailCodeError = CreateText(emailCode.transform, "Error", string.Empty, 13f, new Color32(255, 125, 116, 255), new Vector2(.09f, .44f), new Vector2(.91f, .51f), TextAlignmentOptions.MidlineLeft);
+            Button emailCodeVerify = CreateAuthButton(emailCode.transform, "Verify Button", "VERIFY CODE  //  CONTINUE", .09f, .33f, .82f, .07f, Accent);
+            Button emailCodeSend = CreateAuthButton(emailCode.transform, "Resend Button", "SEND A NEW CODE", .09f, .24f, .82f, .055f, Control);
+            Button emailCodeSignOut = CreateAuthButton(emailCode.transform, "Switch Account Button", "USE A DIFFERENT ACCOUNT", .09f, .16f, .82f, .05f, Control);
+
+            emailCodeError.gameObject.SetActive(false);
+            emailCode.SetActive(false);
             confirm.gameObject.SetActive(false);
             passwordHint.gameObject.SetActive(false);
             googleNote.gameObject.SetActive(false);
@@ -266,6 +277,13 @@ namespace Overlink.EditorTools
             SetRef(serialized, "randomTagButton", randomTag);
             SetRef(serialized, "saveIdentityButton", save);
             SetRef(serialized, "signOutButton", signOut);
+            SetRef(serialized, "emailCodeStep", emailCode);
+            SetRef(serialized, "emailCodeStatus", emailCodeStatus);
+            SetRef(serialized, "emailCodeInput", emailCodeInput);
+            SetRef(serialized, "emailCodeError", emailCodeError);
+            SetRef(serialized, "emailCodeSendButton", emailCodeSend);
+            SetRef(serialized, "emailCodeVerifyButton", emailCodeVerify);
+            SetRef(serialized, "emailCodeSignOutButton", emailCodeSignOut);
             serialized.ApplyModifiedPropertiesWithoutUndo();
             Debug.Log("[SerializedUI] Auth Canvas and all Auth controls authored and assigned.");
         }
@@ -291,7 +309,7 @@ namespace Overlink.EditorTools
             CreateLine(parent, "Signal accent", new Vector2(.07f, .082f), new Vector2(.105f, .082f), Accent);
             CreateText(parent, "Signal detail", "A VERIFIED LINK IS REQUIRED TO ENTER OVERLINK.", 10f, Dim,
                 new Vector2(.12f, .068f), new Vector2(.48f, .095f), TextAlignmentOptions.MidlineLeft);
-            CreateText(parent, "Version", "OVERLINK / AUTH  •  v2026.11.10", 10f, Dim,
+            CreateText(parent, "Version", "OVERLINK / AUTH  •  v2026.11.11", 10f, Dim,
                 new Vector2(.72f, .065f), new Vector2(.94f, .095f), TextAlignmentOptions.MidlineRight);
         }
 

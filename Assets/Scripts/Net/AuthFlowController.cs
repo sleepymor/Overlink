@@ -23,6 +23,12 @@ namespace Overlink.Net
         /// <summary>Signed in but the profile is incomplete; the setup screens are showing.</summary>
         NeedsProfileSetup,
 
+        /// <summary>Signed in with an email that is not yet verified; the code step is showing.</summary>
+        NeedsEmailCode,
+
+        /// <summary>Signed in and verified, but the first-run tutorial has not been finished or skipped.</summary>
+        NeedsTutorial,
+
         /// <summary>Signed in with a complete profile; protected scenes are reachable.</summary>
         Ready,
 
@@ -66,6 +72,7 @@ namespace Overlink.Net
 
         const string AuthSceneName = "Auth";
         const string MainMenuSceneName = "MainMenu";
+        const string TutorialSceneName = "Tutorial";
 
         /// <summary>
         /// Standalone presentation scenes. They are opened straight from the Editor to review card
@@ -96,6 +103,11 @@ namespace Overlink.Net
         }
 
         bool isProcessing;
+
+        // Set by a password sign-in or account creation, and held until a code is verified. It is not
+        // set by a cached session, so a relaunch does not ask again. It survives profile setup on purpose:
+        // a new account has to finish setup, which collects the email, before the code can be sent.
+        bool emailCodeRequired;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void CreateBeforeScene()
@@ -205,8 +217,18 @@ namespace Overlink.Net
             if (isProcessing) return;
             isProcessing = true;
 
+            // Only a Unity-account password sign-in asks for a code. Google's own email_verified claim is
+            // checked on the server, so it does not.
+            emailCodeRequired = AccountManager.Instance != null
+                && AccountManager.Instance.Kind == AccountKind.UsernamePassword;
+
             try
             {
+                string googleIdToken = AccountManager.Instance != null
+                    ? AccountManager.Instance.TakePendingGoogleIdToken()
+                    : null;
+                if (!string.IsNullOrEmpty(googleIdToken)) await VerifyGoogleEmailAsync(googleIdToken);
+
                 await HandleAuthenticatedPlayerAsync();
             }
             catch (Exception e)
@@ -222,21 +244,113 @@ namespace Overlink.Net
         }
 
         /// <summary>Called by the Auth UI once the profile has been saved.</summary>
-        public void OnProfileSetupComplete()
+        public async void OnProfileSetupComplete()
         {
             if (!versionVerified)
             {
                 _ = StartAuthenticationFlowAsync();
                 return;
             }
-            Debug.Log("[AuthFlow] Profile setup complete, loading main menu.");
-            ChangeState(AuthState.Ready, "");
-            LoadMainMenu();
+
+            string profileEmail = PlayerProfileService.Instance?.CurrentProfile?.email ?? "";
+            if (emailCodeRequired || !await IsEmailVerifiedAsync(profileEmail))
+            {
+                Debug.Log("[AuthFlow] Profile setup complete, email code required.");
+                ChangeState(AuthState.NeedsEmailCode, "");
+                ShowAuthScene();
+                return;
+            }
+
+            PlayerProfile profile = PlayerProfileService.Instance?.CurrentProfile;
+            if (profile == null || !profile.IsComplete())
+            {
+                _ = StartAuthenticationFlowAsync();
+                return;
+            }
+
+            await RouteToReadyAsync(profile);
+        }
+
+        /// <summary>
+        /// Called by the identity step once the address is saved. The address is proven here, before the
+        /// starter faction is picked. Returns false when the address needs no code.
+        /// </summary>
+        public async Task<bool> OnEmailAddressSavedAsync(string email)
+        {
+            if (!Application.isPlaying) return false;
+            if (!emailCodeRequired && await IsEmailVerifiedAsync(email)) return false;
+
+            ChangeState(AuthState.NeedsEmailCode, "");
+            ShowAuthScene();
+            return true;
+        }
+
+        /// <summary>
+        /// Called by the code step once the server has accepted the code. Clears the sign-in requirement
+        /// and re-runs the routing, so the player continues to the next step (or MainMenu) from there.
+        /// </summary>
+        public async void OnEmailVerified()
+        {
+            if (!Application.isPlaying) return;
+            if (isProcessing) return;
+            isProcessing = true;
+            emailCodeRequired = false;
+
+            try
+            {
+                await HandleAuthenticatedPlayerAsync();
+            }
+            catch (Exception e)
+            {
+                if (!Application.isPlaying) return;
+                Debug.LogError($"[AuthFlow] Error after email verification: {e}");
+                ChangeState(AuthState.Error, AuthResult.FromException(e).UserMessage);
+            }
+            finally
+            {
+                isProcessing = false;
+            }
+        }
+
+        /// <summary>
+        /// Called by the tutorial once <c>tutorialCompleted</c> is saved. Re-runs the routing from the
+        /// saved profile, so the player continues to MainMenu, or to any step still outstanding.
+        /// </summary>
+        public async void OnTutorialCompleted()
+        {
+            if (!Application.isPlaying) return;
+            if (isProcessing) return;
+            isProcessing = true;
+
+            try
+            {
+                // The email gate was already passed before the tutorial was shown, and a replay runs from a
+                // Ready session, so only the tutorial flag needs re-checking here.
+                PlayerProfile profile = PlayerProfileService.Instance?.CurrentProfile;
+                if (profile == null || !profile.IsComplete())
+                {
+                    await HandleAuthenticatedPlayerAsync();
+                    return;
+                }
+
+                await RouteToReadyAsync(profile);
+            }
+            catch (Exception e)
+            {
+                if (!Application.isPlaying) return;
+                Debug.LogError($"[AuthFlow] Error after tutorial: {e}");
+                ChangeState(AuthState.Error, AuthResult.FromException(e).UserMessage);
+            }
+            finally
+            {
+                isProcessing = false;
+            }
         }
 
         /// <summary>Called by the Auth UI when the player abandons setup and signs out again.</summary>
         public void OnPlayerSignedOut()
         {
+            emailCodeRequired = false;
             versionVerified = false;
             UpdateUrl = "";
             PlayerProfileService.Instance.ClearProfile();
@@ -269,7 +383,10 @@ namespace Overlink.Net
             // and still reaches MainMenu unchanged; so do sign-in and profile-setup completion,
             // which the Auth UI only ever calls from the Auth scene. Every other active scene is
             // left alone, which subsumes the old Gameplay and card-preview special cases.
-            if (SceneManager.GetActiveScene().name != AuthSceneName) return;
+            // The first-run tutorial is also part of the routing, so finishing it in its own scene
+            // continues to MainMenu the same way.
+            string active = SceneManager.GetActiveScene().name;
+            if (active != AuthSceneName && active != TutorialSceneName) return;
 
             SceneManager.LoadScene(MainMenuSceneName);
         }
@@ -329,6 +446,16 @@ namespace Overlink.Net
             }
             else
             {
+                if (emailCodeRequired || !await IsEmailVerifiedAsync(profile.email))
+                {
+                    // Fails closed: if the check cannot run, the player is asked for a code rather than
+                    // let in. The code step is the only place that can clear this state.
+                    Debug.Log("[AuthFlow] Email not verified, showing code step.");
+                    ChangeState(AuthState.NeedsEmailCode, "");
+                    ShowAuthScene();
+                    return;
+                }
+
                 CloudPlayerState progression = await EnsureCloudProgressionAsync();
                 if (!Application.isPlaying) return;
                 if (progression == null || !progression.starterGranted)
@@ -341,11 +468,72 @@ namespace Overlink.Net
                     ShowAuthScene();
                     return;
                 }
-                Debug.Log("[AuthFlow] Profile complete, loading main menu.");
                 AccountManager account = AccountManager.Instance ?? AccountManager.EnsureInstance();
                 account.ApplyIdentity(profile.username, profile.tag);
-                ChangeState(AuthState.Ready, "");
-                LoadMainMenu();
+                await RouteToReadyAsync(profile);
+            }
+        }
+
+        /// <summary>
+        /// The single place that decides the last step before the main menu. Both the cached-session path
+        /// and the setup path reach it, so the email and tutorial gates cannot drift apart.
+        /// </summary>
+        async Task RouteToReadyAsync(PlayerProfile profile)
+        {
+            if (!profile.tutorialCompleted)
+            {
+                Debug.Log("[AuthFlow] Tutorial not completed, showing tutorial.");
+                ChangeState(AuthState.NeedsTutorial, "");
+                ShowTutorialScene();
+                return;
+            }
+
+            Debug.Log("[AuthFlow] Profile complete, loading main menu.");
+            ChangeState(AuthState.Ready, "");
+            LoadMainMenu();
+        }
+
+        void ShowTutorialScene()
+        {
+            if (IsCardPreviewScene(SceneManager.GetActiveScene().name)) return;
+            if (SceneManager.GetActiveScene().name != TutorialSceneName)
+            {
+                SceneManager.LoadScene(TutorialSceneName);
+            }
+        }
+
+        // Failure is not fatal here. Without a verified record the routing check asks for a code, so the
+        // player is never let in on the strength of a claim that did not verify.
+        async Task VerifyGoogleEmailAsync(string idToken)
+        {
+            try
+            {
+                CloudPlayerDataService service = CloudPlayerDataService.Instance
+                    ?? CloudPlayerDataService.EnsureInstance();
+                await service.VerifyGoogleEmailAsync(idToken);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[AuthFlow] Google email verification failed: {e.Message}");
+            }
+        }
+
+        // True only when the server holds a verified record for this exact address. A change of address
+        // since verification therefore sends the player back to the code step.
+        async Task<bool> IsEmailVerifiedAsync(string profileEmail)
+        {
+            try
+            {
+                CloudPlayerDataService service = CloudPlayerDataService.Instance
+                    ?? CloudPlayerDataService.EnsureInstance();
+                EmailVerificationState state = await service.GetEmailVerifiedAsync();
+                return state != null && state.verified
+                    && string.Equals(state.email, profileEmail, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[AuthFlow] Email verification check failed: {e.Message}");
+                return false;
             }
         }
 

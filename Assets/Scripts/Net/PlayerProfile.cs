@@ -50,6 +50,13 @@ namespace Overlink.Net
         /// <summary>Unix seconds at which the profile was first created; 0 until it is saved.</summary>
         public long createdAt;
 
+        /// <summary>
+        /// True once the player has finished or skipped the first-run tutorial. Defaults to false, so a
+        /// profile saved before this field existed reads as not yet seen and shows the tutorial once.
+        /// Grants no reward, so the client may write it. Any future reward must be granted by Cloud Code.
+        /// </summary>
+        public bool tutorialCompleted;
+
         public PlayerIdentity Identity => new PlayerIdentity(username, tag);
 
         /// <summary>
@@ -80,7 +87,8 @@ namespace Overlink.Net
             profileVersion = profileVersion,
             email = email,
             emailVerified = emailVerified,
-            createdAt = createdAt
+            createdAt = createdAt,
+            tutorialCompleted = tutorialCompleted
         };
     }
 }

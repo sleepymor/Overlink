@@ -93,6 +93,20 @@ namespace Overlink.Net
 
         Task initializationTask;
 
+        // Held only between a Google sign-in and the flow controller asking for it. Never logged.
+        string pendingGoogleIdToken;
+
+        /// <summary>
+        /// Returns the Google ID token from the most recent Google sign-in, once. The flow controller
+        /// sends it to the server to check email_verified, then it is gone.
+        /// </summary>
+        public string TakePendingGoogleIdToken()
+        {
+            string token = pendingGoogleIdToken;
+            pendingGoogleIdToken = null;
+            return token;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void CreateBeforeScene()
         {
@@ -315,6 +329,7 @@ namespace Overlink.Net
 
                 await auth.SignInWithGoogleAsync(idToken);
 
+                pendingGoogleIdToken = idToken;
                 Kind = AccountKind.Google;
                 ClearIdentity();
                 SetStatus("Signed in with Google.");

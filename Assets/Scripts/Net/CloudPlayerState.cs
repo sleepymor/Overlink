@@ -165,6 +165,13 @@ namespace Overlink.Net
     }
 
     [Serializable]
+    public sealed class EmailVerificationState
+    {
+        public bool verified;
+        public string email = "";
+    }
+
+    [Serializable]
     public sealed class CloudPackCard
     {
         public string id = "";

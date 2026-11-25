@@ -1317,7 +1317,7 @@ namespace Overlink.UI
                 unit ? (int?)card.Atk : null,
                 unit ? (int?)card.Hp : null,
                 unit ? (int?)0 : null,
-                string.IsNullOrEmpty(card.Rules) && fixture != null ? fixture.abilityText : card.Rules);
+                card.Rules);
 
             CardFaceView template = templateCatalog.Get(card.Type, card.Rarity);
             if (template == null) return null;

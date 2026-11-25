@@ -120,6 +120,13 @@ namespace Overlink.EditorTools
                 errors += Require(canvas.transform, "SettingsPanel/ReduceShakeToggle", typeof(Toggle));
                 errors += Require(canvas.transform, "SettingsPanel/ReduceFlashToggle", typeof(Toggle));
                 errors += Require(canvas.transform, "SettingsPanel/ReducedMotionToggle", typeof(Toggle));
+                errors += Require(canvas.transform, "SettingsPanel/ResolutionDropdown", typeof(TMPro.TMP_Dropdown));
+                errors += Require(canvas.transform, "SettingsPanel/NativeResolutionToggle", typeof(Toggle));
+                errors += Require(canvas.transform, "SettingsPanel/VSyncToggle", typeof(Toggle));
+                errors += Require(canvas.transform, "SettingsPanel/AntiAliasingDropdown", typeof(TMPro.TMP_Dropdown));
+                errors += Require(canvas.transform, "SettingsPanel/RenderScaleSlider", typeof(UnityEngine.UI.Slider));
+                errors += Require(canvas.transform, "SettingsPanel/ShakeIntensitySlider", typeof(UnityEngine.UI.Slider));
+                errors += Require(canvas.transform, "SettingsPanel/FlashIntensitySlider", typeof(UnityEngine.UI.Slider));
             }
             else if (screen == "Gacha")
             {

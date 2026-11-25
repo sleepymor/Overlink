@@ -139,6 +139,7 @@ namespace Overlink.UI
             if (deckListRoot != null) deckListRoot.gameObject.SetActive(false);
             if (newDeckButton != null) newDeckButton.gameObject.SetActive(false);
             if (decksBackButton != null) decksBackButton.gameObject.SetActive(false);
+            if (editDeckButton != null) editDeckButton.gameObject.SetActive(false);
             RefreshViewTabs();
             countCounter = BindCounter(countText,
                 v => "GAMEPLAY CARDS  " + v + " / " + CollectionData.BinderCards().Count + " UNIQUE");
@@ -430,7 +431,7 @@ namespace Overlink.UI
                 card.Type == CardType.Unit ? (int?)card.Atk : null,
                 card.Type == CardType.Unit ? (int?)card.Hp : null,
                 card.Type == CardType.Unit ? (int?)card.Shield : null,
-                string.IsNullOrEmpty(card.Rules) && fixture != null ? fixture.abilityText : card.Rules);
+                card.Rules);
 
             CardFaceView face = Instantiate(template.gameObject, worldCardRoot, false).GetComponent<CardFaceView>();
             if (face == null) return;
@@ -618,7 +619,7 @@ namespace Overlink.UI
                             card.Type == CardType.Unit ? (int?)card.Atk : null,
                             card.Type == CardType.Unit ? (int?)card.Hp : null,
                             card.Type == CardType.Unit ? (int?)card.Shield : null,
-                            string.IsNullOrEmpty(card.Rules) && fixture != null ? fixture.abilityText : card.Rules);
+                            card.Rules);
                         detailFace.PreviewRarity = card.Rarity;
                         detailFace.Bind(data, frameCatalog, tierMaterials);
                         detailFace.SetSortBaseline(10000);
@@ -654,8 +655,7 @@ namespace Overlink.UI
             }
             if (detailBody != null)
             {
-                CardTemplateFixture(card, out CardPresentationFixture bodyFixture);
-                detailBody.text = string.IsNullOrEmpty(card.Rules) && bodyFixture != null ? bodyFixture.abilityText : card.Rules;
+                detailBody.text = card.Rules;
             }
         }
 
@@ -669,6 +669,7 @@ namespace Overlink.UI
             if (deckListRoot != null) deckListRoot.gameObject.SetActive(deckView);
             if (newDeckButton != null) newDeckButton.gameObject.SetActive(deckView);
             if (decksBackButton != null) decksBackButton.gameObject.SetActive(false);
+            if (editDeckButton != null) editDeckButton.gameObject.SetActive(false);
             if (gridRoot != null) gridRoot.parent.gameObject.SetActive(!deckView);
             RefreshViewTabs();
             RefreshFilters();
@@ -683,28 +684,7 @@ namespace Overlink.UI
             StyleViewTab(tabDecksButton, deckView);
         }
 
-        static void StyleViewTab(Button tab, bool active)
-        {
-            if (tab == null) return;
-            Color fill = active ? new Color(0.161f, 0.875f, 0.949f, 1f) : new Color(0.106f, 0.149f, 0.204f, 1f);
-            Color hot = active ? new Color(0.196f, 1f, 1f, 1f) : new Color(0.16f, 0.22f, 0.29f, 1f);
-            Color pressed = active ? new Color(0.126f, 0.683f, 0.740f, 1f) : new Color(0.10f, 0.32f, 0.48f, 1f);
-
-            // Button transitions repaint the graphic from its colour block, so the block has to carry the
-            // active state too. Setting only the graphic is overwritten the next time the button changes state.
-            ColorBlock colors = tab.colors;
-            colors.normalColor = fill;
-            colors.highlightedColor = hot;
-            colors.pressedColor = pressed;
-            colors.selectedColor = hot;
-            tab.colors = colors;
-
-            Image background = tab.GetComponent<Image>();
-            if (background != null) background.color = fill;
-            TMP_Text label = tab.GetComponentInChildren<TMP_Text>(true);
-            if (label != null)
-                label.color = active ? new Color(0.03f, 0.08f, 0.11f, 1f) : new Color(0.871f, 0.910f, 0.933f, 1f);
-        }
+        static void StyleViewTab(Button tab, bool active) => UiKit.StyleTab(tab, active);
 
         /// <summary>Lists every saved deck with its size, legality, and battle tag. Rows are rebuilt on each refresh.</summary>
         void RefreshDeckList()
@@ -846,6 +826,7 @@ namespace Overlink.UI
             if (deckListRoot != null) deckListRoot.gameObject.SetActive(false);
             if (newDeckButton != null) newDeckButton.gameObject.SetActive(false);
             if (decksBackButton != null) decksBackButton.gameObject.SetActive(true);
+            if (editDeckButton != null) editDeckButton.gameObject.SetActive(true);
             if (gridRoot != null) gridRoot.parent.gameObject.SetActive(true);
             RefreshFilters();
         }

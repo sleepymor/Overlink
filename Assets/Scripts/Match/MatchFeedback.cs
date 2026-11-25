@@ -19,6 +19,8 @@ namespace Overlink.Match
         const string ReduceShakeKey = "Overlink.Settings.ReduceShake";
         const string ReduceFlashKey = "Overlink.Settings.ReduceFlash";
         const string PostFxKey = "Overlink.Settings.PostFX";
+        const string ShakeIntensityKey = "Overlink.Settings.ShakeIntensity";
+        const string FlashIntensityKey = "Overlink.Settings.FlashIntensity";
 
         static MatchFeedback instance;
 
@@ -94,7 +96,7 @@ namespace Overlink.Match
             if (flashImage != null)
             {
                 Color color = flashColor;
-                color.a = flash * (ReduceFlashEnabled() ? 0.35f : 1f);
+                color.a = flash * (ReduceFlashEnabled() ? 0.35f : 1f) * FlashIntensity();
                 flashImage.color = color;
             }
         }
@@ -176,7 +178,7 @@ namespace Overlink.Match
                 float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, duration));
                 effect.transform.localScale = Vector3.one * Mathf.Lerp(0.65f, 1.3f, 1f - (1f - t) * (1f - t));
                 Color faded = color;
-                faded.a *= (1f - t) * (ReduceFlashEnabled() ? 0.4f : 1f);
+                faded.a *= (1f - t) * (ReduceFlashEnabled() ? 0.4f : 1f) * FlashIntensity();
                 line.startColor = faded;
                 line.endColor = faded;
                 yield return null;
@@ -189,6 +191,7 @@ namespace Overlink.Match
         {
             if (ReduceShakeEnabled())
                 amount *= 0.35f;
+            amount *= PlayerPrefs.GetFloat(ShakeIntensityKey, 1f);
             trauma = Mathf.Clamp01(trauma + amount);
         }
 
@@ -199,6 +202,7 @@ namespace Overlink.Match
 
         bool ReduceShakeEnabled() => PlayerPrefs.GetInt(ReduceShakeKey, 0) != 0;
         bool ReduceFlashEnabled() => PlayerPrefs.GetInt(ReduceFlashKey, 0) != 0;
+        float FlashIntensity() => PlayerPrefs.GetFloat(FlashIntensityKey, 1f);
 
         static void ApplyPostFxPreference()
         {

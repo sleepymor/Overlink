@@ -34,11 +34,12 @@ namespace Overlink.Net
         public const string KeyCompleted = "profile_completed";
         public const string KeyVersion = "profile_version";
         public const string KeyCreatedAt = "profile_created_at";
+        public const string KeyTutorialCompleted = "profile_tutorial_completed";
 
         static readonly HashSet<string> AllKeys = new HashSet<string>
         {
             KeyUsername, KeyTag, KeyAgeConfirmed, KeyEmail, KeyEmailVerified,
-            KeyCompleted, KeyVersion, KeyCreatedAt
+            KeyCompleted, KeyVersion, KeyCreatedAt, KeyTutorialCompleted
         };
 
         /// <summary>The profile loaded from the cloud, or null when signed out / never set up.</summary>
@@ -143,7 +144,8 @@ namespace Overlink.Net
                     emailVerified = ReadBool(data, KeyEmailVerified),
                     profileCompleted = ReadBool(data, KeyCompleted),
                     profileVersion = ReadInt(data, KeyVersion, PlayerProfile.CurrentVersion),
-                    createdAt = ReadLong(data, KeyCreatedAt, 0)
+                    createdAt = ReadLong(data, KeyCreatedAt, 0),
+                    tutorialCompleted = ReadBool(data, KeyTutorialCompleted)
                 };
 
                 CurrentProfile = profile;
@@ -272,6 +274,20 @@ namespace Overlink.Net
             }
         }
 
+        /// <summary>
+        /// Records that the first-run tutorial was finished or skipped. Writes the whole live profile, so no
+        /// other field can drift during the save. Failure leaves the flag false, so the tutorial shows again.
+        /// </summary>
+        public async Task<AuthResult> MarkTutorialCompletedAsync()
+        {
+            if (CurrentProfile == null) return AuthResult.Fail(AuthErrorCode.InvalidState, "No profile to update.");
+
+            PlayerProfile updated = CurrentProfile.Clone();
+            updated.tutorialCompleted = true;
+            AuthResult result = await SaveProfileAsync(updated);
+            return result;
+        }
+
         static Dictionary<string, object> ToSaveData(PlayerProfile profile) => new Dictionary<string, object>
         {
             { KeyUsername, profile.username ?? "" },
@@ -282,6 +298,7 @@ namespace Overlink.Net
             { KeyCompleted, profile.profileCompleted },
             { KeyVersion, profile.profileVersion },
             { KeyCreatedAt, profile.createdAt },
+            { KeyTutorialCompleted, profile.tutorialCompleted },
         };
 
         // Cloud Save round-trips numbers through JSON, so an integer written as a long can come back

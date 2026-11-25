@@ -32,7 +32,7 @@ public sealed class ProgressionModule
     private const string ProtectedBattleDeckKey = "overlink_battle_deck_v1";
     // Update this server-side policy when a release becomes mandatory. Deploy the module
     // before raising the minimum.
-    private const string MinimumClientVersion = "2026.11.10";
+    private const string MinimumClientVersion = "2026.11.11";
     private const string UpdateUrl = "https://github.com/sleepymor/Overlink/releases/latest";
     private const int CurrentSchema = 3;
     private const int PackSize = 5;
@@ -57,6 +57,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("GetState")]
     public async Task<CloudStateResponse> GetState(IExecutionContext context, IGameApiClient api)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         if (BackfillStarterCredits(state))
             await SaveState(context, api, context.AccessToken!, context.PlayerId!, state);
@@ -68,6 +69,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("GetOwnBattleDeck")]
     public async Task<DeckDto> GetOwnBattleDeck(IExecutionContext context, IGameApiClient api)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         if (string.IsNullOrWhiteSpace(context.PlayerId) || string.IsNullOrWhiteSpace(context.AccessToken))
             throw new InvalidOperationException("An authenticated player is required.");
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
@@ -82,6 +84,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("GrantStarter")]
     public async Task<CloudStateResponse> GrantStarter(IExecutionContext context, IGameApiClient api, string faction)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         if (state.StarterGranted)
         {
@@ -102,6 +105,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("SaveDeck")]
     public async Task<CloudStateResponse> SaveDeck(IExecutionContext context, IGameApiClient api, DeckDto deck)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         if (!state.StarterGranted) throw new InvalidOperationException("Starter collection is not granted.");
         ValidateDeck(state, deck);
@@ -124,6 +128,7 @@ public sealed class ProgressionModule
     public async Task<CloudStateResponse> SetDeckSelection(IExecutionContext context, IGameApiClient api,
         string activeDeckId, string battleDeckId)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         if (!string.IsNullOrEmpty(activeDeckId) && state.Decks.All(d => d.Id != activeDeckId))
             throw new InvalidOperationException("Unknown active deck.");
@@ -150,6 +155,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("DeleteDeck")]
     public async Task<CloudStateResponse> DeleteDeck(IExecutionContext context, IGameApiClient api, string deckId)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         if (string.IsNullOrWhiteSpace(deckId)) throw new InvalidOperationException("Deck id is required.");
         int removed = state.Decks.RemoveAll(deck => deck.Id == deckId);
@@ -169,6 +175,7 @@ public sealed class ProgressionModule
     [CloudCodeFunction("DeleteAllDecks")]
     public async Task<CloudStateResponse> DeleteAllDecks(IExecutionContext context, IGameApiClient api)
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         state.Decks.Clear();
         state.ActiveDeckId = "";
@@ -182,6 +189,7 @@ public sealed class ProgressionModule
     public async Task<CloudStateResponse> OpenPack(IExecutionContext context, IGameApiClient api,
         int packCount = 1, string requestId = "")
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         string operationId = NormalizeRequestId(requestId, "Pack opening");
         int count = packCount == 10 ? 10 : packCount == 1 ? 1 : 0;
@@ -223,6 +231,7 @@ public sealed class ProgressionModule
     public async Task<CloudStateResponse> OpenLoyaltyPack(IExecutionContext context, IGameApiClient api,
         string requestId = "")
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         string operationId = NormalizeRequestId(requestId, "Loyalty pack opening");
         if (state.PackOpenReceipts.TryGetValue(operationId, out PackOpenReceiptDto previous))
@@ -258,6 +267,7 @@ public sealed class ProgressionModule
     public async Task<CloudStateResponse> PurchasePack(IExecutionContext context, IGameApiClient api,
         int packCount = 1, string requestId = "")
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         PlayerState state = await LoadState(context, api, context.AccessToken!, context.PlayerId!);
         int count = packCount == 10 ? 10 : packCount == 1 ? 1 : 0;
         if (count == 0) throw new InvalidOperationException("Pack purchase must be for one or ten packs.");
@@ -304,6 +314,7 @@ public sealed class ProgressionModule
     public async Task<CloudStateResponse> ReportMatch(IExecutionContext context, IGameApiClient api,
         string matchId, string result, bool versusAi, string opponentPlayerId = "")
     {
+        await EmailVerificationModule.RequireVerifiedAsync(context, api);
         if (string.IsNullOrWhiteSpace(matchId)) throw new InvalidOperationException("Match id is required.");
         string normalized = NormalizeResult(result);
         PlayerState current = await LoadState(context, api, context.AccessToken!, context.PlayerId!);

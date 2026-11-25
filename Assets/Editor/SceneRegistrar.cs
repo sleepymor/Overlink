@@ -25,6 +25,7 @@ namespace Overlink.Editor
             ("Assets/Scenes/RevealGacha.unity",    true, false),
             ("Assets/Scenes/Collection.unity",     true, false),
             ("Assets/Scenes/Settings.unity",       true, false),
+            ("Assets/Scenes/Tutorial.unity",       true, false),
             ("Assets/Scenes/NetPresenceDemo.unity",true, false),
             ("Assets/Scenes/CardPresentationPreview.unity", true, false),
             ("Assets/Scenes/CardPresentationLegendaryPreview.unity", true, false),

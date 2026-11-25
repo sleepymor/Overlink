@@ -73,6 +73,33 @@ namespace Overlink.Net
                 new Dictionary<string, object> { { "clientVersion", version ?? "" } });
         }
 
+        public Task<EmailVerificationState> GetEmailVerifiedAsync()
+        {
+            RequireSignedIn();
+            return CallAsync<EmailVerificationState>("GetEmailVerified", null);
+        }
+
+        public Task<EmailVerificationState> RequestEmailCodeAsync(string email)
+        {
+            RequireSignedIn();
+            return CallAsync<EmailVerificationState>("RequestEmailCode",
+                new Dictionary<string, object> { { "email", email ?? "" } });
+        }
+
+        public Task<EmailVerificationState> VerifyEmailCodeAsync(string email, string code)
+        {
+            RequireSignedIn();
+            return CallAsync<EmailVerificationState>("VerifyEmailCode",
+                new Dictionary<string, object> { { "email", email ?? "" }, { "code", code ?? "" } });
+        }
+
+        public Task<EmailVerificationState> VerifyGoogleEmailAsync(string idToken)
+        {
+            RequireSignedIn();
+            return CallAsync<EmailVerificationState>("VerifyGoogleEmail",
+                new Dictionary<string, object> { { "idToken", idToken ?? "" } });
+        }
+
         public async Task<CloudPlayerState> LoadAsync()
         {
             RequireSignedIn();

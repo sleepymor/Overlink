@@ -140,6 +140,32 @@ namespace Overlink.UI
             return tmp;
         }
 
+        /// <summary>
+        /// Selectable tab: solid cyan when active, dark with bright text otherwise. Shared by the binder's
+        /// CARD / DECK tabs and the deck builder's faction buttons.
+        /// </summary>
+        public static void StyleTab(Button tab, bool active)
+        {
+            if (tab == null) return;
+            Color fill = active ? Primary : Card;
+            Color hot = active ? new Color(0.196f, 1f, 1f, 1f) : new Color(0.16f, 0.22f, 0.29f, 1f);
+            Color pressed = active ? new Color(0.126f, 0.683f, 0.740f, 1f) : new Color(0.10f, 0.32f, 0.48f, 1f);
+
+            // Button transitions repaint the graphic from its colour block, so the block has to carry the
+            // active state too. Setting only the graphic is overwritten the next time the button changes state.
+            ColorBlock colors = tab.colors;
+            colors.normalColor = fill;
+            colors.highlightedColor = hot;
+            colors.pressedColor = pressed;
+            colors.selectedColor = hot;
+            tab.colors = colors;
+
+            Image background = tab.GetComponent<Image>();
+            if (background != null) background.color = fill;
+            TMP_Text label = tab.GetComponentInChildren<TMP_Text>(true);
+            if (label != null) label.color = active ? new Color(0.03f, 0.08f, 0.11f, 1f) : TextBright;
+        }
+
         public static GameObject Button(string name, Transform parent, string label, Style style,
             float fontSize = 17f)
         {
@@ -339,7 +365,7 @@ namespace Overlink.UI
             return tmp;
         }
 
-        static TMP_FontAsset DisplayFont
+        internal static TMP_FontAsset DisplayFont
         {
             get
             {

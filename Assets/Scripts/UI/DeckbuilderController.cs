@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Overlink.Cards;
 using Overlink.Core;
 using Overlink.Net;
 using Overlink.Persistence;
@@ -15,7 +16,7 @@ using UnityEngine.UI;
 namespace Overlink.UI
 {
     /// <summary>
-    /// Functional deck builder with faction filter, add/remove with 3-copy limit,
+    /// Functional deck builder with faction, type, rarity and sort filters over a card grid, add/remove with 3-copy limit,
     /// 30-40 card size validation, cost curve visualization, and multiple saved decks in the shared
     /// <see cref="DeckLibrary"/> store (the same records the binder shows and edits).
     /// <para>
@@ -40,17 +41,22 @@ namespace Overlink.UI
         const float CostBarSpacing = 6f;
         const float CostBarMaxHeight = 62f;
         const float CostBarBaseline = 26f;
+        const float CardTileWidth = 212f;
+        const float CardTileHeight = 264f;
+        const int CollectionColumns = 4;
+        static readonly CardType[] TypeOrder = { CardType.Unit, CardType.Ability, CardType.Relay, CardType.Protocol };
+        static readonly string[] SortNames = { "COST", "NAME", "RARITY" };
 
         // UI references (created at runtime)
         private Button btnBack;
-        private Button btnPrevDeck;
-        private Button btnNextDeck;
-        private Button btnNewDeck;
         private TMP_InputField deckNameInput;
         private TMP_Text titleLabel;
         private Button btnFactionFsti;
         private Button btnFactionFrti;
         private Button btnFactionFpb;
+        private Button btnTypeFilter;
+        private Button btnRarityFilter;
+        private Button btnSortFilter;
         private ScrollRect collectionScroll;
         private RectTransform collectionContent;
         private ScrollRect deckScroll;
@@ -58,7 +64,6 @@ namespace Overlink.UI
         private TMP_Text collectionTitleLabel;
         private TMP_Text deckSizeLabel;
         private TMP_Text validationLabel;
-        private TMP_Text deckHintLabel;
         private Button btnSave;
         private Button btnLoad;
         private Button btnClear;
@@ -75,7 +80,12 @@ namespace Overlink.UI
         private readonly TMP_Text[] costBarCounts = new TMP_Text[11];
 
         // State
+        [SerializeField] private Sprite backgroundArt;
+
         private Faction selectedFaction = Faction.Fsti;
+        private int typeFilter;   // 0 = all, otherwise TypeOrder[typeFilter - 1]
+        private int rarityFilter; // 0 = all, otherwise (Rarity)(rarityFilter - 1)
+        private int sortMode;     // index into SortNames
         private Dictionary<string, int> currentDeck = new Dictionary<string, int>(); // cardId -> count
         private IReadOnlyList<CardDefinition> allCards;
         private string activeDeckId = string.Empty;
@@ -244,6 +254,22 @@ namespace Overlink.UI
             bgImage.color = new Color(0.05f, 0.067f, 0.09f, 1f);
             bgImage.raycastTarget = false;
 
+            // Signal bay art over the dark base. Letterboxing on other aspect ratios shows the base colour.
+            if (backgroundArt != null)
+            {
+                GameObject artObj = new GameObject("Background Art");
+                RectTransform artRect = artObj.AddComponent<RectTransform>();
+                artRect.SetParent(bgRect, false);
+                artRect.anchorMin = Vector2.zero;
+                artRect.anchorMax = Vector2.one;
+                artRect.offsetMin = Vector2.zero;
+                artRect.offsetMax = Vector2.zero;
+                Image art = artObj.AddComponent<Image>();
+                art.sprite = backgroundArt;
+                art.preserveAspect = true;
+                art.raycastTarget = false;
+            }
+
             // Main container
             GameObject mainObj = new GameObject("Main Container");
             RectTransform mainRect = mainObj.AddComponent<RectTransform>();
@@ -259,7 +285,7 @@ namespace Overlink.UI
 
             // Back button (top-left). Centre pivot means the position is the centre, so x = 20 + 75
             // keeps the whole box on screen where a raw (20, -20) used to clip half of it away.
-            btnBack = CreateButton(mainRect, "Btn_Back", "\u2190 MAIN MENU", new Vector2(0, 1), new Vector2(0, 1),
+            btnBack = CreateButton(mainRect, "Btn_Back", "BACK TO MENU", new Vector2(0, 1), new Vector2(0, 1),
                 new Vector2(95, -26), new Vector2(150, 40));
             // Top-most in the container: the exit is the one control that must never end up underneath
             // something a later layout change drops into the header band.
@@ -274,69 +300,41 @@ namespace Overlink.UI
             deckBarRect.pivot = new Vector2(0f, 1f);
             deckBarRect.anchoredPosition = new Vector2(-620, -40);
             deckBarRect.sizeDelta = new Vector2(330, 60);
-            deckBar.GetComponent<Image>().color = new Color(0.12f, 0.16f, 0.21f, 1f);
-            deckHintLabel = CreateLabel(mainRect, "Deck Hint", "", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-620, -108), new Vector2(360, 18), 12);
-            deckHintLabel.alignment = TextAlignmentOptions.Left;
-            deckHintLabel.color = new Color(0.65f, 0.75f, 0.84f);
-
-            btnPrevDeck = CreateButton(deckBar.transform, "Btn_PrevDeck", "<", new Vector2(0, 0.5f),
-                new Vector2(0, 0.5f), new Vector2(30, 0), new Vector2(40, 40));
-            btnPrevDeck.onClick.AddListener(() => CycleDeck(-1));
+            deckBar.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
 
             deckNameInput = CreateInputField(deckBar.transform, "Deck Name", string.Empty, new Vector2(0, 0), new Vector2(0, 0));
             RectTransform nameRect = deckNameInput.GetComponent<RectTransform>();
             nameRect.anchorMin = new Vector2(0, 0);
             nameRect.anchorMax = new Vector2(1, 1);
-            nameRect.offsetMin = new Vector2(64, 6);
-            nameRect.offsetMax = new Vector2(-64, -6);
+            nameRect.offsetMin = new Vector2(0, 6);
+            nameRect.offsetMax = new Vector2(0, -6);
 
-            btnNextDeck = CreateButton(deckBar.transform, "Btn_NextDeck", ">", new Vector2(1, 0.5f),
-                new Vector2(1, 0.5f), new Vector2(-30, 0), new Vector2(40, 40));
-            btnNextDeck.onClick.AddListener(() => CycleDeck(1));
-
-            btnNewDeck = CreateButton(mainRect, "Btn_NewDeck", "NEW DECK", new Vector2(1f, 1f),
-                new Vector2(1f, 1f), new Vector2(-150, -58), new Vector2(250, 50));
-            btnNewDeck.onClick.AddListener(OnNewDeckClicked);
-
-            // Faction filter: three buttons, one per faction. Changing faction with cards in the deck
-            // asks first, because the deck is single-faction.
-            GameObject factionPanel = new GameObject("Faction Selector");
-            RectTransform factionPanelRect = factionPanel.AddComponent<RectTransform>();
-            factionPanelRect.SetParent(mainRect, false);
-            factionPanelRect.anchorMin = new Vector2(0f, 1f);
-            factionPanelRect.anchorMax = new Vector2(0f, 1f);
-            factionPanelRect.pivot = new Vector2(0f, 1f);
-            factionPanelRect.anchoredPosition = new Vector2(0, -144);
-            factionPanelRect.sizeDelta = new Vector2(500, 36);
-
-            btnFactionFsti = CreateButton(factionPanelRect, "Btn_Fsti", "FSTI",
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(70, 0), new Vector2(140, 36));
-            btnFactionFsti.onClick.AddListener(() => OnFactionButtonClicked(Faction.Fsti));
-
-            btnFactionFrti = CreateButton(factionPanelRect, "Btn_Frti", "FRTI",
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(220, 0), new Vector2(140, 36));
-            btnFactionFrti.onClick.AddListener(() => OnFactionButtonClicked(Faction.Frti));
-
-            btnFactionFpb = CreateButton(factionPanelRect, "Btn_Fpb", "FPB",
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(370, 0), new Vector2(140, 36));
-            btnFactionFpb.onClick.AddListener(() => OnFactionButtonClicked(Faction.Fpb));
-
-            UpdateFactionButtonStates();
-
-            // Left panel: Card Collection table, between the header and the footer.
+            // Left panel: the card grid, with the filter row between its title and the list.
             GameObject collectionPanel = CreatePanel(mainRect, "Collection Panel",
                 new Vector2(0, 0), new Vector2(0.5f, 1),
                 new Vector2(Gutter, BottomBarHeight + Gutter),
                 new Vector2(-Gutter * 0.5f, -HeaderHeight));
+            collectionPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
             collectionTitleLabel = CreateLabel(collectionPanel.transform, "Collection Title", "CARD COLLECTION",
                 new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20, -22), new Vector2(400, 30), 22);
             collectionTitleLabel.alignment = TextAlignmentOptions.Left;
             collectionTitleLabel.rectTransform.pivot = new Vector2(0f, 1f);
 
+            BuildFilterRow(collectionPanel.transform);
+
             collectionScroll = CreateScrollView(collectionPanel.transform, "Collection Scroll",
-                Vector2.zero, Vector2.one, new Vector2(10, 10), new Vector2(-10, -60));
+                Vector2.zero, Vector2.one, new Vector2(10, 10), new Vector2(-10, -110));
             collectionContent = collectionScroll.content;
+            collectionScroll.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+            GridLayoutGroup grid = collectionContent.gameObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(CardTileWidth, CardTileHeight);
+            grid.spacing = new Vector2(8f, 8f);
+            grid.padding = new RectOffset(10, 10, 10, 10);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = CollectionColumns;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            ContentSizeFitter fitter = collectionContent.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Right panel: Current Deck, with stats and deck requirements.
             GameObject deckPanel = CreatePanel(mainRect, "Deck Panel",
@@ -360,7 +358,7 @@ namespace Overlink.UI
                 float left = 20f + i * 150f;
                 GameObject statCard = CreatePanel(deckPanel.transform, "Stat_" + i,
                     new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(left, -150), new Vector2(left + 136f, -62));
-                statCard.GetComponent<Image>().color = new Color(0.12f, 0.16f, 0.21f, 1f);
+                statCard.GetComponent<Image>().color = UiKit.Card;
                 TMP_Text statTitle = CreateLabel(statCard.transform, "Title", statTitles[i],
                     new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(12, -12), new Vector2(120, 16), 11);
                 statTitle.alignment = TextAlignmentOptions.Left;
@@ -370,7 +368,7 @@ namespace Overlink.UI
                 statValueLabels[i].alignment = TextAlignmentOptions.Left;
                 statValueLabels[i].rectTransform.offsetMin = new Vector2(12, 6);
                 statValueLabels[i].rectTransform.offsetMax = new Vector2(-12, -36);
-                statValueLabels[i].color = new Color(0.16f, 0.87f, 0.95f);
+                statValueLabels[i].color = UiKit.Primary;
             }
 
             // Empty state, shown only while the deck has no cards.
@@ -411,6 +409,8 @@ namespace Overlink.UI
             deckScroll = CreateScrollView(deckPanel.transform, "Deck Scroll",
                 Vector2.zero, Vector2.one, new Vector2(10, 150), new Vector2(-10, -160));
             deckContent = deckScroll.content;
+            deckScroll.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+            deckPanel.GetComponent<Image>().color = new Color(UiKit.Card.r, UiKit.Card.g, UiKit.Card.b, 0.6f);
             // The empty state sits over the deck scroll, so it must draw after it to be visible.
             emptyStateObject.transform.SetAsLastSibling();
 
@@ -418,13 +418,15 @@ namespace Overlink.UI
             GameObject bottomPanel = CreatePanel(mainRect, "Bottom Panel",
                 new Vector2(0, 0), new Vector2(1, 0),
                 new Vector2(Gutter, Gutter), new Vector2(-Gutter, Gutter + BottomBarHeight));
-            bottomPanel.GetComponent<Image>().color = new Color(0.06f, 0.08f, 0.11f, 1f);
+            bottomPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
 
             GameObject costCurveObj = CreatePanel(bottomPanel.transform, "Cost Curve",
                 new Vector2(0, 0), new Vector2(0.3f, 1), new Vector2(10, 10), new Vector2(-5, -10));
             costCurveObj.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
-            CreateLabel(costCurveObj.transform, "Cost Curve Title", "COST CURVE",
-                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(10, -14), new Vector2(200, 20), 13);
+            TMP_Text curveTitle = CreateLabel(costCurveObj.transform, "Cost Curve Title", "COST CURVE",
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0, -14), new Vector2(200, 20), 13);
+            curveTitle.alignment = TextAlignmentOptions.Left;
+            curveTitle.rectTransform.pivot = new Vector2(0f, 1f);
             BuildCostCurve(costCurveObj.transform);
 
             GameObject actionsPanel = CreatePanel(bottomPanel.transform, "Actions",
@@ -447,9 +449,9 @@ namespace Overlink.UI
             // The mockup's primary action is the cyan bar, so Save takes the accent fill rather than the
             // neutral button colours. Disabled state stays dark so an unsavable deck reads as blocked.
             Image saveImage = btnSave.targetGraphic as Image;
-            saveImage.color = new Color(0.16f, 0.875f, 0.949f, 1f);
+            saveImage.color = UiKit.Primary;
             var saveColors = btnSave.colors;
-            saveColors.normalColor = new Color(0.16f, 0.875f, 0.949f, 1f);
+            saveColors.normalColor = UiKit.Primary;
             saveColors.highlightedColor = new Color(0.196f, 1f, 1f, 1f);
             saveColors.pressedColor = new Color(0.126f, 0.683f, 0.74f, 1f);
             saveColors.selectedColor = new Color(0.196f, 1f, 1f, 1f);
@@ -468,7 +470,6 @@ namespace Overlink.UI
 
             // Header controls must remain above panel backgrounds if the canvas is narrow.
             deckBar.transform.SetAsLastSibling();
-            factionPanel.transform.SetAsLastSibling();
             btnBack.transform.SetAsLastSibling();
             BuildConfirmation(mainRect);
             ConfigureNavigation();
@@ -481,17 +482,17 @@ namespace Overlink.UI
         /// </summary>
         void ConfigureNavigation()
         {
-            Link(btnBack, null, btnPrevDeck, btnNewDeck, btnPrevDeck);
-            Link(btnPrevDeck, btnBack, btnFactionFsti, btnNewDeck, deckNameInput);
-            Link(deckNameInput, btnBack, btnFactionFsti, btnPrevDeck, btnNextDeck);
-            Link(btnNextDeck, btnBack, btnFactionFsti, deckNameInput, btnNewDeck);
-            Link(btnNewDeck, btnBack, btnFactionFsti, btnNextDeck, btnFactionFsti);
-            Link(btnFactionFsti, btnPrevDeck, btnSave, btnBack, btnFactionFrti);
-            Link(btnFactionFrti, btnPrevDeck, btnSave, btnFactionFsti, btnFactionFpb);
-            Link(btnFactionFpb, btnPrevDeck, btnSave, btnFactionFrti, btnFactionFsti);
-            Link(btnSave, btnFactionFsti, null, btnClear, btnLoad);
-            Link(btnLoad, btnFactionFrti, null, btnSave, btnClear);
-            Link(btnClear, btnFactionFpb, null, btnLoad, btnSave);
+            Link(btnBack, null, deckNameInput, null, deckNameInput);
+            Link(deckNameInput, btnBack, btnFactionFsti, null, null);
+            Link(btnFactionFsti, deckNameInput, btnTypeFilter, btnBack, btnFactionFrti);
+            Link(btnFactionFrti, deckNameInput, btnTypeFilter, btnFactionFsti, btnFactionFpb);
+            Link(btnFactionFpb, deckNameInput, btnTypeFilter, btnFactionFrti, btnTypeFilter);
+            Link(btnTypeFilter, btnFactionFsti, btnSave, btnFactionFpb, btnRarityFilter);
+            Link(btnRarityFilter, btnFactionFsti, btnSave, btnTypeFilter, btnSortFilter);
+            Link(btnSortFilter, btnFactionFsti, btnSave, btnRarityFilter, btnSave);
+            Link(btnSave, btnSortFilter, null, btnClear, btnLoad);
+            Link(btnLoad, btnRarityFilter, null, btnSave, btnClear);
+            Link(btnClear, btnTypeFilter, null, btnLoad, btnSave);
         }
 
         static void Link(Selectable target, Selectable up, Selectable down, Selectable left, Selectable right)
@@ -581,25 +582,13 @@ namespace Overlink.UI
             SetFactionStyle(btnFactionFpb, selectedFaction == Faction.Fpb);
         }
 
-        static void SetFactionStyle(Button button, bool selected)
-        {
-            if (button == null) return;
-            var colors = button.colors;
-            colors.normalColor = selected ? new Color(0.16f, 0.48f, 0.7f) : new Color(0.16f, 0.22f, 0.29f);
-            colors.selectedColor = selected ? new Color(0.22f, 0.58f, 0.8f) : new Color(0.25f, 0.36f, 0.46f);
-            button.colors = colors;
-            // Selectable's color transition controls the tint; update it immediately after a switch.
-            button.targetGraphic.CrossFadeColor(colors.normalColor, 0f, true, true);
-        }
+        static void SetFactionStyle(Button button, bool selected) => UiKit.StyleTab(button, selected);
 
         void RefreshCollection()
         {
             ClearChildren(collectionContent);
 
-            var factionCards = CollectionData.DeckPool(selectedFaction)
-                .OrderBy(c => c.Cost)
-                .ThenBy(c => c.Name)
-                .ToList();
+            var cards = FilteredCollection();
 
             int total = TotalCards();
             bool atCap = total >= DeckValidator.MaxDeckSize;
@@ -612,74 +601,244 @@ namespace Overlink.UI
                 collectionTitleLabel.color = atCap ? new Color(1f, 0.78f, 0.35f) : Color.white;
             }
 
-            float yPos = -8f;
-
-            BuildCollectionHeader(collectionContent, yPos);
-            yPos -= RowHeight;
-
-            foreach (var card in factionCards)
+            foreach (var card in cards)
             {
-                GameObject cardRow = new GameObject($"Card_{card.Id}");
-                RectTransform rowRect = cardRow.AddComponent<RectTransform>();
-                rowRect.SetParent(collectionContent, false);
-                rowRect.anchorMin = new Vector2(0, 1);
-                rowRect.anchorMax = new Vector2(1, 1);
-                rowRect.pivot = new Vector2(0, 1);
-                rowRect.anchoredPosition = new Vector2(0, yPos);
-                rowRect.sizeDelta = new Vector2(-10, 35); // -10 for padding
-
-                Image rowImage = cardRow.AddComponent<Image>();
-                rowImage.color = new Color(1f, 1f, 1f, 0.03f);
-                rowImage.raycastTarget = false;
-
-                // Units carry ATK / HP / SHD. Other card types have no combat stats, so the mockup's
-                // "stat data unavailable" dash stands in for them.
-                bool hasStats = card.Type == CardType.Unit;
-                string Stat(int value) => hasStats ? value.ToString() : "\u2014";
-
-                CreateCell(rowRect, "NP", card.Cost.ToString("00"), 0, TextAlignmentOptions.Left, 16, new Color(0.35f, 0.85f, 1f));
-                CreateCell(rowRect, "Name", card.Name, 1, TextAlignmentOptions.Left, 16, Color.white);
-                CreateCell(rowRect, "Atk", Stat(card.Atk), 2, TextAlignmentOptions.Center, 14, new Color(0.35f, 0.85f, 1f));
-                CreateCell(rowRect, "Hp", Stat(card.Hp), 3, TextAlignmentOptions.Center, 14, new Color(0.35f, 0.85f, 1f));
-                CreateCell(rowRect, "Shd", Stat(card.Shield), 4, TextAlignmentOptions.Center, 14, new Color(0.35f, 0.85f, 1f));
-                CreateCell(rowRect, "Rarity", card.Rarity.ToString().ToUpperInvariant(), 5, TextAlignmentOptions.Left, 12, RarityColor(card.Rarity));
-
-                // In-deck count, out of the copy limit, as the mockup shows it.
                 int currentCount = currentDeck.ContainsKey(card.Id) ? currentDeck[card.Id] : 0;
-                TMP_Text countText = CreateCell(rowRect, "Count",
-                    $"{currentCount} / {DeckValidator.MaxCopiesPerCard}", 6, TextAlignmentOptions.Center, 14, Color.white);
-
-                // Add button, pinned to the row's right edge.
-                Button addBtn = CreateButton(rowRect, "Btn_Add", "+",
-                    new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-24, 0), new Vector2(40, 30));
-                string cardId = card.Id;
-                addBtn.onClick.AddListener(() => AddCard(cardId));
-                // Both limits bite here: the third copy, and the fortieth card.
-                addBtn.interactable = currentCount < DeckValidator.MaxCopiesPerCard && !atCap;
+                bool canAdd = currentCount < DeckValidator.MaxCopiesPerCard && !atCap;
+                GameObject tile = BuildCardTile(card, currentCount, canAdd);
 
                 if (pendingPopCardId == card.Id)
                 {
-                    UiTween.Pop(countText.transform, new Vector3(1.4f, 1.4f, 1f));
+                    UiTween.Pop(tile.transform, new Vector3(1.08f, 1.08f, 1f));
                     pendingPopCardId = null;
                 }
 
                 if (pendingFlashCardId == card.Id)
                 {
                     var hot = new Color(0.35f, 0.62f, 0.95f, 0.30f);
-                    var rest = new Color(1f, 1f, 1f, 0.03f);
-                    Image captured = rowImage;
+                    Image captured = tile.GetComponent<Image>();
                     captured.color = hot;
                     UiTween.On(captured.transform).PlayStep(0.45f, UiEase.OutCubic,
-                        k => captured.color = Color.Lerp(hot, rest, k));
+                        k => captured.color = Color.Lerp(hot, TileRestColor, k));
                     pendingFlashCardId = null;
                 }
-
-                yPos -= RowHeight;
             }
 
-            // Set content size to fit the header and every card, with padding.
-            float totalHeight = (factionCards.Count + 1) * RowHeight + 16f;
-            collectionContent.sizeDelta = new Vector2(0, totalHeight);
+            if (cards.Count == 0 && collectionTitleLabel != null)
+                collectionTitleLabel.text = "NO CARDS MATCH THE FILTERS";
+        }
+
+        static readonly Color TileRestColor = new Color(0.07f, 0.105f, 0.17f, 1f);
+
+        /// <summary>The faction's pool after the type, rarity and sort filters. Faction is always applied:
+        /// a deck is single-faction, so the grid only ever shows the faction being built.</summary>
+        List<CardDefinition> FilteredCollection()
+        {
+            var cards = CollectionData.DeckPool(selectedFaction).AsEnumerable();
+            if (typeFilter > 0) cards = cards.Where(c => c.Type == TypeOrder[typeFilter - 1]);
+            if (rarityFilter > 0) cards = cards.Where(c => (int)c.Rarity == rarityFilter - 1);
+
+            switch (sortMode)
+            {
+                case 1: cards = cards.OrderBy(c => c.Name).ThenBy(c => c.Cost); break;
+                case 2: cards = cards.OrderByDescending(c => c.Rarity).ThenBy(c => c.Cost).ThenBy(c => c.Name); break;
+                default: cards = cards.OrderBy(c => c.Cost).ThenBy(c => c.Name); break;
+            }
+            return cards.ToList();
+        }
+
+        /// <summary>
+        /// One binder-style tile: the card's art, a rarity outline, the cost badge, the name and type line,
+        /// and the copy count. The whole tile is the add target, so a click adds one copy.
+        /// </summary>
+        GameObject BuildCardTile(CardDefinition card, int currentCount, bool canAdd)
+        {
+            GameObject tile = new GameObject($"Card_{card.Id}");
+            RectTransform rect = tile.AddComponent<RectTransform>();
+            rect.SetParent(collectionContent, false);
+            rect.sizeDelta = new Vector2(CardTileWidth, CardTileHeight);
+
+            Image background = tile.AddComponent<Image>();
+            background.color = currentCount > 0 ? new Color(0.09f, 0.16f, 0.23f, 1f) : TileRestColor;
+            background.raycastTarget = true;
+
+            Outline outline = tile.AddComponent<Outline>();
+            outline.effectColor = RarityColor(card.Rarity);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            Button button = tile.AddComponent<Button>();
+            button.targetGraphic = background;
+            var colors = button.colors;
+            colors.highlightedColor = new Color(0.16f, 0.24f, 0.33f, 1f);
+            colors.pressedColor = new Color(0.10f, 0.32f, 0.48f, 1f);
+            colors.disabledColor = new Color(0.06f, 0.07f, 0.09f, 1f);
+            button.colors = colors;
+            string cardId = card.Id;
+            button.onClick.AddListener(() => AddCard(cardId));
+            button.interactable = canAdd;
+
+            // Art fills the upper part of the tile, under a name strip.
+            GameObject artObj = new GameObject("Art", typeof(RectTransform));
+            artObj.transform.SetParent(tile.transform, false);
+            RectTransform artRect = artObj.GetComponent<RectTransform>();
+            artRect.anchorMin = new Vector2(0f, 0.5f);
+            artRect.anchorMax = new Vector2(1f, 1f);
+            artRect.offsetMin = new Vector2(6f, 0f);
+            artRect.offsetMax = new Vector2(-6f, -6f);
+            Image art = artObj.AddComponent<Image>();
+            art.raycastTarget = false;
+            art.preserveAspect = true;
+            Sprite sprite = CardLibraryBootstrap.ArtFor(card.Id);
+            art.sprite = sprite;
+            art.color = sprite != null ? Color.white : new Color(0.14f, 0.2f, 0.27f, 1f);
+
+            // Bands are fractions of the 264px tile, bottom-up: name, type/rarity, stats, then the text.
+            TMP_Text name = CreateLabel(tile.transform, "Name", card.Name,
+                new Vector2(0f, 0.386f), new Vector2(1f, 0.485f), Vector2.zero, Vector2.zero, 15);
+            name.alignment = TextAlignmentOptions.Left;
+            name.enableWordWrapping = false;
+            name.overflowMode = TextOverflowModes.Ellipsis;
+            name.rectTransform.offsetMin = new Vector2(8f, 0f);
+            name.rectTransform.offsetMax = new Vector2(-8f, 0f);
+
+            TMP_Text meta = CreateLabel(tile.transform, "Meta",
+                card.Type.ToString().ToUpperInvariant() + " / " + card.Rarity.ToString().ToUpperInvariant(),
+                new Vector2(0f, 0.318f), new Vector2(1f, 0.379f), Vector2.zero, Vector2.zero, 10);
+            meta.alignment = TextAlignmentOptions.Left;
+            meta.color = RarityColor(card.Rarity);
+            meta.rectTransform.offsetMin = new Vector2(8f, 0f);
+            meta.rectTransform.offsetMax = new Vector2(-8f, 0f);
+
+            bool isUnit = card.Type == CardType.Unit;
+            if (isUnit)
+            {
+                TMP_Text stats = CreateLabel(tile.transform, "Stats",
+                    "ATK " + card.Atk + "   SHD " + card.Shield + "   HP " + card.Hp,
+                    new Vector2(0f, 0.235f), new Vector2(1f, 0.311f), Vector2.zero, Vector2.zero, 12);
+                stats.alignment = TextAlignmentOptions.Left;
+                stats.color = new Color(0.35f, 0.85f, 1f);
+                stats.enableWordWrapping = false;
+                stats.rectTransform.offsetMin = new Vector2(8f, 0f);
+                stats.rectTransform.offsetMax = new Vector2(-8f, 0f);
+            }
+
+            // Units show their ability; other cards show what they do.
+            TMP_Text body = CreateLabel(tile.transform, "Body", card.AbilityText ?? string.Empty,
+                new Vector2(0f, 0.015f), new Vector2(1f, isUnit ? 0.227f : 0.303f), Vector2.zero, Vector2.zero, 11);
+            body.alignment = TextAlignmentOptions.TopLeft;
+            body.color = new Color(0.8f, 0.86f, 0.92f);
+            body.overflowMode = TextOverflowModes.Ellipsis;
+            body.rectTransform.offsetMin = new Vector2(8f, 0f);
+            body.rectTransform.offsetMax = new Vector2(-8f, 0f);
+
+            // Cost badge, top-left, as the binder's NP corner.
+            TMP_Text cost = CreateLabel(tile.transform, "Cost", "NP " + card.Cost.ToString("00"),
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(6f, -6f), new Vector2(64f, 24f), 16);
+            cost.rectTransform.pivot = new Vector2(0f, 1f);
+            cost.color = new Color(0.35f, 0.85f, 1f);
+            cost.fontStyle = FontStyles.Bold;
+
+            // Copies in the deck, top-right. Shown only when the card is in the deck.
+            if (currentCount > 0)
+            {
+                TMP_Text copies = CreateLabel(tile.transform, "InDeck", "x" + currentCount + " / " + DeckValidator.MaxCopiesPerCard,
+                    new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-6f, -6f), new Vector2(90f, 22f), 13);
+                copies.rectTransform.pivot = new Vector2(1f, 1f);
+                copies.alignment = TextAlignmentOptions.Right;
+                copies.color = UiKit.Primary;
+                copies.fontStyle = FontStyles.Bold;
+            }
+
+            return tile;
+        }
+
+        /// <summary>
+        /// Faction buttons, type / rarity / sort filters for the card grid. Faction stays a separate
+        /// control because it clears the deck; the other three only narrow the view.
+        /// </summary>
+        void BuildFilterRow(Transform parent)
+        {
+            GameObject row = new GameObject("Filter Row", typeof(RectTransform));
+            RectTransform rowRect = row.GetComponent<RectTransform>();
+            rowRect.SetParent(parent, false);
+            rowRect.anchorMin = new Vector2(0f, 1f);
+            rowRect.anchorMax = new Vector2(1f, 1f);
+            rowRect.pivot = new Vector2(0f, 1f);
+            rowRect.anchoredPosition = new Vector2(20f, -58f);
+            rowRect.sizeDelta = new Vector2(-40f, 40f);
+
+            // Centres are measured from the row's left edge; the six buttons total 840 of the ~885 available.
+            btnFactionFsti = CreateButton(rowRect, "Btn_Fsti", "FSTI",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(55f, 0f), new Vector2(110f, 34f));
+            btnFactionFsti.onClick.AddListener(() => OnFactionButtonClicked(Faction.Fsti));
+
+            btnFactionFrti = CreateButton(rowRect, "Btn_Frti", "FRTI",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(173f, 0f), new Vector2(110f, 34f));
+            btnFactionFrti.onClick.AddListener(() => OnFactionButtonClicked(Faction.Frti));
+
+            btnFactionFpb = CreateButton(rowRect, "Btn_Fpb", "FPB",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(291f, 0f), new Vector2(110f, 34f));
+            btnFactionFpb.onClick.AddListener(() => OnFactionButtonClicked(Faction.Fpb));
+
+            btnTypeFilter = CreateButton(rowRect, "Btn_Type", "TYPE - ANY",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(429f, 0f), new Vector2(150f, 34f));
+            btnTypeFilter.onClick.AddListener(CycleType);
+
+            btnRarityFilter = CreateButton(rowRect, "Btn_Rarity", "RARITY - ANY",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(597f, 0f), new Vector2(170f, 34f));
+            btnRarityFilter.onClick.AddListener(CycleRarity);
+
+            btnSortFilter = CreateButton(rowRect, "Btn_Sort", "SORT - COST",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(765f, 0f), new Vector2(150f, 34f));
+            btnSortFilter.onClick.AddListener(CycleSort);
+
+            UpdateFactionButtonStates();
+            RefreshFilterLabels();
+        }
+
+        void CycleType()
+        {
+            typeFilter = (typeFilter + 1) % (TypeOrder.Length + 1);
+            RefreshFilterLabels();
+            RefreshUI();
+        }
+
+        void CycleRarity()
+        {
+            rarityFilter = (rarityFilter + 1) % 5;
+            RefreshFilterLabels();
+            RefreshUI();
+        }
+
+        void CycleSort()
+        {
+            sortMode = (sortMode + 1) % SortNames.Length;
+            RefreshFilterLabels();
+            RefreshUI();
+        }
+
+        // Filter labels use the binder's "TYPE - ANY" wording and cyan text on a dark chip.
+        void RefreshFilterLabels()
+        {
+            if (btnTypeFilter != null)
+            {
+                string type = typeFilter == 0 ? "ANY" : TypeOrder[typeFilter - 1].ToString().ToUpperInvariant();
+                SetFilterText(btnTypeFilter, "TYPE - " + type);
+            }
+            if (btnRarityFilter != null)
+            {
+                string rarity = rarityFilter == 0 ? "ANY" : ((Rarity)(rarityFilter - 1)).ToString().ToUpperInvariant();
+                SetFilterText(btnRarityFilter, "RARITY - " + rarity);
+            }
+            if (btnSortFilter != null)
+                SetFilterText(btnSortFilter, "SORT - " + SortNames[sortMode]);
+        }
+
+        static void SetFilterText(Button chip, string text)
+        {
+            TMP_Text label = chip.GetComponentInChildren<TMP_Text>();
+            label.text = text;
+            label.color = UiKit.Primary;
         }
 
         void RefreshDeck()
@@ -702,7 +861,7 @@ namespace Overlink.UI
                 deckCountLabel.text = totalCount.ToString("00") + " / 30\u201340";
                 deckCountLabel.color = totalCount > DeckValidator.MaxDeckSize
                     ? new Color(1f, 0.3f, 0.3f)
-                    : new Color(0.16f, 0.875f, 0.949f, 1f);
+                    : UiKit.Primary;
             }
             RefreshDeckStats(deckCards.Select(x => (x.Card, x.Count)), totalCount);
             if (emptyStateObject != null) emptyStateObject.SetActive(totalCount == 0);
@@ -777,7 +936,7 @@ namespace Overlink.UI
             statValueLabels[0].text = atk.ToString();
             statValueLabels[1].text = hp.ToString();
             statValueLabels[2].text = shield.ToString();
-            statValueLabels[3].text = totalCount > 0 ? (costTotal / (float)totalCount).ToString("0.0") : "\u2014";
+            statValueLabels[3].text = totalCount > 0 ? (costTotal / (float)totalCount).ToString("0.0") : "-";
         }
 
         void RefreshValidation()
@@ -816,18 +975,17 @@ namespace Overlink.UI
         /// </summary>
         void BuildCostCurve(Transform parent)
         {
-            float totalWidth = (CostBarWidth + CostBarSpacing) * costBars.Length;
-            float startX = -totalWidth / 2f;
-
+            // Bars start at the panel's left edge, so the first bar lines up with the title and the
+            // BACK TO MENU button above it.
             for (int cost = 0; cost < costBars.Length; cost++)
             {
-                float xPos = startX + (CostBarWidth + CostBarSpacing) * cost + CostBarWidth / 2f;
+                float xPos = (CostBarWidth + CostBarSpacing) * cost + CostBarWidth / 2f;
 
                 GameObject barObj = new GameObject($"Bar_{cost}");
                 RectTransform barRect = barObj.AddComponent<RectTransform>();
                 barRect.SetParent(parent, false);
-                barRect.anchorMin = new Vector2(0.5f, 0);
-                barRect.anchorMax = new Vector2(0.5f, 0);
+                barRect.anchorMin = new Vector2(0f, 0);
+                barRect.anchorMax = new Vector2(0f, 0);
                 barRect.pivot = new Vector2(0.5f, 0);
                 barRect.anchoredPosition = new Vector2(xPos, CostBarBaseline);
                 barRect.sizeDelta = new Vector2(CostBarWidth, 0f);
@@ -843,7 +1001,7 @@ namespace Overlink.UI
 
                 // Cost axis label stays pinned to the panel so it never rides the bar.
                 TMP_Text axis = CreateLabel(parent, $"Cost_{cost}", cost.ToString(),
-                    new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(xPos, 11), new Vector2(CostBarWidth, 14), 10);
+                    new Vector2(0f, 0), new Vector2(0f, 0), new Vector2(xPos, 11), new Vector2(CostBarWidth, 14), 10);
                 axis.raycastTarget = false;
 
                 costBars[cost] = barRect;
@@ -1053,10 +1211,9 @@ namespace Overlink.UI
             DeckLibrary.Create(string.Empty, selectedFaction);
         }
 
-        /// <summary>Binds the deck bar to the active deck: name field, position readout, arrows.</summary>
+        /// <summary>Binds the deck bar to the active deck: the name field and the title.</summary>
         void RefreshDeckIdentity()
         {
-            IReadOnlyList<DeckSummary> decks = DeckLibrary.All();
             DeckSummary active = DeckLibrary.Active;
 
             if (active == null)
@@ -1064,8 +1221,6 @@ namespace Overlink.UI
                 activeDeckId = string.Empty;
                 if (deckNameInput != null) deckNameInput.SetTextWithoutNotify(string.Empty);
                 if (titleLabel != null) titleLabel.text = "DECK BUILDER";
-                if (btnPrevDeck != null) btnPrevDeck.interactable = false;
-                if (btnNextDeck != null) btnNextDeck.interactable = false;
                 return;
             }
 
@@ -1074,79 +1229,6 @@ namespace Overlink.UI
 
             if (deckNameInput != null && (deckChanged || !deckNameInput.isFocused) && deckNameInput.text != active.Name)
                 deckNameInput.SetTextWithoutNotify(active.Name);
-
-            if (titleLabel != null)
-            {
-                int index = 0;
-                for (int i = 0; i < decks.Count; i++)
-                {
-                    if (decks[i].Id == active.Id)
-                    {
-                        index = i;
-                        break;
-                    }
-                }
-
-                titleLabel.text = decks.Count > 1
-                    ? "DECK BUILDER  \u2022  " + (index + 1) + " / " + decks.Count
-                    : "DECK BUILDER";
-            }
-
-            // With a single deck the arrows would be a no-op; disable them rather than lie about it.
-            bool many = decks.Count > 1;
-            if (btnPrevDeck != null) btnPrevDeck.interactable = many;
-            if (btnNextDeck != null) btnNextDeck.interactable = many;
-            if (deckNameInput != null && btnNewDeck != null)
-            {
-                Link(btnBack, null, many ? (Selectable)btnPrevDeck : deckNameInput, btnNewDeck, deckNameInput);
-                Link(deckNameInput, btnBack, btnFactionFsti, many ? (Selectable)btnPrevDeck : btnNewDeck,
-                    many ? (Selectable)btnNextDeck : btnNewDeck);
-                Link(btnNewDeck, btnBack, btnFactionFsti, many ? (Selectable)btnNextDeck : deckNameInput, deckNameInput);
-                Link(btnFactionFsti, deckNameInput, btnSave, btnBack, btnFactionFrti);
-                Link(btnFactionFrti, deckNameInput, btnSave, btnFactionFsti, btnFactionFpb);
-                Link(btnFactionFpb, deckNameInput, btnSave, btnFactionFrti, btnFactionFsti);
-            }
-            if (deckHintLabel != null)
-                deckHintLabel.text = many ? "Use arrows to switch decks. Drafts are kept." : "Create another deck to enable the arrows.";
-        }
-
-        /// <summary>Switches to the neighbouring saved deck, keeping unsaved edits on the one left behind.</summary>
-        void CycleDeck(int step)
-        {
-            IReadOnlyList<DeckSummary> decks = DeckLibrary.All();
-            if (decks.Count < 2) return;
-
-            CommitDeckName();
-            PersistActiveDeck();
-
-            int current = 0;
-            for (int i = 0; i < decks.Count; i++)
-            {
-                if (decks[i].Id == activeDeckId)
-                {
-                    current = i;
-                    break;
-                }
-            }
-
-            int next = ((current + step) % decks.Count + decks.Count) % decks.Count;
-            DeckLibrary.SetActive(decks[next].Id);
-            LoadDeck();
-            RefreshUI();
-        }
-
-        /// <summary>Creates an empty deck and switches to it, so decks never overwrite each other.</summary>
-        void OnNewDeckClicked()
-        {
-            CommitDeckName();
-            PersistActiveDeck();
-
-            // Blank name: the library auto-names ("Deck 3") and keeps names unique, so the player can
-            // jump straight into building and rename later.
-            string id = DeckLibrary.Create(string.Empty, selectedFaction);
-            DeckLibrary.SetActive(id);
-            LoadDeck();
-            RefreshUI();
         }
 
         /// <summary>Renames the active deck on end-edit. Blank input keeps the current name.</summary>
@@ -1334,6 +1416,7 @@ namespace Overlink.UI
             rect.sizeDelta = size;
 
             TMP_Text tmp = obj.AddComponent<TextMeshProUGUI>();
+            if (UiKit.DisplayFont != null) tmp.font = UiKit.DisplayFont;
             tmp.text = text;
             tmp.fontSize = fontSize;
             tmp.color = Color.white;
@@ -1343,53 +1426,6 @@ namespace Overlink.UI
             tmp.raycastTarget = false;
 
             return tmp;
-        }
-
-        // Collection table columns, as fractions of the row width. The Add button sits in the last
-        // 5% of the row, so the Count column stops short of it.
-        static readonly float[] CollectionColumnStart = { 0f, 0.08f, 0.42f, 0.52f, 0.62f, 0.72f, 0.86f };
-        static readonly float[] CollectionColumnEnd = { 0.08f, 0.42f, 0.52f, 0.62f, 0.72f, 0.86f, 0.95f };
-        static readonly TextAlignmentOptions[] CollectionColumnAlign =
-        {
-            TextAlignmentOptions.Left, TextAlignmentOptions.Left, TextAlignmentOptions.Center,
-            TextAlignmentOptions.Center, TextAlignmentOptions.Center, TextAlignmentOptions.Left,
-            TextAlignmentOptions.Center
-        };
-
-        void BuildCollectionHeader(Transform content, float yPos)
-        {
-            GameObject header = new GameObject("Collection Header");
-            RectTransform rect = header.AddComponent<RectTransform>();
-            rect.SetParent(content, false);
-            rect.anchorMin = new Vector2(0, 1);
-            rect.anchorMax = new Vector2(1, 1);
-            rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = new Vector2(0, yPos);
-            rect.sizeDelta = new Vector2(-10, 30);
-
-            Image background = header.AddComponent<Image>();
-            background.color = new Color(1f, 1f, 1f, 0.06f);
-            background.raycastTarget = false;
-
-            string[] titles = { "NP", "NAME", "ATK", "HP", "SHD", "RARITY", "IN DECK" };
-            Color dim = new Color(0.65f, 0.75f, 0.84f);
-            for (int i = 0; i < titles.Length; i++)
-                CreateCell(rect, "Head_" + titles[i], titles[i], i, CollectionColumnAlign[i], 12, dim);
-        }
-
-        TMP_Text CreateCell(Transform row, string name, string text, int column, TextAlignmentOptions align,
-            int fontSize, Color color)
-        {
-            TMP_Text cell = CreateLabel(row, name, text,
-                new Vector2(CollectionColumnStart[column], 0), new Vector2(CollectionColumnEnd[column], 1),
-                Vector2.zero, Vector2.zero, fontSize);
-            cell.alignment = align;
-            cell.color = color;
-            cell.enableWordWrapping = false;
-            cell.overflowMode = TextOverflowModes.Ellipsis;
-            cell.rectTransform.offsetMin = new Vector2(column == 0 ? 8 : 4, 0);
-            cell.rectTransform.offsetMax = new Vector2(-4, 0);
-            return cell;
         }
 
         static Color RarityColor(Rarity rarity)
@@ -1421,14 +1457,25 @@ namespace Overlink.UI
             Button button = obj.AddComponent<Button>();
             button.targetGraphic = image;
 
-            // Set up color transitions for visual feedback
+            // Same ghost style as the binder's buttons: dark card fill, bright label, cyan top edge.
             var colors = button.colors;
-            colors.normalColor = new Color(0.16f, 0.22f, 0.29f, 1f);
-            colors.highlightedColor = new Color(0.25f, 0.42f, 0.55f, 1f);
+            colors.normalColor = UiKit.Card;
+            colors.highlightedColor = new Color(0.16f, 0.22f, 0.29f, 1f);
             colors.pressedColor = new Color(0.10f, 0.32f, 0.48f, 1f);
-            colors.selectedColor = new Color(0.22f, 0.38f, 0.5f, 1f);
+            colors.selectedColor = new Color(0.16f, 0.22f, 0.29f, 1f);
             colors.disabledColor = new Color(0.12f, 0.14f, 0.17f, 0.65f);
             button.colors = colors;
+
+            GameObject edge = new GameObject("AccentEdge", typeof(RectTransform));
+            RectTransform edgeRect = edge.GetComponent<RectTransform>();
+            edgeRect.SetParent(rect, false);
+            edgeRect.anchorMin = new Vector2(0f, 1f);
+            edgeRect.anchorMax = new Vector2(1f, 1f);
+            edgeRect.pivot = new Vector2(0.5f, 1f);
+            edgeRect.sizeDelta = new Vector2(0f, 2f);
+            Image edgeImage = edge.AddComponent<Image>();
+            edgeImage.color = new Color(UiKit.Accent.r, UiKit.Accent.g, UiKit.Accent.b, 0.3f);
+            edgeImage.raycastTarget = false;
 
             // Button text
             GameObject textObj = new GameObject("Text");
@@ -1440,10 +1487,11 @@ namespace Overlink.UI
             textRect.offsetMax = Vector2.zero;
 
             TMP_Text tmp = textObj.AddComponent<TextMeshProUGUI>();
+            if (UiKit.DisplayFont != null) tmp.font = UiKit.DisplayFont;
             tmp.text = text;
             tmp.fontSize = 16;
-            tmp.color = Color.white;
             tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = UiKit.TextBright;
             tmp.raycastTarget = false; // Text doesn't need to block raycasts
 
             return button;
@@ -1469,7 +1517,7 @@ namespace Overlink.UI
             rect.sizeDelta = size;
 
             Image image = obj.AddComponent<Image>();
-            image.color = new Color(0.16f, 0.16f, 0.16f, 1f);
+            image.color = UiKit.InputBackground;
             image.raycastTarget = true;
 
             GameObject textObj = new GameObject("Text");
@@ -1481,6 +1529,7 @@ namespace Overlink.UI
             textRect.offsetMax = new Vector2(-10f, -2f);
 
             TextMeshProUGUI textComponent = textObj.AddComponent<TextMeshProUGUI>();
+            if (UiKit.DisplayFont != null) textComponent.font = UiKit.DisplayFont;
             textComponent.text = text;
             textComponent.fontSize = 14;
             textComponent.color = Color.white;
