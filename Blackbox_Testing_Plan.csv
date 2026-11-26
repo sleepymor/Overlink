@@ -1,0 +1,27 @@
+INFO,,,,,,,,,,
+Tester,Themis,,,,,,,,,
+Testing Date,26 Nov 2026,,,,,,,,,
+Tested Version,2026.11.9 (22 Nov 2026 live GDD),,,,,,,,,
+Detailed Steps / Related Script,"PlayMode/build-level E2E via Unity CI (game-ci/unity-builder). Save/Load deck builder, match start, victory conditions, card play, combat, and build output checks. PlayMode tests (22 in Overlink.Cards.Tests) never executed locally — needs CI Unity Editor license on runner. Related files: Assets/Tests/Cards/Overlink.Cards.Tests; Assets/Scripts/Core/*.cs; .github/workflows/release-build.yml",,,,,,,,,
+,,,,,,,,,,
+ID,Category,Component,Test Description,Coverage Status,Priority,Source Entry Point,Notes,Testing Result,Date,Tester
+BB-01,Deck Builder,Save/Load,Save a 30–40 card single-faction deck; reload; deck loads with same cards/counts,GAP,High,DeckbuilderController + DeckLibrary,PlayMode test,Pending,26 Nov 2026,Themis
+BB-02,Deck Builder,Rejection gates,29-card / 41-card / 4-copy / mixed-faction decks refused at save,GAP,High,DeckValidator gate in UI,PlayMode test,Pending,26 Nov 2026,Themis
+BB-03,Match Start,Opening lineup deal,5 cards dealt; cost ≤3 per card; coin flip,GAP,High,MatchState.InitializeSetup / CompleteSetup / FlipCoin,PlayMode test via GameCoordinator/MatchEngine end-to-end,Pending,26 Nov 2026,Themis
+BB-04,Match Start,First Upkeep NP gain,+4 base + controlled Nodes,GAP,High,MatchState.OnUpkeepPhase,PlayMode test,Pending,26 Nov 2026,Themis
+BB-05,Victory Conditions,Core destruction (20→0),Both cores dead → active player wins; single core dead → other wins,GAP,High,MatchState.CheckVictoryConditions,PlayMode test driving commands through MatchEngine+MatchState,Pending,26 Nov 2026,Themis
+BB-06,Victory Conditions,Deck-Out,Empty deck AND empty hand → loss,GAP,High,MatchState.OnDrawPhase,PlayMode test,Pending,26 Nov 2026,Themis
+BB-07,Victory Conditions,Concession,Result stable; not overwritten after game over,GAP,High,MatchState.Concede,PlayMode test,Pending,26 Nov 2026,Themis
+BB-08,Victory Conditions,Node Domination,3+ uncontested Nodes → active player wins NODE DOMINATION; skipped TurnNumber≤1,GAP,High,MatchState.CheckNodeDomination,PlayMode test,Pending,26 Nov 2026,Themis
+BB-09,Card Play,Unit card play,Deploy triggers on Unit deployment; correct slot rules,GAP,High,MatchEngine.PlayCardCommand → EffectInterpreter.Resolve,PlayMode test,Pending,26 Nov 2026,Themis
+BB-10,Card Play,Ability card play,One-shot effect; no board slot,GAP,High,MatchEngine.PlayCardCommand,PlayMode test,Pending,26 Nov 2026,Themis
+BB-11,Card Play,Protocol card play,Occupies single Protocol slot; EffectInterpreter handles Protocol effects,GAP,High,MatchEngine.PlayCardCommand,PlayMode test,Pending,26 Nov 2026,Themis
+BB-12,Card Play,Relay card play,Placed on Node slots; EffectInterpreter handles Relay effects,GAP,High,MatchEngine.PlayCardCommand,PlayMode test,Pending,26 Nov 2026,Themis
+BB-13,Combat,Attack / block / damage / simultaneous destruction,GAP,High,MatchEngine.DeclareAttackCommand → EffectInterpreter,PlayMode test,Pending,26 Nov 2026,Themis
+BB-14,Combat,FirstStrike / Piercing / Core transfer / battlefield promotion,GAP,High,MatchEngine.DeclareAttackCommand,PlayMode test,Pending,26 Nov 2026,Themis
+BB-15,Build Output,Windows zip contains Overlink.exe at root,Partially present in release-build.yml,Medium,release-build.yml shell steps,CI smoke-build,Pending,26 Nov 2026,Themis
+BB-16,Build Output,WebGL channel has index.html at root,Partially present in release-build.yml,Medium,release-build.yml shell steps,CI smoke-build,Pending,26 Nov 2026,Themis
+BB-17,Toolchain,Run environment,PlayMode tests via Unity Test Runner (game-ci/unity-builder),GAP — never executed locally; needs CI Unity Editor,High,Assets\Tests\Cards\Overlink.Cards.Tests,22 tests never executed,Pending,26 Nov 2026,Themis
+BB-18,Toolchain,Run environment,CI test-playmode job for Overlink.Cards.Tests + new blackbox tests,GAP,High,.github/workflows/release-build.yml,Requires Unity Editor license on runner,Pending,26 Nov 2026,Themis
+BB-19,Toolchain,Run environment,CI test job (EditMode) before build,GAP,High,.github/workflows/release-build.yml,Requires Unity Editor license on runner,Pending,26 Nov 2026,Themis
+BB-20,Toolchain,Run environment,CI smoke-build step (non-empty output + index.html at root before itch push),Partially present,Medium,.github/workflows/release-build.yml,Formalize as reusable step,Pending,26 Nov 2026,Themis

@@ -28,12 +28,12 @@ A Unity TCG called Overlink. Three MVP factions, card-driven combat, Active–Be
 
 | Type | In code? | Notes |
 |---|---|---|
-| Unit | ✅ Yes | `CardType` enum: Active/Bench/Ability. Units map to Active/Bench board positions |
+| Unit | ✅ Yes | `CardType` enum; Units map to Active/Bench board positions |
 | Ability | ✅ Yes | One-shot effect, no board slot |
-| Relay | ❌ No | Designed in GDD §2.1.5, not yet in `CardType` enum — deferred to post-MVP |
-| Protocol | ❌ No | Designed in GDD §2.1.5, not yet in `CardType` enum — deferred to post-MVP |
+| Relay | ✅ Yes | `CardType` enum; `Board.CanHost` allows Relay on Node slots; `EffectInterpreter` handles Relay effects |
+| Protocol | ✅ Yes | `CardType` enum; `Board.CanHost` allows Protocol on the Protocol slot; `EffectInterpreter` handles Protocol effects |
 
-Deck type-share ranges (Relay 10–15%, Protocol 10–15%) are aspirational until those types are implemented.
+Deck type-share ranges (Relay 10–15%, Protocol 10–15%) are implemented in `CardValidator` rarity/composition checks.
 
 ## 4. Build & test conventions
 

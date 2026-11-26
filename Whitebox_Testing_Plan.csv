@@ -1,0 +1,53 @@
+INFO,,,,,,,,,,
+Tester,Themis,,,,,,,,,
+Testing Date,26 Nov 2026,,,,,,,,,
+Tested Version,2026.11.9 (22 Nov 2026 live GDD),,,,,,,,,
+Detailed Steps / Related Script,"EditMode NUnit unit tests on Core C# logic (DeckValidator, CardValidator, MatchEngine, MatchState, CardComposition, CardJson, PlayerState, Board, EffectInterpreter, MvpCardLibrary). Run standalone dotnet test on Core (no Unity deps for Core files) where dotnet SDK is available; CI EditMode via Unity Test Runner (game-ci/unity-builder) requires Unity Editor license on runner. Related files: Assets/Scripts/Core/*.cs; Assets/Tests/Core/*.cs; .github/workflows/release-build.yml",,,,,,,,,
+,,,,,,,,,,
+ID,Category,Component,Test Description,Coverage Status,Priority,Source File,Notes,Testing Result,Date,Tester
+WB-01,Existing Coverage,DeckValidator,Null/empty deck rejection,Covered,High,Assets\Tests\Core\DeckValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-02,Existing Coverage,DeckValidator,Deck sizes 29/30/40/41 boundary,Covered,High,Assets\Tests\Core\DeckValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-03,Existing Coverage,DeckValidator,4-copy limit enforcement,Covered,High,Assets\Tests\Core\DeckValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-04,Existing Coverage,DeckValidator,Mixed-faction deck rejection,Covered,High,Assets\Tests\Core\DeckValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-05,Existing Coverage,DeckValidator,Null entries / unknown IDs / zero-negative counts,Covered,High,Assets\Tests\Core\DeckValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-06,Existing Coverage,CardValidator,Valid unit / flavour length / duplicate ID / missing name,Covered,High,Assets\Tests\Core\CardValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-07,Existing Coverage,CardValidator,Cost 11 / negative stats / empty unit / dangling refs / zero amount,Covered,High,Assets\Tests\Core\CardValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-08,Existing Coverage,CardValidator,Target legality (self/commander) / repair limits / GainNP/Draw targeting / keyword support,Covered,High,Assets\Tests\Core\CardValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-09,Existing Coverage,CardValidator,Rarity budget / Relay-Protocol stats / duration bounds / Move-AddKeyword-Summon ReferenceId / ID format / duplicate keywords / Fast keyword pairing,Covered,High,Assets\Tests\Core\CardValidatorTests.cs,,Pending,26 Nov 2026,Themis
+WB-10,Existing Coverage,MatchEngine,PlayCard success / insufficient NP / wrong phase / slot occupied / Protocol placement,Covered,High,Assets\Tests\Core\MatchEngineTests.cs,,Pending,26 Nov 2026,Themis
+WB-11,Existing Coverage,MatchEngine,DeclareAttack damage / Core hit exactly 1 / cannot act / position switch / pass phase / end turn / mulligan / FirstStrike / Piercing / concede,Covered,High,Assets\Tests\Core\MatchEngineTests.cs,,Pending,26 Nov 2026,Themis
+WB-12,Existing Coverage,MatchState,"NP economy partially covered (GainNP cap, SpendNP, RepairCore clamp)",Partial,Medium,Assets\Tests\Core\MatchStateTests.cs,DrawCard null/reshuffle unconfirmed; TakeDamage clamp unconfirmed,Pending,26 Nov 2026,Themis
+WB-13,Existing Coverage,CardComposition,Rarity/faction counting / null handling,Covered,Medium,Assets\Tests\Core\CardCompositionTests.cs,,Pending,26 Nov 2026,Themis
+WB-14,Existing Coverage,CardJson,Serialization / roundtrip / escape control chars / faction tokens / malformed / future-version rejection,Covered,High,Assets\Tests\Core\CardJsonTests.cs,,Pending,26 Nov 2026,Themis
+WB-15,GAP,PlayerState,DrawCard returns null when deck+discard empty; reshuffles discard when deck empty,Unconfirmed gap,High,Assets\Scripts\Core\PlayerState.cs,,Pending,26 Nov 2026,Themis
+WB-16,GAP,PlayerState,TakeDamage clamps Core durability at 0,Unconfirmed gap,High,Assets\Scripts\Core\PlayerState.cs,,Pending,26 Nov 2026,Themis
+WB-17,GAP,MatchState,AdvancePhase cycle Upkeep→Draw→Main→Combat→End→Cleanup→Upkeep (player switch + TurnNumber++ on Cleanup),Partial gap,High,Assets\Scripts\Core\MatchState.cs,,Pending,26 Nov 2026,Themis
+WB-18,GAP,MatchState,OnUpkeepPhase readies units / clears CannotBeBlocked / gains NP +4+controlled Nodes / Node Domination skipped TurnNumber≤1,Partial gap,High,Assets\Scripts\Core\MatchState.cs,,Pending,26 Nov 2026,Themis
+WB-19,GAP,MatchState,OnDrawPhase skips draw on Turn 1; Deck-Out loss only when deck empty AND hand empty,Partial gap,High,Assets\Scripts\Core\MatchState.cs,,Pending,26 Nov 2026,Themis
+WB-20,GAP,MatchState,CheckNodeDomination 3+ uncontested Nodes → active player wins NODE DOMINATION,Partial gap,High,Assets\Scripts\Core\MatchState.cs,,Pending,26 Nov 2026,Themis
+WB-21,GAP,MatchState,CheckVictoryConditions both cores dead → active player wins; single core dead → other wins; concession stable not overwritten,Partial gap,High,Assets\Scripts\Core\MatchState.cs,,Pending,26 Nov 2026,Themis
+WB-22,GAP,MatchEngine,DeclareBlockCommand: only non-active player; one block per attacker/blocker; battlefield-group match (CR-02),Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-23,GAP,MatchEngine,SwitchPositionCommand: Main phase only; blocked by SummoningDelay; refreshes Node multipliers,Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-24,GAP,MatchEngine,RetreatCommand: Combat phase only; both units exhaust; 1 NP cost; same battlefield group,Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-25,GAP,MatchEngine,MulliganCommand: Turn 1 only; Upkeep/Draw phase only; returns cards to deck; reshuffles; redraws same count,Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-26,GAP,MatchEngine,PassPhaseCommand / EndTurnCommand: clears pending blocks; EndTurn walks phases to hand over,Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-27,GAP,MatchEngine,PlayCardCommand for Unit/Ability/Protocol/Relay with correct slot rules,Partial gap,High,Assets\Scripts\Core\MatchEngine.cs,,Pending,26 Nov 2026,Themis
+WB-28,GAP,EffectInterpreter,DealDamage/Heal with shield-before transfer (10% rounded up to Core when shield-less Core Active),Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-29,GAP,EffectInterpreter,Draw/GainNP capped by controlled nodes,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-30,GAP,EffectInterpreter,Buff/Debuff with Amount/Amount2 and duration logging,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-31,GAP,EffectInterpreter,Destroy marks dead; CollectDeadSlot announces +1 Core durability loss for Core Active Units,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-32,GAP,EffectInterpreter,Summon requires ReferenceId / Unit-Relay type / free slot,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-33,GAP,EffectInterpreter,Move: Bench→Active or Active→Bench; never opponent's half,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-34,GAP,EffectInterpreter,Repair capped at MaxRepairAmount 3; restores Core durability,Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-35,GAP,EffectInterpreter,AddKeyword logged as unresolved (no keyword payload in schema),Entirely missing,High,Assets\Scripts\Core\EffectInterpreter.cs,,Pending,26 Nov 2026,Themis
+WB-36,GAP,CardValidator,Pool rarity budget 75/45/22/8 of 150; warnings when off,GAP,Medium,Assets\Scripts\Core\CardValidator.cs,,Pending,26 Nov 2026,Themis
+WB-37,GAP,CardValidator,All 3 factions pass ID format; wrong faction token warns,GAP,Medium,Assets\Scripts\Core\CardValidator.cs,,Pending,26 Nov 2026,Themis
+WB-38,GAP,CardValidator,ValidatePool with null pool → error,GAP,Medium,Assets\Scripts\Core\CardValidator.cs,,Pending,26 Nov 2026,Themis
+WB-39,GAP,Board,CanHost: Core slots Unit only; Node slots Unit+Relay; Protocol slot Protocol only,Entirely missing,High,Assets\Scripts\Core\Board.cs,,Pending,26 Nov 2026,Themis
+WB-40,GAP,Board,TryFindFreeSlot spreads Units Core Active → Node Actives → Core Bench → Node Benches,Entirely missing,High,Assets\Scripts\Core\Board.cs,,Pending,26 Nov 2026,Themis
+WB-41,GAP,Board,HoldsNode is per-board occupation (not control; control needs both boards),Entirely missing,High,Assets\Scripts\Core\Board.cs,,Pending,26 Nov 2026,Themis
+WB-42,GAP,MvpCardLibrary,Register drops nulls; throws on null input,GAP,Medium,Assets\Scripts\Core\MvpCardLibrary.cs,,Pending,26 Nov 2026,Themis
+WB-43,GAP,MvpCardLibrary,All()/ByFaction() throw before registration; return after,GAP,Medium,Assets\Scripts\Core\MvpCardLibrary.cs,,Pending,26 Nov 2026,Themis
+WB-44,GAP,MvpCardLibrary,Composition: 50 per faction expected when real pool registered,GAP,Medium,Assets\Scripts\Core\MvpCardLibrary.cs,,Pending,26 Nov 2026,Themis
+WB-45,Toolchain,Run environment,Standalone dotnet test on Core (no Unity deps for files read),Blocked on Tethys (no dotnet SDK); available on hyperion (user-reported),High,Assets\Scripts\Core\,,Pending,26 Nov 2026,Themis
+WB-46,Toolchain,Run environment,EditMode NUnit via CI Unity Test Runner (game-ci/unity-builder),Requires Unity Editor license on runner,High,.github/workflows/release-build.yml,,Pending,26 Nov 2026,Themis
