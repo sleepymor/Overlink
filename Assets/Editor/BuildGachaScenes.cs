@@ -158,7 +158,7 @@ namespace Overlink.EditorTools
             // only states which resolution is running. The ten-pack is ten real standard packs
             // (fifty cards), never one compressed roll.
             TextMeshProUGUI packHeader = CreateText("Pack Header", screen.transform, string.Empty, 20f, TextBright,
-                TextAlignmentOptions.Center, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -176f), new Vector2(900f, 30f));
+                TextAlignmentOptions.Center, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -154f), new Vector2(900f, 30f));
 
             // Pack queue strip: one capsule per pack in the bundle (plus loyalty bonus packs), cloned at
             // runtime from this authored template so sealed/open/done state stays visible while revealing.
