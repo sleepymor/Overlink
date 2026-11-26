@@ -645,7 +645,7 @@ PlayerSettings:
   webGLDebugSymbols: 0
   webGLEmscriptenArgs: -s EXPORTED_RUNTIME_METHODS=['getDynCaller']
   webGLModulesDirectory: 
-  webGLTemplate: APPLICATION:Default
+  webGLTemplate: Overlink:Default
   webGLAnalyzeBuildSize: 0
   webGLUseEmbeddedResources: 0
   webGLCompressionFormat: 0

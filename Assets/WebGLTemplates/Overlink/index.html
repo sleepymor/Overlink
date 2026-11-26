@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Unity WebGL Player | [PRODUCT_NAME]</title>
+    <script src="[UNITY_LOADER_SRC]"></script>
+    <script>
+        // Overlink WebGL fix: expose getDynCaller as a bare global before Unity's
+        // generated WebSocket glue tries to call it. Some Unity/emscripten patch
+        // combinations don't define this symbol, producing:
+        //
+        //   ReferenceError: getDynCaller is not defined
+        //   at createUnityInstance
+        //
+        // Defining it here (before UnityLoader.instantiate runs) guarantees it is
+        // available as window.getDynCaller for any code that calls bare getDynCaller(...).
+        (function () {
+            if (typeof window.getDynCaller === 'undefined') {
+                window.getDynCaller = function (sig, func) {
+                    if (typeof func === 'function') {
+                        return function () {
+                            return func.apply(null, arguments);
+                        };
+                    }
+                    // func is a function pointer (number). Fall back to dynCall if available.
+                    return function () {
+                        if (typeof Runtime !== 'undefined' && typeof Runtime.dynCall === 'function') {
+                            return Runtime.dynCall(sig || 'vi', func, Array.prototype.slice.call(arguments));
+                        }
+                    };
+                };
+            }
+        })();
+    </script>
+    <script>
+        var config = {
+            dataUrl: "[DATA_URL]",
+            frameworkUrl: "[FRAMEWORK_URL]",
+            codeUrl: "[CODE_URL]",
+            streamingAssetsUrl: "[STREAMING_ASSETS_URL]",
+            companyName: "[COMPANY_NAME]",
+            productName: "[PRODUCT_NAME]",
+            productVersion: "[PRODUCT_VERSION]",
+            ...
+        };
+        var gameInstance = UnityLoader.instantiate("[CONTAINER]", "[BUILD_URL]", config);
+    </script>
+</head>
+<body>
+    <div id="[CONTAINER]" style="width: [WIDTH]px; height: [HEIGHT]px; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background-color: #000000;"></div>
+</body>
+</html>
